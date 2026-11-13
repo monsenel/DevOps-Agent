@@ -15,7 +15,10 @@ public sealed class ChatService(
     public async Task<IReadOnlyList<ChatConversationSummary>> ListAsync(CancellationToken cancellationToken)
     {
         var items = await conversations.ListAsync(cancellationToken);
-        return items.Select(item => new ChatConversationSummary(item.Id, item.Title, item.UpdatedAtUtc)).ToArray();
+        return items
+            .OrderByDescending(item => item.UpdatedAtUtc)
+            .Select(item => new ChatConversationSummary(item.Id, item.Title, item.UpdatedAtUtc))
+            .ToArray();
     }
 
     public async Task<IReadOnlyList<ChatMessageView>> GetMessagesAsync(Guid conversationId, CancellationToken cancellationToken)
@@ -48,8 +51,8 @@ public sealed class ChatService(
 
         var conversation = await conversations.GetAsync(conversationId, cancellationToken)
             ?? throw new InvalidOperationException("The conversation no longer exists.");
-        conversation.AddMessage("user", prompt, timeProvider.GetUtcNow());
-        await conversations.SaveAsync(conversation, cancellationToken);
+        var userMessage = conversation.AddMessage("user", prompt, timeProvider.GetUtcNow());
+        await conversations.SaveMessageAsync(userMessage, cancellationToken);
 
         var provider = (await providers.ListAsync(cancellationToken)).SingleOrDefault(item => item.IsDefault)
             ?? throw new InvalidOperationException("Add and select a default LLM provider in Settings before starting a chat.");
@@ -92,8 +95,8 @@ public sealed class ChatService(
 
         if (response.Length > 0)
         {
-            conversation.AddMessage("assistant", response.ToString(), timeProvider.GetUtcNow());
-            await conversations.SaveAsync(conversation, cancellationToken);
+            var assistantMessage = conversation.AddMessage("assistant", response.ToString(), timeProvider.GetUtcNow());
+            await conversations.SaveMessageAsync(assistantMessage, cancellationToken);
         }
     }
 }

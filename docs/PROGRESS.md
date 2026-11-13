@@ -8,7 +8,7 @@
 
 - **Task:** T0.8 Basic chat (no tools)
 - **Status:** in-progress
-- **Last updated:** 2026-11-13 by implementation session
+- **Last updated:** 2026-11-14 by implementation session
 
 ## WIP notes
 
@@ -28,8 +28,12 @@ What is done so far:
 - T0.8 scope: Agent chat page, streaming replies from the default LLM provider, and persisted conversations/messages.
 - Added `ChatConversation` and `ChatMessageRecord`, repository/application service contracts, EF Core configuration and the `AddChatConversations` migration.
 - `ChatService` persists the user's prompt, streams via `IChatClient` using the selected default provider, and persists the assembled assistant answer; provider streaming preference is respected.
+- Built the Agent chat layout with conversation history, new/select actions, message composer, streaming output, and error state.
+- Fixed SQLite conversation ordering by sorting in memory, and explicitly adds each new message row to EF Core; browser verification then confirmed a streamed response and both messages after reload.
+- Verified chat layout at 390px with no horizontal overflow and toggled both themes. `dotnet build DevOpsAgent.slnx` passed with 0 warnings/errors, `dotnet test DevOpsAgent.slnx` passed (4/4), `git diff --check` and CSS color-token audit passed.
+- Verified `IChatClient.GetStreamingResponseAsync` against current Microsoft Learn docs and the OpenAI-compatible flow against a local fixture. No real OpenRouter API key is configured in the project environment, so that live endpoint check remains.
 What is next (exact next step):
-- Build the Agent chat conversation-list and message-card UI, wire create/select/send actions, then verify streaming and reload persistence.
+- Configure an OpenRouter provider and API key in Settings, send a harmless test prompt, and verify the real endpoint. If that passes, mark T0.8 done and commit `feat(T0.8): basic persisted chat`; if it fails, fix the provider flow first.
 Files touched:
 - `src/DevOpsAgent.Domain/Chat/ChatConversation.cs`
 - `src/DevOpsAgent.Domain/Chat/ChatMessageRecord.cs`
@@ -40,14 +44,19 @@ Files touched:
 - `src/DevOpsAgent.Infrastructure/Persistence/ChatConversationRepository.cs`
 - `src/DevOpsAgent.Infrastructure/Persistence/PersistenceServiceCollectionExtensions.cs`
 - `src/DevOpsAgent.Infrastructure/Migrations/*AddChatConversations*`
+- `src/DevOpsAgent.Web/Components/Pages/AgentChat.razor`
+- `src/DevOpsAgent.Web/Components/_Imports.razor`
+- `src/DevOpsAgent.Web/wwwroot/css/app.css`
 - `src/DevOpsAgent.Web/Program.cs`
 - `docs/PROGRESS.md`
 Gotchas found:
 - T0.7 keeps stored API key material out of component state; the blank password field plus saved-key indicator preserves the credential without exposing it.
+- SQLite EF Core does not translate `DateTimeOffset` sorting; sort loaded conversation summaries in application memory.
+- Newly created message records must be explicitly added to `ChatMessages`; appending only to a tracked navigation collection caused EF Core to treat them as updates.
 
 ## Blockers
 
-_(none)_
+OpenRouter live chat verification is pending because this workspace has no configured API key (`.env` is absent). The generic OpenAI-compatible fixture verified streaming and persistence, but cannot confirm the real OpenRouter service response.
 
 ---
 
@@ -64,7 +73,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T0.5 | Design system and app shell | done | `feat(T0.5): design system and app shell` |
 | T0.6 | LLM providers — domain, storage, client | done | `feat(T0.6): llm providers backend` |
 | T0.7 | Settings › LLM connection page | done | `feat(T0.7): llm connection settings` |
-| T0.8 | Basic chat (no tools) | todo | |
+| T0.8 | Basic chat (no tools) | in-progress | |
 | T1.1 | Server inventory | todo | |
 | T1.2 | SSH pool and runner | todo | |
 | T1.3 | Import ssh config | todo | |
@@ -117,3 +126,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-13 · Codex · T0.7 · build/test pass; settings save/test/default flow, saved-key privacy, both themes, and 390px layout verified
 - 2026-11-13 · Codex · T0.8 · started
 - 2026-11-13 · Codex · T0.8 · conversation persistence and provider-backed streaming service checkpointed; next implement the chat page
+- 2026-11-14 · Codex · T0.8 · chat UI, streamed fixture response, reload persistence, theme and mobile layout verified; live OpenRouter check pending credentials

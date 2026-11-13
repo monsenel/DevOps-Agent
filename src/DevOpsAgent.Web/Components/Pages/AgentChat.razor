@@ -1,3 +1,165 @@
 @page "/agent-chat"
+@inject ChatService Chat
+
 <PageTitle>Agent chat · DevOps Agent</PageTitle>
-<PagePlaceholder Title="Agent chat" Description="Connect a language model provider to start a conversation." />
+
+<div class="agent-chat-layout">
+    <section class="ui-card chat-conversations" aria-labelledby="conversations-heading">
+        <header class="ui-card-header">
+            <h2 id="conversations-heading">Conversations</h2>
+            <button type="button" class="chat-new-button" @onclick="CreateConversationAsync" aria-label="New conversation">+</button>
+        </header>
+        @if (_conversations.Count == 0)
+        {
+            <p class="muted">No conversations yet.</p>
+        }
+        else
+        {
+            <nav class="chat-conversation-list" aria-label="Conversation history">
+                @foreach (var conversation in _conversations)
+                {
+                    <button type="button" class="chat-conversation-item @(_selectedConversationId == conversation.Id ? "selected" : null)"
+                            aria-current="@(_selectedConversationId == conversation.Id ? "page" : null)"
+                            @onclick="() => SelectConversationAsync(conversation.Id)">
+                        <span>@conversation.Title</span>
+                        <time datetime="@conversation.UpdatedAtUtc.ToString("O")">@conversation.UpdatedAtUtc.ToLocalTime().ToString("g")</time>
+                    </button>
+                }
+            </nav>
+        }
+    </section>
+
+    <section class="ui-card chat-panel" aria-labelledby="chat-heading">
+        <header class="ui-card-header chat-panel-header">
+            <div>
+                <h2 id="chat-heading">@SelectedTitle</h2>
+                <p class="muted">Chat uses your default provider. No server tools are enabled in this task.</p>
+            </div>
+            <span class="ui-badge neutral">@(_isSending ? "Generating" : "Basic chat")</span>
+        </header>
+
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="chat-error" role="alert">@_error</div>
+        }
+
+        <div class="chat-messages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Conversation messages">
+            @if (_messages.Count == 0 && !_isSending)
+            {
+                <div class="chat-empty-state">
+                    <strong>Start a conversation</strong>
+                    <span>Ask a question to begin. Replies are saved with this conversation.</span>
+                </div>
+            }
+            @foreach (var message in _messages)
+            {
+                <article class="chat-message @(message.Role == "user" ? "user-message" : "assistant-message")">
+                    <div class="chat-message-role">@(message.Role == "user" ? "You" : "Agent")</div>
+                    <div class="chat-message-content">@message.Content</div>
+                </article>
+            }
+            @if (_isSending)
+            {
+                <article class="chat-message assistant-message">
+                    <div class="chat-message-role">Agent</div>
+                    <div class="chat-message-content">@_streamingText<span class="chat-cursor" aria-label="Generating">▋</span></div>
+                </article>
+            }
+        </div>
+
+        <form class="chat-composer" @onsubmit="SendAsync" @onsubmit:preventDefault>
+            <label for="chat-prompt">Message</label>
+            <textarea id="chat-prompt" @bind="_draft" @bind:event="oninput" placeholder="Ask a question…" rows="3" disabled="@_isSending"></textarea>
+            <div class="chat-composer-footer">
+                <span class="muted">Enter a message for your default model.</span>
+                <button type="submit" class="ui-button primary" disabled="@(_isSending || string.IsNullOrWhiteSpace(_draft))">
+                    @(_isSending ? "Sending…" : "Send")
+                </button>
+            </div>
+        </form>
+    </section>
+</div>
+
+@code {
+    private readonly List<ChatConversationSummary> _conversations = [];
+    private readonly List<ChatMessageView> _messages = [];
+    private Guid? _selectedConversationId;
+    private string _draft = string.Empty;
+    private string _streamingText = string.Empty;
+    private string? _error;
+    private bool _isSending;
+
+    private string SelectedTitle => _conversations.SingleOrDefault(item => item.Id == _selectedConversationId)?.Title ?? "New conversation";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConversationsAsync();
+        if (_conversations.Count == 0)
+        {
+            await CreateConversationAsync();
+        }
+        else
+        {
+            await SelectConversationAsync(_conversations[0].Id);
+        }
+    }
+
+    private async Task LoadConversationsAsync()
+    {
+        _conversations.Clear();
+        _conversations.AddRange(await Chat.ListAsync(CancellationToken.None));
+    }
+
+    private async Task CreateConversationAsync()
+    {
+        var id = await Chat.CreateAsync(CancellationToken.None);
+        await LoadConversationsAsync();
+        await SelectConversationAsync(id);
+    }
+
+    private async Task SelectConversationAsync(Guid id)
+    {
+        _selectedConversationId = id;
+        _messages.Clear();
+        _messages.AddRange(await Chat.GetMessagesAsync(id, CancellationToken.None));
+        _error = null;
+    }
+
+    private async Task SendAsync()
+    {
+        var prompt = _draft.Trim();
+        if (string.IsNullOrEmpty(prompt) || _isSending || _selectedConversationId is null)
+        {
+            return;
+        }
+
+        _draft = string.Empty;
+        _error = null;
+        _streamingText = string.Empty;
+        _isSending = true;
+        try
+        {
+            await foreach (var chunk in Chat.SendAsync(_selectedConversationId.Value, prompt))
+            {
+                _streamingText += chunk;
+                await InvokeAsync(StateHasChanged);
+            }
+
+            await LoadConversationsAsync();
+            await SelectConversationAsync(_selectedConversationId.Value);
+        }
+        catch (Exception exception)
+        {
+            if (_selectedConversationId is not null)
+            {
+                await SelectConversationAsync(_selectedConversationId.Value);
+            }
+            _error = exception.Message;
+        }
+        finally
+        {
+            _isSending = false;
+            _streamingText = string.Empty;
+        }
+    }
+}

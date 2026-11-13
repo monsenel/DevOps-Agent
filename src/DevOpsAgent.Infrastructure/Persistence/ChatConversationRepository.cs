@@ -9,7 +9,6 @@ public sealed class ChatConversationRepository(AppDbContext dbContext) : IChatCo
     public async Task<IReadOnlyList<ChatConversation>> ListAsync(CancellationToken cancellationToken) =>
         await dbContext.ChatConversations
             .AsNoTracking()
-            .OrderByDescending(conversation => conversation.UpdatedAtUtc)
             .ToArrayAsync(cancellationToken);
 
     public Task<ChatConversation?> GetAsync(Guid id, CancellationToken cancellationToken) =>
@@ -23,8 +22,9 @@ public sealed class ChatConversationRepository(AppDbContext dbContext) : IChatCo
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task SaveAsync(ChatConversation conversation, CancellationToken cancellationToken)
+    public async Task SaveMessageAsync(ChatMessageRecord newMessage, CancellationToken cancellationToken)
     {
+        dbContext.ChatMessages.Add(newMessage);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 }
