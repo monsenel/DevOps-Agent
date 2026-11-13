@@ -6,8 +6,8 @@
 
 ## Current
 
-- **Task:** T1.3 Import ssh config
-- **Status:** in-progress
+- **Task:** T1.2 SSH pool and runner
+- **Status:** blocked
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
@@ -24,17 +24,14 @@ Gotchas found:
 -->
 
 What is done so far:
-- T1.2 SSH pool and runner is implemented and committed as `c439b13`, but its live direct-host and jump-host acceptance checks are blocked by missing targets and `/keys` credentials.
-- T1.3 scope: parse OpenSSH config host stanzas, skip wildcard host patterns, support `HostName`, `User`, `Port`, `IdentityFile`, and `ProxyJump`, then provide paste → preview → import UI.
-- Implemented deterministic `SshConfigParser` with exact host aliases, supported directives, quoted values, first-value semantics, and wildcard skips; fixture tests pass and the suite is green (15/15).
+- T1.2 implementation is committed as `c439b13`; connection pool, `sudo -n` runner, jump forwarding, capabilities probe, host-key pinning, and UI are implemented and covered by tests.
+- T1.3 Import SSH config is complete and committed as `feat(T1.3): import ssh config`; parser fixtures cover supported directives, wildcard skips, quoted identities, and ProxyJump.
+- Verified paste → preview → import with a temporary database and key directory. The exact host aliases imported, the wildcard was skipped, key basename mapped, and the target was linked to the imported gateway.
+- Final build passes with zero warnings/errors and tests pass (15/15). Checked the importer UI in light/dark themes and at 390px with no page-level horizontal overflow.
 What is next (exact next step):
-- Complete the Servers import dialog: paste config, preview parsed rows with `/keys` basename mapping and ProxyJump resolution, then import jump hosts before dependent servers.
+- Provide an authorized direct SSH test host and a target reachable through a jump server, with private keys in `/keys` and independently verified pins in `/keys/known_hosts`; then run both T1.2 connection tests. If they pass, mark T1.2 done and start T2.1.
 Files touched:
-- `docs/PROGRESS.md`
-- `src/DevOpsAgent.Application/Servers/SshConfigParser.cs`
-- `tests/DevOpsAgent.Tests/DevOpsAgent.Tests.csproj`
-- `tests/DevOpsAgent.Tests/Fixtures/ssh-config/basic.conf`
-- `tests/DevOpsAgent.Tests/SshConfigParserTests.cs`
+- No uncommitted files; T1.2 and T1.3 code is committed.
 - `docs/PROGRESS.md`
 Gotchas found:
 - T0.8 remains blocked on missing OpenRouter credentials.
@@ -64,7 +61,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T0.8 | Basic chat (no tools) | blocked | |
 | T1.1 | Server inventory | done | `feat(T1.1): server inventory` |
 | T1.2 | SSH pool and runner | blocked | |
-| T1.3 | Import ssh config | in-progress | |
+| T1.3 | Import ssh config | done | `feat(T1.3): import ssh config` |
 | T2.1 | Collector framework and snapshots | todo | |
 | T2.2 | Host collector | todo | |
 | T2.3 | Listener collector | todo | |
@@ -120,3 +117,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex · T1.2 · started
 - 2026-11-14 · Codex / GPT-6 · resumed T1.2; SSH pool, command runner, capability UI and safeguards implemented; build/test pass (13/13), live SSH blocked by missing test targets
 - 2026-11-14 · Codex · T1.3 · started
+- 2026-11-14 · Codex / GPT-6 · T1.3 · parser fixtures and import dialog complete; paste/preview/import and jump mapping verified, both themes and 390px checked, build/test pass (15/15)

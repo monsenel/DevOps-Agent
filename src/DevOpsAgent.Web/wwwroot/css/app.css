@@ -1457,6 +1457,12 @@ p {
     margin-bottom: 18px;
 }
 
+.servers-heading-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
 .servers-heading h2,
 .confirm-dialog h2 {
     margin: 0;
@@ -1565,6 +1571,37 @@ p {
 
 .capability-dialog {
     width: min(560px, 100%);
+}
+
+.ssh-import-dialog {
+    width: min(1040px, 100%);
+}
+
+.ssh-config-field textarea {
+    width: 100%;
+    min-height: 180px;
+    padding: 12px;
+    border: 1px solid var(--dva-line);
+    border-radius: var(--dva-radius-input);
+    background: var(--dva-inset);
+    color: var(--dva-ink);
+    resize: vertical;
+}
+
+.import-summary {
+    margin: 14px 0 8px;
+}
+
+.import-preview-scroll {
+    max-height: 300px;
+}
+
+.import-preview-table {
+    min-width: 760px;
+}
+
+.import-preview-table td:last-child {
+    min-width: 190px;
 }
 
 .capability-results {

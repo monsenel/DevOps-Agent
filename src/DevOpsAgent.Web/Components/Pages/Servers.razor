@@ -11,7 +11,10 @@
                 <h2 id="servers-title">Servers</h2>
                 <p class="muted">Manage the Linux hosts DevOps Agent can connect to.</p>
             </div>
-            <button class="ui-button primary" type="button" @onclick="OpenCreate">Add server</button>
+            <div class="servers-heading-actions">
+                <button class="ui-button secondary" type="button" @onclick="OpenImport">Import SSH config</button>
+                <button class="ui-button primary" type="button" @onclick="OpenCreate">Add server</button>
+            </div>
         </div>
 
         @if (!string.IsNullOrWhiteSpace(_pageError))
@@ -181,6 +184,68 @@
     </div>
 }
 
+@if (_importDialogOpen)
+{
+    <div class="dialog-backdrop">
+        <section class="ui-card inventory-dialog ssh-import-dialog" role="dialog" aria-modal="true" aria-labelledby="ssh-import-title">
+            <div class="servers-heading">
+                <div>
+                    <p class="eyebrow">Server inventory</p>
+                    <h2 id="ssh-import-title">Import SSH config</h2>
+                    <p class="muted">Paste OpenSSH config text. Wildcard host patterns are skipped.</p>
+                </div>
+                <button class="ui-button secondary compact" type="button" @onclick="CloseImport">Close</button>
+            </div>
+            <div class="field ssh-config-field">
+                <label for="ssh-config-text">SSH config</label>
+                <textarea id="ssh-config-text" class="mono" @bind="_sshConfigText" @bind:event="oninput" rows="9" spellcheck="false" placeholder="Paste an OpenSSH config snippet"></textarea>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(_importError))
+            {
+                <div class="alert-message error" role="alert">@_importError</div>
+            }
+            @if (_importRows.Count > 0)
+            {
+                <p class="muted import-summary">@_importRows.Count host(s) found; @_importRows.Count(row => row.CanImport) ready to import. @_skippedWildcardCount wildcard pattern(s) skipped.</p>
+                <div class="table-scroll import-preview-scroll">
+                    <table class="servers-table import-preview-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Alias</th>
+                                <th scope="col">Host</th>
+                                <th scope="col">Port</th>
+                                <th scope="col">User</th>
+                                <th scope="col">Key file</th>
+                                <th scope="col">Jump server</th>
+                                <th scope="col">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in _importRows)
+                            {
+                                <tr @key="row.Entry.Alias">
+                                    <th scope="row">@row.Entry.Alias</th>
+                                    <td><span class="mono">@row.Entry.HostName</span></td>
+                                    <td><span class="mono">@row.Entry.Port</span></td>
+                                    <td>@(string.IsNullOrWhiteSpace(row.Entry.User) ? "—" : row.Entry.User)</td>
+                                    <td><span class="mono">@(row.KeyFile ?? "—")</span></td>
+                                    <td>@(row.JumpAlias ?? "—")</td>
+                                    <td>@(row.Error ?? "Ready")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            <div class="dialog-actions">
+                <button class="ui-button secondary" type="button" @onclick="CloseImport">Cancel</button>
+                <button class="ui-button secondary" type="button" @onclick="PreviewSshConfig" disabled="@_importing">Preview</button>
+                <button class="ui-button primary" type="button" @onclick="ImportSshConfigAsync" disabled="@(_importing || !_importRows.Any(row => row.CanImport))">@(_importing ? "Importing…" : "Import ready servers")</button>
+            </div>
+        </section>
+    </div>
+}
+
 @if (_testDialogOpen)
 {
     <div class="dialog-backdrop">
@@ -231,6 +296,12 @@
     private Guid? _testingId;
     private string? _testServerName;
     private ServerCapabilityResult? _testResult;
+    private bool _importDialogOpen;
+    private bool _importing;
+    private string _sshConfigText = string.Empty;
+    private string? _importError;
+    private IReadOnlyList<SshConfigImportRow> _importRows = [];
+    private int _skippedWildcardCount;
     private string? _pageError;
     private string? _formError;
 
@@ -296,6 +367,173 @@
     }
 
     private void CloseTestDialog() => _testDialogOpen = false;
+
+    private void OpenImport()
+    {
+        _sshConfigText = string.Empty;
+        _importRows = [];
+        _importError = null;
+        _skippedWildcardCount = 0;
+        _importDialogOpen = true;
+    }
+
+    private void CloseImport() => _importDialogOpen = false;
+
+    private void PreviewSshConfig()
+    {
+        _importError = null;
+        try
+        {
+            var parsed = SshConfigParser.Parse(_sshConfigText);
+            _skippedWildcardCount = parsed.SkippedWildcardHostCount;
+            var aliases = parsed.Entries.ToDictionary(entry => entry.Alias, StringComparer.OrdinalIgnoreCase);
+            var keyFiles = ServersService.ListKeyFiles();
+            _importRows = parsed.Entries.Select(entry =>
+            {
+                var identityName = Path.GetFileName(entry.IdentityFile.Replace('\\', '/'));
+                var keyFile = keyFiles.FirstOrDefault(name => string.Equals(name, identityName, StringComparison.Ordinal));
+                var jumpAlias = GetProxyJumpAlias(entry.ProxyJump);
+                var existingJump = jumpAlias is null ? null : _servers.FirstOrDefault(server =>
+                    string.Equals(server.Name, jumpAlias, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(server.Host, jumpAlias, StringComparison.OrdinalIgnoreCase));
+                var problem = string.IsNullOrWhiteSpace(entry.User) ? "SSH user is missing."
+                    : string.IsNullOrWhiteSpace(entry.IdentityFile) ? "IdentityFile is missing."
+                    : keyFile is null ? "IdentityFile does not match a file in /keys."
+                    : _servers.Any(server => string.Equals(server.Name, entry.Alias, StringComparison.OrdinalIgnoreCase)) ? "A server with this alias already exists."
+                    : entry.ProxyJump?.Contains(',') == true ? "Use a single ProxyJump alias and define its route in that host's stanza."
+                    : jumpAlias is not null && existingJump is null && !aliases.ContainsKey(jumpAlias) ? $"ProxyJump host '{jumpAlias}' was not found."
+                    : null;
+                return new SshConfigImportRow(entry, keyFile, jumpAlias, existingJump?.Id, problem);
+            }).ToArray();
+
+            if (_importRows.Count == 0)
+            {
+                _importError = "No exact Host entries were found. Wildcard host patterns are skipped.";
+            }
+        }
+        catch (FormatException exception)
+        {
+            _importRows = [];
+            _importError = exception.Message;
+        }
+        catch (ArgumentException exception)
+        {
+            _importRows = [];
+            _importError = $"Unable to parse SSH config: {exception.Message}";
+        }
+    }
+
+    private async Task ImportSshConfigAsync()
+    {
+        _importing = true;
+        _importError = null;
+        try
+        {
+            var remaining = _importRows.Where(row => row.CanImport).ToList();
+            var importedByAlias = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+            var scheduledAliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var ordered = new List<SshConfigImportRow>();
+            while (remaining.Count > 0)
+            {
+                var ready = remaining.Where(row => row.JumpAlias is null
+                    || row.ExistingJumpServerId.HasValue
+                    || scheduledAliases.Contains(row.JumpAlias)).ToArray();
+                if (ready.Length == 0)
+                {
+                    _importError = "The selected hosts contain a ProxyJump cycle or depend on a host that cannot be imported.";
+                    return;
+                }
+
+                foreach (var row in ready)
+                {
+                    remaining.Remove(row);
+                    ordered.Add(row);
+                    scheduledAliases.Add(row.Entry.Alias);
+                }
+            }
+
+            var importedCount = 0;
+            foreach (var row in ordered)
+            {
+                Guid? jumpServerId = row.ExistingJumpServerId;
+                if (row.JumpAlias is not null)
+                {
+                    if (row.ExistingJumpServerId is Guid existingId)
+                    {
+                        jumpServerId = existingId;
+                    }
+                    else if (importedByAlias.TryGetValue(row.JumpAlias, out var importedId))
+                    {
+                        jumpServerId = importedId;
+                    }
+                    else
+                    {
+                        var importedJump = _servers.FirstOrDefault(server =>
+                            string.Equals(server.Name, row.JumpAlias, StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(server.Host, row.JumpAlias, StringComparison.OrdinalIgnoreCase));
+                        jumpServerId = importedJump?.Id;
+                    }
+
+                    if (!jumpServerId.HasValue)
+                    {
+                        row.Error = $"ProxyJump host '{row.JumpAlias}' has not been imported.";
+                        continue;
+                    }
+                }
+
+                try
+                {
+                    var created = await ServersService.CreateAsync(new ServerInput(
+                        row.Entry.Alias, row.Entry.HostName, row.Entry.Port, row.Entry.User, row.KeyFile!, null,
+                        jumpServerId, "prod", []), CancellationToken.None);
+                    importedByAlias[row.Entry.Alias] = created.Id;
+                    importedCount++;
+                }
+                catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+                {
+                    row.Error = exception.Message;
+                }
+            }
+
+            await LoadAsync();
+            if (importedCount > 0)
+            {
+                _importError = $"Imported {importedCount} server(s). Review any rows marked with an error before importing them separately.";
+                _importRows = _importRows.Where(row => row.Error is not null).ToArray();
+                if (_importRows.Count == 0)
+                {
+                    _importDialogOpen = false;
+                }
+            }
+        }
+        finally
+        {
+            _importing = false;
+        }
+    }
+
+    private static string? GetProxyJumpAlias(string? proxyJump)
+    {
+        if (string.IsNullOrWhiteSpace(proxyJump) || string.Equals(proxyJump, "none", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var jump = proxyJump.Trim();
+        var at = jump.LastIndexOf('@');
+        if (at >= 0)
+        {
+            jump = jump[(at + 1)..];
+        }
+
+        if (jump.StartsWith('[') && jump.IndexOf(']') is var closeBracket && closeBracket > 0)
+        {
+            return jump[1..closeBracket];
+        }
+
+        var colon = jump.LastIndexOf(':');
+        return colon > 0 && jump.IndexOf(':') == colon ? jump[..colon] : jump;
+    }
 
     private async Task SaveAsync()
     {
@@ -370,5 +608,20 @@
         [System.ComponentModel.DataAnnotations.Required]
         public string Group { get; set; } = "prod";
         public string TagsText { get; set; } = string.Empty;
+    }
+
+    private sealed class SshConfigImportRow(
+        SshConfigEntry entry,
+        string? keyFile,
+        string? jumpAlias,
+        Guid? existingJumpServerId,
+        string? error)
+    {
+        public SshConfigEntry Entry { get; } = entry;
+        public string? KeyFile { get; } = keyFile;
+        public string? JumpAlias { get; } = jumpAlias;
+        public Guid? ExistingJumpServerId { get; } = existingJumpServerId;
+        public string? Error { get; set; } = error;
+        public bool CanImport => string.IsNullOrWhiteSpace(Error);
     }
 }
