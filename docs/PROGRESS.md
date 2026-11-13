@@ -25,12 +25,13 @@ Gotchas found:
 
 What is done so far:
 - T0.3 persistence is committed and verified.
+- Read the Overview and Settings mockups and added self-hosted WOFF2 fonts with their license texts.
 What is next (exact next step):
-- Inspect the approved Overview and LLM settings mockups and implement the tokens, shell, reusable components, theme toggle, and component preview page.
+- Implement the token sheets, responsive shell and theme toggle, then add reusable UI components and the hidden component preview route.
 Files touched:
-- `docs/PROGRESS.md`.
+- `docs/PROGRESS.md`, `docs/DECISIONS.md`, `src/DevOpsAgent.Web/wwwroot/fonts/**`.
 Gotchas found:
-- None yet.
+- The Google Fonts CSS endpoint returned TTF assets; Fontsource packages provided the requested WOFF2 files and bundled SIL license texts.
 
 ## Blockers
 

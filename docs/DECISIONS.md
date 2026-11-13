@@ -52,3 +52,8 @@ Format: `D-<number> · <date> · <title>` then Decision / Why / Consequences.
 - **Decision:** Use Microsoft.EntityFrameworkCore.Sqlite, Microsoft.EntityFrameworkCore.Design, and the repository-local dotnet-ef tool at version 10.0.14 for persistence and migrations.
 - **Why:** The official SQLite provider supports EF Core 10, and 10.0.14 is the latest stable EF Core 10 servicing release available for this session.
 - **Consequences:** Keep EF Core packages on the same 10.0 servicing version and apply committed migrations at application startup.
+
+### D-014 · 2026-11-13 · Self-host licensed UI fonts
+- **Decision:** Vendor Plus Jakarta Sans and JetBrains Mono WOFF2 assets from Fontsource 5.3.0 with their SIL Open Font License 1.1 texts.
+- **Why:** The interface must work offline and the approved design specifies these fonts.
+- **Consequences:** Keep the font assets and license files in `src/DevOpsAgent.Web/wwwroot/fonts`; do not load fonts from a CDN at runtime.
