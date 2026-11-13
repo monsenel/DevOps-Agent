@@ -6,8 +6,8 @@
 
 ## Current
 
-- **Task:** T0.3 Persistence
-- **Status:** done
+- **Task:** T0.5 Design system and app shell
+- **Status:** in-progress
 - **Last updated:** 2026-11-13 by implementation session
 
 ## WIP notes
@@ -23,7 +23,14 @@ Gotchas found:
 -
 -->
 
-_(empty)_
+What is done so far:
+- T0.3 persistence is committed and verified.
+What is next (exact next step):
+- Inspect the approved Overview and LLM settings mockups and implement the tokens, shell, reusable components, theme toggle, and component preview page.
+Files touched:
+- `docs/PROGRESS.md`.
+Gotchas found:
+- None yet.
 
 ## Blockers
 
@@ -42,7 +49,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T0.2 | Docker and compose | todo | |
 | T0.3 | Persistence | todo | |
 | T0.4 | Single-user login | todo | |
-| T0.5 | Design system and app shell | todo | |
+| T0.5 | Design system and app shell | in-progress | |
 | T0.6 | LLM providers — domain, storage, client | todo | |
 | T0.7 | Settings › LLM connection page | todo | |
 | T0.8 | Basic chat (no tools) | todo | |
@@ -86,3 +93,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-13 · Codex · T0.1 · solution skeleton complete; build/test pass and default page returns HTTP 200
 - 2026-11-13 · Codex · T0.3 · started
 - 2026-11-13 · Codex · T0.3 · build/test pass; app startup created SQLite DB, applied migration, and wrote Data Protection key ring
+- 2026-11-13 · Codex · T0.5 · started
