@@ -7,7 +7,7 @@
 ## Current
 
 - **Task:** T0.3 Persistence
-- **Status:** in-progress
+- **Status:** done
 - **Last updated:** 2026-11-13 by implementation session
 
 ## WIP notes
@@ -23,17 +23,7 @@ Gotchas found:
 -
 -->
 
-What is done so far:
-- T0.1 solution skeleton is committed and verified.
-- T0.3 `AppDbContext`, `AppSetting`, SQLite configuration, startup migration application, persisted Data Protection keys, and `ISecretProtector` are implemented.
-- Initial EF migration is generated; local `dotnet-ef` is pinned to match EF Core 10.0.14.
-- Added a Data Protection secret round-trip test.
-What is next (exact next step):
-- Run build and tests, then launch the app with a temporary local data path and confirm the SQLite database and key-ring files are created.
-Files touched:
-- `Directory.Packages.props`, `docs/DECISIONS.md`, `.config/dotnet-tools.json`, `src/DevOpsAgent.Domain/Settings/AppSetting.cs`, `src/DevOpsAgent.Application/Abstractions/ISecretProtector.cs`, `src/DevOpsAgent.Infrastructure/**`, `src/DevOpsAgent.Web/**`, `tests/DevOpsAgent.Tests/SecretProtectorTests.cs`.
-Gotchas found:
-- The globally installed EF tool was 10.0.13; a repository-local 10.0.14 tool removes the runtime/tool mismatch.
+_(empty)_
 
 ## Blockers
 
@@ -48,7 +38,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | Task | Title | Status | Commit |
 |---|---|---|---|
 | T0.1 | Solution skeleton | done | `feat(T0.1): solution skeleton` |
-| T0.3 | Persistence | in-progress | |
+| T0.3 | Persistence | done | `feat(T0.3): sqlite persistence` |
 | T0.2 | Docker and compose | todo | |
 | T0.3 | Persistence | todo | |
 | T0.4 | Single-user login | todo | |
@@ -95,3 +85,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-13 · planning · docs created · ready for T0.1
 - 2026-11-13 · Codex · T0.1 · solution skeleton complete; build/test pass and default page returns HTTP 200
 - 2026-11-13 · Codex · T0.3 · started
+- 2026-11-13 · Codex · T0.3 · build/test pass; app startup created SQLite DB, applied migration, and wrote Data Protection key ring
