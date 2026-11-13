@@ -6,8 +6,8 @@
 
 ## Current
 
-- **Task:** T1.2 SSH pool and runner
-- **Status:** blocked
+- **Task:** T1.3 Import ssh config
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
@@ -24,35 +24,13 @@ Gotchas found:
 -->
 
 What is done so far:
-- T1.1 Server inventory is complete and committed; build/test pass (7/7).
-- T1.2 scope: SSH connection pool, timeout-aware command runner with optional `sudo -n`, jump-host local forwarding, and server capability probe.
-- Checked current official SSH.NET docs: stable `SSH.NET` 2026.0.0 targets .NET 8+; async connect/command, command timeout/status, and local port forwarding APIs are available.
-- Confirmed SSH.NET's `HostKeyEventArgs.CanTrust` defaults to true. The connection layer must override this and verify against pinned host keys.
-- Added SSH.NET 2026.0.0 with decision D-018 (exact host/port host-key pins in `/keys/known_hosts`); package restore and build pass with zero warnings/errors.
-- Implemented the connection pool, reconnect behavior, recursive jump-host tunnels, command runner, sudo wrapping, and OS/uptime/sudo/tool capability probe.
-- Added the Servers test-connection dialog with OS, uptime, sudo, tool, and actionable pinned-host-key failure results.
-- Added tests for exact host/port/key pin matching, mismatch reporting, and jump-route cycles; final build passes with zero warnings/errors and tests pass (13/13).
-- Verified dependency injection and migrations at app startup with an isolated SQLite database; checked both themes and the 390px layout.
+- T1.2 SSH pool and runner is implemented and committed as `c439b13`, but its live direct-host and jump-host acceptance checks are blocked by missing targets and `/keys` credentials.
+- T1.3 scope: parse OpenSSH config host stanzas, skip wildcard host patterns, support `HostName`, `User`, `Port`, `IdentityFile`, and `ProxyJump`, then provide paste → preview → import UI.
 What is next (exact next step):
-- T1.2 cannot be marked done until a real direct host and a host reached through a jump server can be tested. Provide an authorized test target, identity keys, and verified `/keys/known_hosts` entries, then run both connection tests.
+- Read the T1.3 acceptance criteria and server inventory contracts, then implement a deterministic `SshConfigParser` with fixture-based tests.
 Files touched:
 - `docs/PROGRESS.md`
-- `docs/DECISIONS.md`
-- `Directory.Packages.props`
-- `src/DevOpsAgent.Infrastructure/DevOpsAgent.Infrastructure.csproj`
-- `src/DevOpsAgent.Application/Abstractions/ISshRunner.cs`
-- `src/DevOpsAgent.Application/Servers/ServerTestContracts.cs`
-- `src/DevOpsAgent.Application/Servers/ServerCapabilityService.cs`
-- `src/DevOpsAgent.Application/Servers/ServerService.cs`
-- `src/DevOpsAgent.Domain/Servers/Server.cs`
-- `src/DevOpsAgent.Infrastructure/Ssh/*`
-- `src/DevOpsAgent.Infrastructure/Persistence/ServerKeyStore.cs`
-- `src/DevOpsAgent.Infrastructure/Persistence/PersistenceServiceCollectionExtensions.cs`
-- `src/DevOpsAgent.Web/Program.cs`
-- `src/DevOpsAgent.Web/Components/Pages/Servers.razor`
-- `src/DevOpsAgent.Web/wwwroot/css/app.css`
-- `tests/DevOpsAgent.Tests/ServerInventoryTests.cs`
-- `tests/DevOpsAgent.Tests/SshAndCapabilityTests.cs`
+- `docs/PROGRESS.md`
 Gotchas found:
 - T0.8 remains blocked on missing OpenRouter credentials.
 - T1.2 live verification needs a real direct target, jump-host target, identity keys, and pinned host-key entries; none are configured in the repository or `/keys`.
@@ -81,7 +59,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T0.8 | Basic chat (no tools) | blocked | |
 | T1.1 | Server inventory | done | `feat(T1.1): server inventory` |
 | T1.2 | SSH pool and runner | blocked | |
-| T1.3 | Import ssh config | todo | |
+| T1.3 | Import ssh config | in-progress | |
 | T2.1 | Collector framework and snapshots | todo | |
 | T2.2 | Host collector | todo | |
 | T2.3 | Listener collector | todo | |
@@ -136,3 +114,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex · T1.1 · server CRUD, migration startup, jump guard, both themes, and 390px layout verified; build/test pass (7/7)
 - 2026-11-14 · Codex · T1.2 · started
 - 2026-11-14 · Codex / GPT-6 · resumed T1.2; SSH pool, command runner, capability UI and safeguards implemented; build/test pass (13/13), live SSH blocked by missing test targets
+- 2026-11-14 · Codex · T1.3 · started
