@@ -24,6 +24,7 @@ public static class PersistenceServiceCollectionExtensions
         });
 
         services.AddScoped<ILlmProviderRepository, LlmProviderRepository>();
+        services.AddScoped<IChatConversationRepository, ChatConversationRepository>();
         services.AddHttpClient("llm", client => client.Timeout = Timeout.InfiniteTimeSpan);
         services.AddSingleton<OpenAiCompatibleChatClientFactory>();
         services.AddSingleton<IChatClientFactory>(serviceProvider =>

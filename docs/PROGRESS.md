@@ -25,11 +25,23 @@ Gotchas found:
 
 What is done so far:
 - T0.1 through T0.7 are complete and committed.
-- T0.8 started; the scope is the Agent chat page, streaming replies from the default LLM provider, and persisted conversations/messages.
+- T0.8 scope: Agent chat page, streaming replies from the default LLM provider, and persisted conversations/messages.
+- Added `ChatConversation` and `ChatMessageRecord`, repository/application service contracts, EF Core configuration and the `AddChatConversations` migration.
+- `ChatService` persists the user's prompt, streams via `IChatClient` using the selected default provider, and persists the assembled assistant answer; provider streaming preference is respected.
 What is next (exact next step):
-- Inspect current chat/page/persistence wiring and the PRD/design requirements, then implement conversation storage and the streaming chat flow.
+- Build the Agent chat conversation-list and message-card UI, wire create/select/send actions, then verify streaming and reload persistence.
 Files touched:
-- _(none; WIP notes are clear)_
+- `src/DevOpsAgent.Domain/Chat/ChatConversation.cs`
+- `src/DevOpsAgent.Domain/Chat/ChatMessageRecord.cs`
+- `src/DevOpsAgent.Application/Abstractions/IChatConversationRepository.cs`
+- `src/DevOpsAgent.Application/Chat/ChatContracts.cs`
+- `src/DevOpsAgent.Application/Chat/ChatService.cs`
+- `src/DevOpsAgent.Infrastructure/Persistence/AppDbContext.cs`
+- `src/DevOpsAgent.Infrastructure/Persistence/ChatConversationRepository.cs`
+- `src/DevOpsAgent.Infrastructure/Persistence/PersistenceServiceCollectionExtensions.cs`
+- `src/DevOpsAgent.Infrastructure/Migrations/*AddChatConversations*`
+- `src/DevOpsAgent.Web/Program.cs`
+- `docs/PROGRESS.md`
 Gotchas found:
 - T0.7 keeps stored API key material out of component state; the blank password field plus saved-key indicator preserves the credential without exposing it.
 
@@ -104,3 +116,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-13 · Codex · T0.7 · started
 - 2026-11-13 · Codex · T0.7 · build/test pass; settings save/test/default flow, saved-key privacy, both themes, and 390px layout verified
 - 2026-11-13 · Codex · T0.8 · started
+- 2026-11-13 · Codex · T0.8 · conversation persistence and provider-backed streaming service checkpointed; next implement the chat page
