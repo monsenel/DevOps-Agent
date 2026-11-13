@@ -6,8 +6,8 @@
 
 ## Current
 
-- **Task:** T0.6 LLM providers — domain, storage, client
-- **Status:** done
+- **Task:** T0.7 Settings › LLM connection page
+- **Status:** in-progress
 - **Last updated:** 2026-11-13 by implementation session
 
 ## WIP notes
@@ -23,7 +23,15 @@ Gotchas found:
 -
 -->
 
-_(clear when no task is in progress)_
+What is done so far:
+- T0.6 provider domain, protected persistence, CRUD/default rules, chat client factory, model listing, and connection tests are committed and verified.
+- The current task spec is the Settings › LLM connection page in `docs/PLAN.md`; the UI must match `settings-llm.dc.html` and LLM-1 through LLM-8.
+What is next (exact next step):
+- Read the full design-system spec and the Settings LLM mockup, then implement the page against the existing provider service and UI components.
+Files touched:
+- `docs/PROGRESS.md`.
+Gotchas found:
+- Show API keys only as an unspecific saved indicator; never pass stored key material to a component.
 
 ## Blockers
 
@@ -43,7 +51,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T0.4 | Single-user login | done | `feat(T0.4): single-user login` |
 | T0.5 | Design system and app shell | done | `feat(T0.5): design system and app shell` |
 | T0.6 | LLM providers — domain, storage, client | done | `feat(T0.6): llm providers backend` |
-| T0.7 | Settings › LLM connection page | todo | |
+| T0.7 | Settings › LLM connection page | in-progress | |
 | T0.8 | Basic chat (no tools) | todo | |
 | T1.1 | Server inventory | todo | |
 | T1.2 | SSH pool and runner | todo | |
@@ -93,3 +101,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-13 · Codex · T0.4 · build/test pass; login, logout, health/static access, and both themes verified
 - 2026-11-13 · Codex · T0.6 · started
 - 2026-11-13 · Codex · T0.6 · build/test pass; migration startup, fake HTTP routine, and Ollama qwen2.5:0.5b smoke verified
+- 2026-11-13 · Codex · T0.7 · started
