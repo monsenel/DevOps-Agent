@@ -6,8 +6,8 @@
 
 ## Current
 
-- **Task:** T0.7 Settings › LLM connection page
-- **Status:** in-progress
+- **Task:** T0.8 Basic chat (no tools)
+- **Status:** todo
 - **Last updated:** 2026-11-13 by implementation session
 
 ## WIP notes
@@ -24,33 +24,13 @@ Gotchas found:
 -->
 
 What is done so far:
-- T0.6 provider domain, protected persistence, CRUD/default rules, chat client factory, model listing, and connection tests are committed and verified.
-- The current task spec is the Settings › LLM connection page in `docs/PLAN.md`; the UI must match `settings-llm.dc.html` and LLM-1 through LLM-8.
-- Added persisted test details (model count, streaming, tool calling, error summary) and model refresh using either an entered key or the selected provider's protected key.
-- Implemented provider list and connection form, provider presets, field validation, refresh/test/save/remove actions, test result card, default selection, section placeholders, v2 routing/fallback cards, cloud redaction setting, and live sidebar model status.
-- Verified saved credentials remain blank in the password field after reload; only a saved-key indicator is shown. Verified add/save/test/default flow against a local OpenAI-compatible fixture: endpoint reachable, one model listed, streaming and tool calling supported, sidebar changed to Connected.
-- Verified light/dark theme switching and 390px layout without horizontal overflow. `dotnet build DevOpsAgent.slnx` passed with 0 warnings/errors, `dotnet test DevOpsAgent.slnx` passed (4/4), `git diff --check` and CSS color-token audit passed.
+- T0.1 through T0.7 are complete and committed.
 What is next (exact next step):
-- Commit the completed T0.7 implementation as `feat(T0.7): llm connection settings`, then start T0.8 Basic chat (no tools) per `docs/PLAN.md`.
+- Start T0.8 by marking it in-progress, recording the session log start line, and committing `chore(progress): start T0.8`; then implement the persisted basic chat page and streaming path described in `docs/PLAN.md`.
 Files touched:
-- `src/DevOpsAgent.Application/Llm/LlmProviderContracts.cs`
-- `src/DevOpsAgent.Application/Llm/ProviderService.cs`
-- `src/DevOpsAgent.Domain/Llm/LlmProvider.cs`
-- `src/DevOpsAgent.Infrastructure/Migrations/20261113200840_PersistProviderTestSummary.*`
-- `src/DevOpsAgent.Infrastructure/Persistence/AppDbContext.cs`
-- `src/DevOpsAgent.Web/Components/Layout/Sidebar.razor`
-- `src/DevOpsAgent.Web/Components/Layout/TopBar.razor`
-- `src/DevOpsAgent.Web/Components/Pages/Settings.razor`
-- `src/DevOpsAgent.Web/Components/UI/Field.razor`
-- `src/DevOpsAgent.Web/Components/UI/SwitchRow.razor`
-- `src/DevOpsAgent.Web/Components/_Imports.razor`
-- `src/DevOpsAgent.Web/ProviderStatusState.cs`
-- `src/DevOpsAgent.Web/Program.cs`
-- `src/DevOpsAgent.Web/wwwroot/css/app.css`
-- `tests/DevOpsAgent.Tests/LlmProviderTests.cs`
-- `docs/PROGRESS.md`
+- _(none; WIP notes are clear)_
 Gotchas found:
-- Keep API keys out of component state after loading; the form uses a blank password field plus an unspecific saved-key indicator, and blank input means retain the stored key.
+- T0.7 keeps stored API key material out of component state; the blank password field plus saved-key indicator preserves the credential without exposing it.
 
 ## Blockers
 
@@ -70,7 +50,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T0.4 | Single-user login | done | `feat(T0.4): single-user login` |
 | T0.5 | Design system and app shell | done | `feat(T0.5): design system and app shell` |
 | T0.6 | LLM providers — domain, storage, client | done | `feat(T0.6): llm providers backend` |
-| T0.7 | Settings › LLM connection page | in-progress | |
+| T0.7 | Settings › LLM connection page | done | `feat(T0.7): llm connection settings` |
 | T0.8 | Basic chat (no tools) | todo | |
 | T1.1 | Server inventory | todo | |
 | T1.2 | SSH pool and runner | todo | |
@@ -121,3 +101,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-13 · Codex · T0.6 · started
 - 2026-11-13 · Codex · T0.6 · build/test pass; migration startup, fake HTTP routine, and Ollama qwen2.5:0.5b smoke verified
 - 2026-11-13 · Codex · T0.7 · started
+- 2026-11-13 · Codex · T0.7 · build/test pass; settings save/test/default flow, saved-key privacy, both themes, and 390px layout verified
