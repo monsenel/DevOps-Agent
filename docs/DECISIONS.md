@@ -37,3 +37,8 @@ Format: `D-<number> · <date> · <title>` then Decision / Why / Consequences.
 
 ### D-010 · 2026-11-13 · Secrets encrypted with ASP.NET Data Protection
 - **Why:** API keys and key passphrases at rest in SQLite; key ring on `/data/keys`.
+
+### D-011 · 2026-11-13 · Central package management for test dependencies
+- **Decision:** Pin the initial test tooling centrally in `Directory.Packages.props`: Microsoft.NET.Test.Sdk 17.14.1, xunit 2.9.3, xunit.runner.visualstudio 3.1.4, and coverlet.collector 6.0.4.
+- **Why:** T0.1 requires centrally managed package versions, and the .NET 10 xUnit template supplied these compatible versions.
+- **Consequences:** New NuGet dependencies require a corresponding decision entry and package version in the central file.

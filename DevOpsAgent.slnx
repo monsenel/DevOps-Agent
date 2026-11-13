@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DevOpsAgent.Application/DevOpsAgent.Application.csproj" />
+    <Project Path="src/DevOpsAgent.Domain/DevOpsAgent.Domain.csproj" />
+    <Project Path="src/DevOpsAgent.Infrastructure/DevOpsAgent.Infrastructure.csproj" />
+    <Project Path="src/DevOpsAgent.Web/DevOpsAgent.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DevOpsAgent.Tests/DevOpsAgent.Tests.csproj" />
+  </Folder>
+</Solution>

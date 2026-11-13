@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DevOpsAgent.Application</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../DevOpsAgent.Domain/DevOpsAgent.Domain.csproj" />
+  </ItemGroup>
+</Project>
