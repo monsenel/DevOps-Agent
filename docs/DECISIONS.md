@@ -57,3 +57,8 @@ Format: `D-<number> · <date> · <title>` then Decision / Why / Consequences.
 - **Decision:** Vendor Plus Jakarta Sans and JetBrains Mono WOFF2 assets from Fontsource 5.3.0 with their SIL Open Font License 1.1 texts.
 - **Why:** The interface must work offline and the approved design specifies these fonts.
 - **Consequences:** Keep the font assets and license files in `src/DevOpsAgent.Web/wwwroot/fonts`; do not load fonts from a CDN at runtime.
+
+### D-015 · 2026-11-13 · Match the container UID to bind-mounted data
+- **Decision:** Run the app image as a non-root user and let Compose set its numeric UID/GID through `DVA_UID` and `DVA_GID` for the host-mounted data directory.
+- **Why:** SQLite and Data Protection need write access to `./data`, whose ownership follows the local host user when Compose creates the bind path.
+- **Consequences:** Set these values to the host user's numeric UID/GID when they differ from the `.env.example` defaults.

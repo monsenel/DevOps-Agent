@@ -1,0 +1,30 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    user: "${DVA_UID:-1000}:${DVA_GID:-1000}"
+    ports:
+      - "8080:8080"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      ASPNETCORE_URLS: ${ASPNETCORE_URLS:-http://+:8080}
+      PersistenceOptions__ConnectionString: Data Source=/data/devops-agent.db
+      PersistenceOptions__DataProtectionKeysDirectory: /data/keys
+    volumes:
+      - ./data:/data
+      - ./keys:/keys:ro
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama
+    profiles:
+      - ollama
+    volumes:
+      - ollama:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  ollama:

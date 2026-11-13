@@ -25,12 +25,14 @@ Gotchas found:
 
 What is done so far:
 - T0.5 design system and app shell is committed and verified.
+- Added a multi-stage .NET 10 image, Docker Compose app/Ollama services, optional `.env`, ignored build/data secrets, and `/healthz` returning status plus assembly version.
+- Compose config resolves to a non-root UID/GID for the host data bind mount.
 What is next (exact next step):
-- Check Docker availability and implement the multi-stage non-root image, compose services, `.env.example`, and anonymous `/healthz` endpoint.
+- Build and start the Compose app, then verify `/healthz`, the main page, the host data directory, SQLite migration, and container user.
 Files touched:
-- `docs/PROGRESS.md`.
+- `docs/PROGRESS.md`, `docs/DECISIONS.md`, `src/DevOpsAgent.Web/Program.cs`, `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `.env.example`.
 Gotchas found:
-- None yet.
+- The bind-mounted SQLite volume needs a container UID/GID matching the host directory owner while keeping the image non-root.
 
 ## Blockers
 

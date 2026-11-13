@@ -20,6 +20,12 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseAntiforgery();
 
+app.MapGet("/healthz", () => Results.Ok(new
+{
+    status = "ok",
+    version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown"
+})).AllowAnonymous();
+
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
