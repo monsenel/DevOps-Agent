@@ -25,12 +25,15 @@ Gotchas found:
 
 What is done so far:
 - T0.1 solution skeleton is committed and verified.
+- T0.3 `AppDbContext`, `AppSetting`, SQLite configuration, startup migration application, persisted Data Protection keys, and `ISecretProtector` are implemented.
+- Initial EF migration is generated; local `dotnet-ef` is pinned to match EF Core 10.0.14.
+- Added a Data Protection secret round-trip test.
 What is next (exact next step):
-- Review the EF Core 10 SQLite migration and ASP.NET Data Protection persistence docs, then implement `AppDbContext`, the `AppSetting` entity, startup migration, key-ring persistence, and `ISecretProtector`.
+- Run build and tests, then launch the app with a temporary local data path and confirm the SQLite database and key-ring files are created.
 Files touched:
-- `docs/PROGRESS.md`.
+- `Directory.Packages.props`, `docs/DECISIONS.md`, `.config/dotnet-tools.json`, `src/DevOpsAgent.Domain/Settings/AppSetting.cs`, `src/DevOpsAgent.Application/Abstractions/ISecretProtector.cs`, `src/DevOpsAgent.Infrastructure/**`, `src/DevOpsAgent.Web/**`, `tests/DevOpsAgent.Tests/SecretProtectorTests.cs`.
 Gotchas found:
-- None yet.
+- The globally installed EF tool was 10.0.13; a repository-local 10.0.14 tool removes the runtime/tool mismatch.
 
 ## Blockers
 
