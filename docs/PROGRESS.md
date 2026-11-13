@@ -6,7 +6,7 @@
 
 ## Current
 
-- **Task:** T0.1 Solution skeleton
+- **Task:** T0.3 Persistence
 - **Status:** in-progress
 - **Last updated:** 2026-11-13 by implementation session
 
@@ -23,7 +23,14 @@ Gotchas found:
 -
 -->
 
-_(empty)_
+What is done so far:
+- T0.1 solution skeleton is committed and verified.
+What is next (exact next step):
+- Review the EF Core 10 SQLite migration and ASP.NET Data Protection persistence docs, then implement `AppDbContext`, the `AppSetting` entity, startup migration, key-ring persistence, and `ISecretProtector`.
+Files touched:
+- `docs/PROGRESS.md`.
+Gotchas found:
+- None yet.
 
 ## Blockers
 
@@ -38,7 +45,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | Task | Title | Status | Commit |
 |---|---|---|---|
 | T0.1 | Solution skeleton | done | `feat(T0.1): solution skeleton` |
-| T0.3 | Persistence | todo | |
+| T0.3 | Persistence | in-progress | |
 | T0.2 | Docker and compose | todo | |
 | T0.3 | Persistence | todo | |
 | T0.4 | Single-user login | todo | |
@@ -84,3 +91,4 @@ One line per session: date · tool/model · tasks touched · result.
 
 - 2026-11-13 · planning · docs created · ready for T0.1
 - 2026-11-13 · Codex · T0.1 · solution skeleton complete; build/test pass and default page returns HTTP 200
+- 2026-11-13 · Codex · T0.3 · started
