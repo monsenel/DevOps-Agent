@@ -29,8 +29,9 @@ What is done so far:
 - Added environment-backed admin credentials, password hash verification/plain-password hashing with warning, cookie auth, authenticated fallback, anonymous health/static assets, and Razor Pages sign-in/sign-out.
 - Built a token-styled 400px login card and added a protected, antiforgery-backed logout form to the sidebar.
 - `dotnet build DevOpsAgent.slnx` passes with zero warnings.
+- HTTP verification confirms `/` redirects to `/login`, `/healthz` and login assets remain anonymous, wrong credentials show an error, valid credentials reach Overview, and logout invalidates the cookie.
 What is next (exact next step):
-- Run the app with temporary admin credentials and verify anonymous redirects, wrong-password feedback, successful sign-in, sign-out, anonymous health, and the login page layout.
+- Inspect the login card in the browser, rerun build/tests and the component token audit, then mark T0.4 done and start T0.6.
 Files touched:
 - `docs/PROGRESS.md`, `src/DevOpsAgent.Web/Program.cs`, `src/DevOpsAgent.Web/Authentication/**`, `src/DevOpsAgent.Web/Pages/**`, `src/DevOpsAgent.Web/Components/Layout/Sidebar.razor`, `src/DevOpsAgent.Web/Components/_Imports.razor`, `src/DevOpsAgent.Web/wwwroot/css/app.css`.
 Gotchas found:
