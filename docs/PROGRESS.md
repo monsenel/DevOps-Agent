@@ -26,10 +26,13 @@ Gotchas found:
 What is done so far:
 - T0.2 Docker and compose is committed and verified.
 - Reviewed official .NET 10 cookie authentication, Blazor auth-state, antiforgery, Razor Pages form, and static asset authorization guidance.
+- Added environment-backed admin credentials, password hash verification/plain-password hashing with warning, cookie auth, authenticated fallback, anonymous health/static assets, and Razor Pages sign-in/sign-out.
+- Built a token-styled 400px login card and added a protected, antiforgery-backed logout form to the sidebar.
+- `dotnet build DevOpsAgent.slnx` passes with zero warnings.
 What is next (exact next step):
-- Add admin credential options and password verification, wire cookie/authorization middleware and protected routes, then build the accessible login/logout pages with antiforgery.
+- Run the app with temporary admin credentials and verify anonymous redirects, wrong-password feedback, successful sign-in, sign-out, anonymous health, and the login page layout.
 Files touched:
-- `docs/PROGRESS.md`.
+- `docs/PROGRESS.md`, `src/DevOpsAgent.Web/Program.cs`, `src/DevOpsAgent.Web/Authentication/**`, `src/DevOpsAgent.Web/Pages/**`, `src/DevOpsAgent.Web/Components/Layout/Sidebar.razor`, `src/DevOpsAgent.Web/Components/_Imports.razor`, `src/DevOpsAgent.Web/wwwroot/css/app.css`.
 Gotchas found:
 - The app uses globally Interactive Server rendering, so login must complete through a normal HTTP form response before the cookie can be set.
 

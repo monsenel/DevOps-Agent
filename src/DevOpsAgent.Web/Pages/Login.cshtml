@@ -1,0 +1,56 @@
+@page "/login"
+@model LoginModel
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign in · DevOps Agent</title>
+    <script>
+        (() => {
+            let theme;
+            try {
+                theme = localStorage.getItem("dva-theme");
+            } catch {
+                theme = null;
+            }
+            if (theme !== "light" && theme !== "dark") {
+                theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+            }
+            document.documentElement.dataset.theme = theme;
+        })();
+    </script>
+    <link rel="stylesheet" href="/css/tokens.css" />
+    <link rel="stylesheet" href="/css/app.css" />
+</head>
+<body>
+    <main class="login-page">
+        <section class="login-card" aria-labelledby="login-heading">
+            <a class="brand-row login-brand" href="/" aria-label="DevOps Agent">
+                <span class="brand-mark" aria-hidden="true">
+                    <svg class="icon" viewBox="0 0 18 18"><circle cx="4" cy="9" r="2.25"></circle><circle cx="14" cy="4" r="2.25"></circle><circle cx="14" cy="14" r="2.25"></circle><path d="m6 8 5.8-3M6 10l5.8 3"></path></svg>
+                </span>
+                <span>DevOps Agent</span>
+            </a>
+            <h1 id="login-heading">Sign in</h1>
+            <p class="muted">Use your administrator credentials to continue.</p>
+            @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+            {
+                <div class="login-error" role="alert">@Model.ErrorMessage</div>
+            }
+            <form method="post" class="login-form">
+                <input asp-for="ReturnUrl" type="hidden" />
+                <div class="field">
+                    <label asp-for="Username">Username</label>
+                    <input asp-for="Username" autocomplete="username" required autofocus />
+                </div>
+                <div class="field">
+                    <label asp-for="Password">Password</label>
+                    <input asp-for="Password" type="password" autocomplete="current-password" required />
+                </div>
+                <button class="ui-button primary full-width" type="submit">Sign in</button>
+            </form>
+        </section>
+    </main>
+</body>
+</html>
