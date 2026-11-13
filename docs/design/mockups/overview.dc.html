@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DevOps Agent overview</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 100%; min-height: 1040px; box-sizing: border-box; padding: 20px; display: flex; flex-wrap: wrap; gap: 20px; background: {{bg}}; color: {{ink}}; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; font-size: 13px; line-height: 1.45">
+
+<nav aria-label="Main" style="flex: 1 1 220px; max-width: 248px; box-sizing: border-box; padding: 20px 14px 14px; border-radius: 24px; background: {{card}}; display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; align-items: center; gap: 10px; padding: 0 8px">
+<span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 10px; background: {{accent}}">
+<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="4" cy="9" r="2.25" fill="none" stroke="{{onAccent}}" stroke-width="1.75"></circle><circle cx="14" cy="4" r="2.25" fill="none" stroke="{{onAccent}}" stroke-width="1.75"></circle><circle cx="14" cy="14" r="2.25" fill="none" stroke="{{onAccent}}" stroke-width="1.75"></circle><path d="M6 8L12 5M6 10L12 13" fill="none" stroke="{{onAccent}}" stroke-width="1.75"></path></svg>
+</span>
+<span style="font-size: 16px; font-weight: 700">DevOps Agent</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<button type="button" style="display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 14px; border: 0; border-radius: 14px; background: {{accent}}; color: {{onAccent}}; font: inherit; font-weight: 600; text-align: left; cursor: pointer">Overview</button>
+<button type="button" style="display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 14px; border: 0; border-radius: 14px; background: transparent; color: {{muted}}; font: inherit; font-weight: 500; text-align: left; cursor: pointer">Topology</button>
+<button type="button" style="display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 14px; border: 0; border-radius: 14px; background: transparent; color: {{muted}}; font: inherit; font-weight: 500; text-align: left; cursor: pointer">Servers</button>
+<button type="button" style="display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 14px; border: 0; border-radius: 14px; background: transparent; color: {{muted}}; font: inherit; font-weight: 500; text-align: left; cursor: pointer"><span>Alerts</span><span style="padding: 2px 9px; border-radius: 10px; background: {{warnSoft}}; color: {{onWarn}}; font-size: 11px; font-weight: 700">2</span></button>
+<button type="button" style="display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 14px; border: 0; border-radius: 14px; background: transparent; color: {{muted}}; font: inherit; font-weight: 500; text-align: left; cursor: pointer">Updates</button>
+<button type="button" style="display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 14px; border: 0; border-radius: 14px; background: transparent; color: {{muted}}; font: inherit; font-weight: 500; text-align: left; cursor: pointer">Agent chat</button>
+<button type="button" style="display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 14px; border: 0; border-radius: 14px; background: transparent; color: {{muted}}; font: inherit; font-weight: 500; text-align: left; cursor: pointer">Action log</button>
+<a href="settings-llm.dc.html" style="display: flex; align-items: center; height: 44px; padding: 0 14px; border-radius: 14px; color: {{muted}}; font-weight: 500; text-decoration: none">Settings</a>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<div style="padding: 0 14px 4px; font-size: 12px; font-weight: 700">Groups</div>
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; color: {{muted}}"><span>prod</span><span>7</span></div>
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; color: {{muted}}"><span>staging</span><span>4</span></div>
+</div>
+<div style="flex: 1"></div>
+<div style="padding: 16px; border-radius: 18px; background: {{inv}}; color: {{onInv}}; display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #aab4bd">Model</div>
+<div style="font-weight: 600">Ollama (local)</div>
+<div style="font-size: 12px; color: #aab4bd">Connected. Tool calling on.</div>
+<a href="settings-llm.dc.html" style="display: flex; align-items: center; justify-content: center; height: 44px; border-radius: 12px; background: {{accent}}; color: {{onAccent}}; font-weight: 600; text-decoration: none">LLM settings</a>
+</div>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 4px 4px 0">
+<h1 style="margin: 0; font-size: 24px; font-weight: 700">Overview</h1>
+<div style="flex: 1 1 0"></div>
+<div style="flex: 0 1 280px; display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px; border-radius: 14px; background: {{card}}">
+<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="6" cy="6" r="4.25" fill="none" stroke="{{muted}}" stroke-width="1.5"></circle><path d="M9.2 9.2L13 13" stroke="{{muted}}" stroke-width="1.5"></path></svg>
+<label for="search" style="position: absolute; width: 1px; height: 1px; overflow: hidden">Search</label>
+<input id="search" type="text" placeholder="Search name, IP or port" style="flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: {{ink}}; font: inherit">
+</div>
+<button type="button" style="height: 44px; padding: 0 16px; border: 0; border-radius: 14px; background: {{card}}; color: {{ink}}; font: inherit; font-weight: 500; cursor: pointer">Theme: {{themeName}}</button>
+<button type="button" style="height: 44px; padding: 0 18px; border: 0; border-radius: 14px; background: {{accent}}; color: {{onAccent}}; font: inherit; font-weight: 600; cursor: pointer">Run discovery</button>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 20px">
+<section style="flex: 5 1 320px; box-sizing: border-box; padding: 24px; border-radius: 24px; background: {{card}}; display: flex; flex-direction: column; gap: 10px; align-items: flex-start">
+<h2 style="margin: 0; font-size: 20px; font-weight: 700">11 servers, 2 need attention</h2>
+<p style="margin: 0; color: {{muted}}">Last discovery ran 4 minutes ago and found 3 changes since yesterday.</p>
+<div style="flex: 1"></div>
+<button type="button" style="height: 44px; padding: 0 18px; border: 0; border-radius: 14px; background: {{accent}}; color: {{onAccent}}; font: inherit; font-weight: 600; cursor: pointer">Ask the agent</button>
+</section>
+<section style="flex: 2 1 150px; box-sizing: border-box; padding: 20px; border-radius: 24px; background: {{card}}; display: flex; flex-direction: column; gap: 14px">
+<span style="display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 12px; background: {{inset}}"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2.5" width="12" height="4.5" rx="1.5" fill="none" stroke="{{ink}}" stroke-width="1.5"></rect><rect x="2" y="9" width="12" height="4.5" rx="1.5" fill="none" stroke="{{ink}}" stroke-width="1.5"></rect></svg></span>
+<div style="color: {{muted}}">Servers online</div>
+<div style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: 28px; font-weight: 700">11</span><span style="color: {{muted}}">of 11</span></div>
+</section>
+<section style="flex: 2 1 150px; box-sizing: border-box; padding: 20px; border-radius: 24px; background: {{card}}; display: flex; flex-direction: column; gap: 14px">
+<span style="display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 12px; background: {{inset}}"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5V10M4.5 6.5L8 10L11.5 6.5M3 13.5H13" fill="none" stroke="{{ink}}" stroke-width="1.5"></path></svg></span>
+<div style="color: {{muted}}">Pending updates</div>
+<div style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: 28px; font-weight: 700">14</span><span style="padding: 2px 9px; border-radius: 10px; background: {{soft}}; color: {{onSoft}}; font-size: 11px; font-weight: 700">5 security</span></div>
+</section>
+<section style="flex: 2 1 150px; box-sizing: border-box; padding: 20px; border-radius: 24px; background: {{accent}}; color: {{onAccent}}; display: flex; flex-direction: column; gap: 14px">
+<span style="display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 12px; background: {{onAccent}}"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2L14 13H2z" fill="none" stroke="{{accent}}" stroke-width="1.5"></path><path d="M8 6.5V9.5M8 11V11.6" fill="none" stroke="{{accent}}" stroke-width="1.5"></path></svg></span>
+<div>Open alerts</div>
+<div style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: 28px; font-weight: 700">2</span><span>1 high</span></div>
+</section>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 20px">
+<section style="flex: 8 1 520px; min-width: 0; box-sizing: border-box; padding: 22px; border-radius: 24px; background: {{card}}; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<h2 style="margin: 0; font-size: 16px; font-weight: 700">Topology</h2>
+<span style="padding: 4px 12px; border-radius: 10px; background: {{inset}}; font-weight: 600">Service view</span>
+<span style="padding: 4px 12px; color: {{muted}}">Network view</span>
+<div style="flex: 1 1 0"></div>
+<span style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 10px; background: {{soft}}; color: {{onSoft}}; font-weight: 600">Trace <span style="font-family: 'JetBrains Mono', monospace; font-weight: 500">api.example.com</span></span>
+</div>
+<svg viewBox="0 0 830 400" role="img" aria-label="Service graph: api.example.com reaches nginx on srv-edge, which proxies to the api container on port 5000, which uses PostgreSQL on 5432 and Redis on 6379. One unknown address is outside the inventory." style="width: 100%; height: auto; display: block; font-family: 'JetBrains Mono', monospace">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="{{edge}}"></path></marker>
+<marker id="ah-trace" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="{{accent}}"></path></marker>
+<marker id="ah-unk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="{{warn}}"></path></marker>
+</defs>
+<rect x="200" y="90" width="170" height="130" rx="18" fill="{{inset}}"></rect>
+<text x="216" y="114" font-size="11" fill="{{muted}}">srv-edge · 203.0.113.10</text>
+<rect x="430" y="20" width="180" height="290" rx="18" fill="{{inset}}"></rect>
+<text x="446" y="44" font-size="11" fill="{{muted}}">srv-app-1 · 10.0.1.12</text>
+<rect x="670" y="20" width="145" height="200" rx="18" fill="{{inset}}"></rect>
+<text x="684" y="44" font-size="11" fill="{{muted}}">srv-db · 10.0.1.20</text>
+<rect x="200" y="270" width="170" height="110" rx="18" fill="{{inset}}"></rect>
+<text x="216" y="294" font-size="11" fill="{{muted}}">srv-tools · 10.0.1.30</text>
+
+<path d="M160 142L213 160" stroke="{{edge}}" stroke-width="1.5" fill="none" marker-end="url(#ah)"></path>
+<path d="M355 158L443 92" stroke="{{edge}}" stroke-width="1.5" fill="none" marker-end="url(#ah)"></path>
+<text x="372" y="118" font-size="11" fill="{{muted}}">:3000</text>
+<path d="M520 310V338H357" stroke="{{edge}}" stroke-width="1.5" fill="none" marker-end="url(#ah)"></path>
+<text x="392" y="358" font-size="11" fill="{{muted}}">:8083 docker pull</text>
+<path d="M595 266L668 286" stroke="{{warn}}" stroke-width="1.5" stroke-dasharray="5 4" fill="none" marker-end="url(#ah-unk)"></path>
+
+<path d="M160 212L213 180" stroke="{{accent}}" stroke-width="2.5" fill="none" marker-end="url(#ah-trace)"></path>
+<text x="166" y="186" font-size="11" fill="{{ink}}">:443</text>
+<path d="M355 178H443" stroke="{{accent}}" stroke-width="2.5" fill="none" marker-end="url(#ah-trace)"></path>
+<text x="380" y="170" font-size="12" font-weight="500" fill="{{ink}}">:5000</text>
+<path d="M595 168L680 98" stroke="{{accent}}" stroke-width="2.5" fill="none" marker-end="url(#ah-trace)"></path>
+<text x="612" y="122" font-size="11" fill="{{ink}}">:5432</text>
+<path d="M595 186H680" stroke="{{accent}}" stroke-width="2.5" fill="none" marker-end="url(#ah-trace)"></path>
+<text x="620" y="204" font-size="11" fill="{{ink}}">:6379</text>
+
+<rect x="20" y="120" width="140" height="44" rx="22" fill="{{inset}}"></rect>
+<text x="90" y="146" font-size="11" text-anchor="middle" fill="{{ink}}">app.example.com</text>
+<rect x="20" y="190" width="140" height="44" rx="22" fill="{{soft}}" stroke="{{accent}}" stroke-width="2"></rect>
+<text x="90" y="216" font-size="11" text-anchor="middle" fill="{{onSoft}}">api.example.com</text>
+
+<rect x="215" y="148" width="140" height="58" rx="12" fill="{{card}}" stroke="{{accent}}" stroke-width="2"></rect>
+<text x="229" y="173" font-size="13" font-weight="500" fill="{{ink}}">nginx</text>
+<text x="229" y="191" font-size="11" fill="{{muted}}">:80 :443</text>
+
+<rect x="445" y="62" width="150" height="56" rx="12" fill="{{card}}" stroke="{{line}}"></rect>
+<text x="459" y="86" font-size="13" font-weight="500" fill="{{ink}}">web</text>
+<text x="459" y="104" font-size="11" fill="{{muted}}">container · :3000</text>
+<rect x="445" y="150" width="150" height="56" rx="12" fill="{{card}}" stroke="{{accent}}" stroke-width="2"></rect>
+<text x="459" y="174" font-size="13" font-weight="500" fill="{{ink}}">api</text>
+<text x="459" y="192" font-size="11" fill="{{muted}}">container · :5000</text>
+<rect x="445" y="238" width="150" height="56" rx="12" fill="{{card}}" stroke="{{line}}"></rect>
+<text x="459" y="262" font-size="13" font-weight="500" fill="{{ink}}">worker</text>
+<text x="459" y="280" font-size="11" fill="{{muted}}">container</text>
+
+<rect x="682" y="62" width="121" height="56" rx="12" fill="{{card}}" stroke="{{accent}}" stroke-width="2"></rect>
+<text x="694" y="86" font-size="13" font-weight="500" fill="{{ink}}">postgres</text>
+<text x="694" y="104" font-size="11" fill="{{muted}}">:5432</text>
+<rect x="682" y="150" width="121" height="56" rx="12" fill="{{card}}" stroke="{{accent}}" stroke-width="2"></rect>
+<text x="694" y="174" font-size="13" font-weight="500" fill="{{ink}}">redis</text>
+<text x="694" y="192" font-size="11" fill="{{muted}}">:6379</text>
+
+<rect x="670" y="258" width="145" height="60" rx="12" fill="{{warnSoft}}" stroke="{{warn}}" stroke-width="1.5" stroke-dasharray="5 4"></rect>
+<text x="684" y="283" font-size="13" font-weight="500" fill="{{onWarn}}">Unknown</text>
+<text x="684" y="302" font-size="11" fill="{{onWarn}}">10.0.2.40 · :9200</text>
+
+<rect x="215" y="306" width="140" height="58" rx="12" fill="{{card}}" stroke="{{line}}"></rect>
+<text x="229" y="331" font-size="13" font-weight="500" fill="{{ink}}">nexus</text>
+<text x="229" y="349" font-size="11" fill="{{muted}}">:8081 :8083</text>
+</svg>
+</section>
+
+<div style="flex: 4 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
+<section style="box-sizing: border-box; padding: 22px; border-radius: 24px; background: {{card}}; display: flex; flex-direction: column; gap: 12px">
+<h2 style="margin: 0; font-size: 16px; font-weight: 700">Alerts</h2>
+<div style="display: flex; gap: 12px; padding: 12px 14px; border-radius: 16px; background: {{warnSoft}}; color: {{onWarn}}">
+<span style="font-weight: 700">High</span>
+<span>srv-edge: 400 failed SSH logins in 5 min from 3 IPs</span>
+</div>
+<div style="display: flex; gap: 12px; padding: 12px 14px; border-radius: 16px; background: {{inset}}">
+<span style="font-weight: 700; color: {{muted}}">Low</span>
+<span>app.example.com: TLS certificate expires in 12 days</span>
+</div>
+</section>
+<section style="flex: 1; box-sizing: border-box; padding: 22px; border-radius: 24px; background: {{card}}; display: flex; flex-direction: column; gap: 12px">
+<h2 style="margin: 0; font-size: 16px; font-weight: 700">Agent</h2>
+<p style="margin: 0">No successful login from those addresses on any server. I suggest blocking two of them on srv-edge for 24 hours.</p>
+<pre style="margin: 0; padding: 12px 14px; border-radius: 14px; background: {{inset}}; color: {{ink}}; font-family: 'JetBrains Mono', monospace; font-size: 12px; overflow-x: auto">block_ip(198.51.100.24, ttl=24h)
+block_ip(198.51.100.77, ttl=24h)</pre>
+<div style="flex: 1"></div>
+<div style="display: flex; gap: 10px">
+<button type="button" style="flex: 1; height: 44px; border: 0; border-radius: 14px; background: {{accent}}; color: {{onAccent}}; font: inherit; font-weight: 600; cursor: pointer">Approve and run</button>
+<button type="button" style="flex: 1; height: 44px; border: 0; border-radius: 14px; background: {{inset}}; color: {{ink}}; font: inherit; font-weight: 600; cursor: pointer">Reject</button>
+</div>
+</section>
+</div>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 20px">
+<section style="flex: 1 1 280px; box-sizing: border-box; padding: 22px; border-radius: 24px; background: {{card}}; display: flex; flex-direction: column; gap: 12px">
+<h2 style="margin: 0; font-size: 16px; font-weight: 700">Drift since yesterday</h2>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; gap: 10px; align-items: baseline"><span style="flex: 0 0 64px; font-weight: 700; color: {{onSoft}}">Added</span><span>Listener :9000 on srv-app-2</span></div>
+<div style="display: flex; gap: 10px; align-items: baseline"><span style="flex: 0 0 64px; font-weight: 700; color: {{onWarn}}">Changed</span><span>nginx upstream for api now points to 10.0.1.12</span></div>
+<div style="display: flex; gap: 10px; align-items: baseline"><span style="flex: 0 0 64px; font-weight: 700; color: {{muted}}">Removed</span><span>Container legacy-cron on srv-tools</span></div>
+</div>
+</section>
+<section style="flex: 1 1 280px; box-sizing: border-box; padding: 22px; border-radius: 24px; background: {{card}}; display: flex; flex-direction: column; gap: 14px">
+<h2 style="margin: 0; font-size: 16px; font-weight: 700">Server load</h2>
+<div style="display: grid; grid-template-columns: 84px 1fr 40px; gap: 12px 10px; align-items: center; font-family: 'JetBrains Mono', monospace; font-size: 12px">
+<span>srv-edge</span><span style="height: 8px; border-radius: 4px; background: {{inset}}; display: block"><span style="display: block; width: 62%; height: 8px; border-radius: 4px; background: {{accent}}"></span></span><span style="text-align: right; color: {{muted}}">62%</span>
+<span>srv-app-1</span><span style="height: 8px; border-radius: 4px; background: {{inset}}; display: block"><span style="display: block; width: 41%; height: 8px; border-radius: 4px; background: {{accent}}"></span></span><span style="text-align: right; color: {{muted}}">41%</span>
+<span>srv-db</span><span style="height: 8px; border-radius: 4px; background: {{inset}}; display: block"><span style="display: block; width: 28%; height: 8px; border-radius: 4px; background: {{accent}}"></span></span><span style="text-align: right; color: {{muted}}">28%</span>
+<span>srv-tools</span><span style="height: 8px; border-radius: 4px; background: {{inset}}; display: block"><span style="display: block; width: 91%; height: 8px; border-radius: 4px; background: {{warn}}"></span></span><span style="text-align: right; color: {{onWarn}}">91%</span>
+</div>
+</section>
+<section style="flex: 1 1 280px; min-width: 0; box-sizing: border-box; padding: 22px; border-radius: 24px; background: {{card}}; display: flex; flex-direction: column; gap: 10px">
+<h2 style="margin: 0; font-size: 16px; font-weight: 700">Selected edge</h2>
+<div style="font-weight: 600">nginx → api <span style="font-family: 'JetBrains Mono', monospace; color: {{onSoft}}">:5000</span></div>
+<div style="color: {{muted}}">Declared and observed. 6 open connections.</div>
+<div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: {{muted}}">/etc/nginx/conf.d/api.conf:14</div>
+<pre style="margin: 0; padding: 12px 14px; border-radius: 14px; background: {{inset}}; color: {{ink}}; font-family: 'JetBrains Mono', monospace; font-size: 12px; overflow-x: auto">proxy_pass http://10.0.1.12:5000;</pre>
+</section>
+</div>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":1040}}'>
+class Component extends DCLogic {
+renderVals() {
+const dark = this.props.dark === true || this.props.dark === 'true';
+if (dark) {
+return { themeName: 'Dark', bg: '#0c0f11', card: '#161a1e', inset: '#1e2429', ink: '#eef1f3', muted: '#9da8b1', line: '#2a3239', accent: '#4ade80', onAccent: '#052e14', soft: '#12331f', onSoft: '#86efac', warn: '#fbbf24', warnSoft: '#3b2d0b', onWarn: '#fcd34d', edge: '#5d6973', inv: '#1e2429', onInv: '#eef1f3' };
+}
+return { themeName: 'Light', bg: '#eceef1', card: '#ffffff', inset: '#f3f5f7', ink: '#14181b', muted: '#56616b', line: '#d5dae0', accent: '#15803d', onAccent: '#ffffff', soft: '#dcfce7', onSoft: '#14532d', warn: '#b45309', warnSoft: '#fef3c7', onWarn: '#7c2d12', edge: '#8b96a0', inv: '#14181b', onInv: '#f3f5f7' };
+}
+}
+</script>
+</body>
+</html>

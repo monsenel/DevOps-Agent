@@ -1,0 +1,39 @@
+# Decisions
+
+Append-only. To change a decision, add a new entry that supersedes the old one; do not edit old entries.
+
+Format: `D-<number> · <date> · <title>` then Decision / Why / Consequences.
+
+---
+
+### D-001 · 2026-11-13 · Web app in Docker, not a desktop app
+- **Decision:** Self-hosted web app shipped as one Docker image, run with docker compose.
+- **Why:** Monitoring must run 24/7; no cross-platform desktop shell to maintain; runs inside the private network so fewer jump hosts.
+- **Consequences:** Needs a login. Must not be exposed to the internet (VPN/WireGuard only).
+
+### D-002 · 2026-11-13 · Blazor Web App, Interactive Server render mode
+- **Why:** Single user, same network; live updates over the circuit; no separate API client layer.
+
+### D-003 · 2026-11-13 · SQLite with EF Core
+- **Why:** Single-user tool; no DB server to run; one file on `/data`.
+
+### D-004 · 2026-11-13 · SSH.NET, agentless
+- **Why:** Managed, no `ssh` binary needed in the image; port forwarding covers jump hosts. Nothing installed on managed servers.
+
+### D-005 · 2026-11-13 · Microsoft.Extensions.AI with an OpenAI-compatible client
+- **Why:** One abstraction for Ollama, LM Studio, OpenRouter and custom endpoints; built-in function invocation. JSON-in-prompt fallback for models without native tool calling.
+
+### D-006 · 2026-11-13 · Deterministic parsers for all known configs
+- **Why:** The graph must be exact and reproducible. The LLM only proposes `inferred` edges for configs without a collector (v2).
+
+### D-007 · 2026-11-13 · Cytoscape.js for the graph, vendored
+- **Why:** Compound (nested) nodes, ELK/dagre layouts, handles 500+ nodes. Vendored into `wwwroot/lib` so the app works offline.
+
+### D-008 · 2026-11-13 · Bento design, light + dark, English LTR
+- **Why:** Owner's chosen visual direction (see `DESIGN.md`). Personal tool, English UI.
+
+### D-009 · 2026-11-13 · No Hangfire/Redis
+- **Why:** Hosted services are enough for a single-process app.
+
+### D-010 · 2026-11-13 · Secrets encrypted with ASP.NET Data Protection
+- **Why:** API keys and key passphrases at rest in SQLite; key ring on `/data/keys`.
