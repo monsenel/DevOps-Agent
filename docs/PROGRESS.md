@@ -7,8 +7,8 @@
 ## Current
 
 - **Task:** T0.1 Solution skeleton
-- **Status:** todo
-- **Last updated:** 2026-11-13 by planning session
+- **Status:** in-progress
+- **Last updated:** 2026-11-13 by implementation session
 
 ## WIP notes
 
@@ -82,3 +82,4 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 One line per session: date · tool/model · tasks touched · result.
 
 - 2026-11-13 · planning · docs created · ready for T0.1
+- 2026-11-13 · Codex · T0.1 · started
