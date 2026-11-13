@@ -62,3 +62,8 @@ Format: `D-<number> · <date> · <title>` then Decision / Why / Consequences.
 - **Decision:** Run the app image as a non-root user and let Compose set its numeric UID/GID through `DVA_UID` and `DVA_GID` for the host-mounted data directory.
 - **Why:** SQLite and Data Protection need write access to `./data`, whose ownership follows the local host user when Compose creates the bind path.
 - **Consequences:** Set these values to the host user's numeric UID/GID when they differ from the `.env.example` defaults.
+
+### D-016 · 2026-11-13 · Initialize bind-mount ownership before dropping privileges
+- **Decision:** The Compose entrypoint starts with root only long enough to create and assign `/data` and `/data/keys` to `DVA_UID:DVA_GID`, then uses `setpriv` to run the web process as that non-root identity.
+- **Why:** Compose creates fresh bind-mount directories as root on the target host, so a non-root process cannot initialize the required SQLite and Data Protection files by itself.
+- **Consequences:** The application process remains non-root; only the small entrypoint initialization runs with elevated privileges.
