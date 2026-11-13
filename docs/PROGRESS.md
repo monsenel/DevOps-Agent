@@ -7,7 +7,7 @@
 ## Current
 
 - **Task:** T0.5 Design system and app shell
-- **Status:** in-progress
+- **Status:** done
 - **Last updated:** 2026-11-13 by implementation session
 
 ## WIP notes
@@ -23,18 +23,7 @@ Gotchas found:
 -
 -->
 
-What is done so far:
-- T0.3 persistence is committed and verified.
-- Read the Overview and Settings mockups and added self-hosted WOFF2 fonts with their license texts.
-- Implemented light/dark tokens, the interactive theme toggle, responsive shell and navigation, Overview structure, placeholder nav pages, all required UI primitives, and `/dev/components` previews for both themes.
-- `dotnet build DevOpsAgent.slnx` passes with zero warnings.
-What is next (exact next step):
-- Launch the app and inspect the Overview plus component preview in both themes at desktop and 390px widths; fix any layout or accessibility issues, then rerun build/tests.
-Files touched:
-- `docs/PROGRESS.md`, `docs/DECISIONS.md`, `src/DevOpsAgent.Web/Components/**`, `src/DevOpsAgent.Web/wwwroot/**`.
-Gotchas found:
-- The Google Fonts CSS endpoint returned TTF assets; Fontsource packages provided the requested WOFF2 files and bundled SIL license texts.
-- The .NET template's ReconnectModal included hard-coded colors; it was removed because the design system requires all UI colors to use `--dva-*` tokens.
+_(empty)_
 
 ## Blockers
 
@@ -53,7 +42,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T0.2 | Docker and compose | todo | |
 | T0.3 | Persistence | todo | |
 | T0.4 | Single-user login | todo | |
-| T0.5 | Design system and app shell | in-progress | |
+| T0.5 | Design system and app shell | done | `feat(T0.5): design system and app shell` |
 | T0.6 | LLM providers — domain, storage, client | todo | |
 | T0.7 | Settings › LLM connection page | todo | |
 | T0.8 | Basic chat (no tools) | todo | |
@@ -98,3 +87,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-13 · Codex · T0.3 · started
 - 2026-11-13 · Codex · T0.3 · build/test pass; app startup created SQLite DB, applied migration, and wrote Data Protection key ring
 - 2026-11-13 · Codex · T0.5 · started
+- 2026-11-13 · Codex · T0.5 · build/test pass; checked both themes and 390px layout in browser
