@@ -6,8 +6,8 @@
 
 ## Current
 
-- **Task:** T0.4 Single-user login
-- **Status:** done
+- **Task:** T0.6 LLM providers — domain, storage, client
+- **Status:** in-progress
 - **Last updated:** 2026-11-13 by implementation session
 
 ## WIP notes
@@ -23,7 +23,15 @@ Gotchas found:
 -
 -->
 
-_(clear when no task is in progress)_
+What is done so far:
+- T0.4 single-user login is committed and verified.
+- Read T0.6 scope: provider domain entity, protected API key persistence, CRUD with a single default, OpenAI-compatible `IChatClient` factory, model listing, and connection test routine.
+What is next (exact next step):
+- Check the current official Microsoft.Extensions.AI and OpenAI client docs, then design T0.6 abstractions and package versions before implementation.
+Files touched:
+- `docs/PROGRESS.md`.
+Gotchas found:
+- Build the routine test against a fake HTTP handler; the manual Ollama check depends on a reachable Ollama endpoint.
 
 ## Blockers
 
@@ -42,7 +50,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T0.3 | Persistence | done | `feat(T0.3): sqlite persistence` |
 | T0.4 | Single-user login | done | `feat(T0.4): single-user login` |
 | T0.5 | Design system and app shell | done | `feat(T0.5): design system and app shell` |
-| T0.6 | LLM providers — domain, storage, client | todo | |
+| T0.6 | LLM providers — domain, storage, client | in-progress | |
 | T0.7 | Settings › LLM connection page | todo | |
 | T0.8 | Basic chat (no tools) | todo | |
 | T1.1 | Server inventory | todo | |
@@ -91,3 +99,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-13 · Codex · T0.2 · Compose build and run verified; health endpoint, host DB/migration/key ring, and non-root process checked
 - 2026-11-13 · Codex · T0.4 · started
 - 2026-11-13 · Codex · T0.4 · build/test pass; login, logout, health/static access, and both themes verified
+- 2026-11-13 · Codex · T0.6 · started
