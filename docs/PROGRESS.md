@@ -7,7 +7,7 @@
 ## Current
 
 - **Task:** T0.8 Basic chat (no tools)
-- **Status:** todo
+- **Status:** in-progress
 - **Last updated:** 2026-11-13 by implementation session
 
 ## WIP notes
@@ -25,8 +25,9 @@ Gotchas found:
 
 What is done so far:
 - T0.1 through T0.7 are complete and committed.
+- T0.8 started; the scope is the Agent chat page, streaming replies from the default LLM provider, and persisted conversations/messages.
 What is next (exact next step):
-- Start T0.8 by marking it in-progress, recording the session log start line, and committing `chore(progress): start T0.8`; then implement the persisted basic chat page and streaming path described in `docs/PLAN.md`.
+- Inspect current chat/page/persistence wiring and the PRD/design requirements, then implement conversation storage and the streaming chat flow.
 Files touched:
 - _(none; WIP notes are clear)_
 Gotchas found:
@@ -102,3 +103,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-13 · Codex · T0.6 · build/test pass; migration startup, fake HTTP routine, and Ollama qwen2.5:0.5b smoke verified
 - 2026-11-13 · Codex · T0.7 · started
 - 2026-11-13 · Codex · T0.7 · build/test pass; settings save/test/default flow, saved-key privacy, both themes, and 390px layout verified
+- 2026-11-13 · Codex · T0.8 · started
