@@ -7,7 +7,7 @@
 ## Current
 
 - **Task:** T1.1 Server inventory
-- **Status:** in-progress
+- **Status:** done
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
@@ -22,36 +22,6 @@ Files touched:
 Gotchas found:
 -
 -->
-
-What is done so far:
-- T0.8 was resumed; build passed with 0 warnings/errors and tests passed (4/4). Its OpenRouter criterion is blocked for missing credentials and recorded in Blockers.
-- T1.1 scope reviewed: server entity + migration, inventory table, and add/edit dialog with validation and jump-server relation.
-- Added the `Server` entity, repository/service contracts, SQLite configuration, `/keys` file catalog, passphrase protection, and server CRUD page.
-- Added validation for unique names, port range, key file availability/path safety, existing jump servers, and jump-server deletion guards. Added three inventory service tests.
-- `dotnet build DevOpsAgent.slnx` passes with 0 warnings/errors; `dotnet test DevOpsAgent.slnx` passes (7/7).
-- Generated `AddServerInventory` migration.
-What is next (exact next step):
-- Apply the migration through app startup on a fresh local SQLite database, then inspect Servers page CRUD, validation, 390px layout, and both themes in a browser; fix any issues, rerun build/tests, and finish T1.1.
-Files touched:
-- `src/DevOpsAgent.Domain/Servers/Server.cs`
-- `src/DevOpsAgent.Application/Abstractions/IServerRepository.cs`
-- `src/DevOpsAgent.Application/Servers/ServerContracts.cs`
-- `src/DevOpsAgent.Application/Servers/ServerService.cs`
-- `src/DevOpsAgent.Infrastructure/Persistence/AppDbContext.cs`
-- `src/DevOpsAgent.Infrastructure/Persistence/ServerRepository.cs`
-- `src/DevOpsAgent.Infrastructure/Persistence/ServerInventoryOptions.cs`
-- `src/DevOpsAgent.Infrastructure/Persistence/ServerKeyStore.cs`
-- `src/DevOpsAgent.Infrastructure/Persistence/PersistenceServiceCollectionExtensions.cs`
-- `src/DevOpsAgent.Infrastructure/Migrations/*AddServerInventory*`
-- `src/DevOpsAgent.Web/Program.cs`
-- `src/DevOpsAgent.Web/Components/Pages/Servers.razor`
-- `src/DevOpsAgent.Web/Components/_Imports.razor`
-- `src/DevOpsAgent.Web/wwwroot/css/app.css`
-- `tests/DevOpsAgent.Tests/ServerInventoryTests.cs`
-- `docs/PROGRESS.md`
-Gotchas found:
-- T0.8 remains blocked until an OpenRouter key is configured and the real endpoint check succeeds.
-- Validate jump-server references asynchronously from the loaded inventory; don't synchronously query EF Core from the validation path.
 
 ## Blockers
 
@@ -73,7 +43,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T0.6 | LLM providers — domain, storage, client | done | `feat(T0.6): llm providers backend` |
 | T0.7 | Settings › LLM connection page | done | `feat(T0.7): llm connection settings` |
 | T0.8 | Basic chat (no tools) | blocked | |
-| T1.1 | Server inventory | in-progress | |
+| T1.1 | Server inventory | done | `feat(T1.1): server inventory` |
 | T1.2 | SSH pool and runner | todo | |
 | T1.3 | Import ssh config | todo | |
 | T2.1 | Collector framework and snapshots | todo | |
@@ -127,4 +97,5 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-13 · Codex · T0.8 · conversation persistence and provider-backed streaming service checkpointed; next implement the chat page
 - 2026-11-14 · Codex · T0.8 · chat UI, streamed fixture response, reload persistence, theme and mobile layout verified; live OpenRouter check pending credentials
 - 2026-11-14 · Codex / GPT-6 · resumed T0.8; build/test pass, OpenRouter credential blocker confirmed, orphaned Graphify output stashed
+- 2026-11-14 · Codex · T1.1 · server CRUD, migration startup, jump guard, both themes, and 390px layout verified; build/test pass (7/7)
 - 2026-11-14 · Codex · T1.1 · started

@@ -39,7 +39,7 @@
                             <th scope="col">Jump server</th>
                             <th scope="col">Sudo</th>
                             <th scope="col">Last seen</th>
-                            <th scope="col"><span class="sr-only">Actions</span></th>
+                            <th scope="col" aria-label="Actions"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -154,7 +154,7 @@
                 </div>
                 <div class="dialog-actions">
                     <button class="ui-button secondary" type="button" @onclick="CloseForm">Cancel</button>
-                    <button class="ui-button primary" type="submit" disabled="_saving">@(_saving ? "Saving…" : "Save server")</button>
+                    <button class="ui-button primary" type="submit" disabled="@_saving">@(_saving ? "Saving…" : "Save server")</button>
                 </div>
             </EditForm>
         </section>
