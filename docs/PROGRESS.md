@@ -6,8 +6,8 @@
 
 ## Current
 
-- **Task:** T0.2 Docker and compose
-- **Status:** done
+- **Task:** T0.4 Single-user login
+- **Status:** in-progress
 - **Last updated:** 2026-11-13 by implementation session
 
 ## WIP notes
@@ -40,7 +40,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T0.1 | Solution skeleton | done | `feat(T0.1): solution skeleton` |
 | T0.2 | Docker and compose | done | `feat(T0.2): docker and compose` |
 | T0.3 | Persistence | done | `feat(T0.3): sqlite persistence` |
-| T0.4 | Single-user login | todo | |
+| T0.4 | Single-user login | in-progress | |
 | T0.5 | Design system and app shell | done | `feat(T0.5): design system and app shell` |
 | T0.6 | LLM providers — domain, storage, client | todo | |
 | T0.7 | Settings › LLM connection page | todo | |
@@ -89,3 +89,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-13 · Codex · T0.5 · build/test pass; checked both themes and 390px layout in browser
 - 2026-11-13 · Codex · T0.2 · started
 - 2026-11-13 · Codex · T0.2 · Compose build and run verified; health endpoint, host DB/migration/key ring, and non-root process checked
+- 2026-11-13 · Codex · T0.4 · started
