@@ -23,7 +23,15 @@ Gotchas found:
 -
 -->
 
-_(empty)_
+What is done so far:
+- T0.2 Docker and compose is committed and verified.
+- Reviewed official .NET 10 cookie authentication, Blazor auth-state, antiforgery, Razor Pages form, and static asset authorization guidance.
+What is next (exact next step):
+- Add admin credential options and password verification, wire cookie/authorization middleware and protected routes, then build the accessible login/logout pages with antiforgery.
+Files touched:
+- `docs/PROGRESS.md`.
+Gotchas found:
+- The app uses globally Interactive Server rendering, so login must complete through a normal HTTP form response before the cookie can be set.
 
 ## Blockers
 
