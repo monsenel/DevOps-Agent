@@ -119,3 +119,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex · T1.3 · started
 - 2026-11-14 · Codex / GPT-6 · T1.3 · parser fixtures and import dialog complete; paste/preview/import and jump mapping verified, both themes and 390px checked, build/test pass (15/15)
 - 2026-11-14 · Codex / GPT-6 · resumed T1.2 · refreshed Graphify output (869 nodes, 1,687 links); build/test pass; SSH blocker unchanged
+- 2026-11-14 · Codex / GPT-6 · resumed T1.2 · build/test pass (15/15); real SSH and jump-host verification remains blocked by missing test targets and keys
