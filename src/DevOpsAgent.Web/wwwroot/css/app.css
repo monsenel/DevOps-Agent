@@ -1563,6 +1563,35 @@ p {
     width: min(460px, 100%);
 }
 
+.capability-dialog {
+    width: min(560px, 100%);
+}
+
+.capability-results {
+    display: grid;
+    gap: 10px;
+    margin: 18px 0 8px;
+}
+
+.capability-results > div {
+    display: grid;
+    grid-template-columns: minmax(130px, .8fr) minmax(0, 1.2fr);
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: var(--dva-radius-row);
+    background: var(--dva-inset);
+}
+
+.capability-results dt {
+    color: var(--dva-muted);
+    font-weight: 600;
+}
+
+.capability-results dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
 .inventory-dialog .servers-heading {
     margin-bottom: 20px;
 }
@@ -1637,6 +1666,11 @@ p {
     .inventory-dialog,
     .confirm-dialog {
         max-height: calc(100dvh - 24px);
+    }
+
+    .capability-results > div {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 4px;
     }
 }
 

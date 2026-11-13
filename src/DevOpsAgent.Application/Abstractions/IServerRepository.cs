@@ -15,4 +15,5 @@ public interface IServerKeyStore
 {
     IReadOnlyList<string> ListFileNames();
     bool Contains(string fileName);
+    string GetFullPath(string fileName);
 }

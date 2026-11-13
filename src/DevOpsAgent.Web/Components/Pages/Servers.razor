@@ -1,5 +1,6 @@
 @page "/servers"
 @inject ServerService ServersService
+@inject ServerCapabilityService CapabilityService
 <PageTitle>Servers · DevOps Agent</PageTitle>
 
 <div class="page-stack">
@@ -62,6 +63,7 @@
                                 <td>@(server.LastSeenAtUtc?.ToLocalTime().ToString("g") ?? "Never")</td>
                                 <td>
                                     <div class="table-actions">
+                                        <button class="ui-button secondary" type="button" @onclick="() => TestConnectionAsync(server.Id)" disabled="@(_testingId == server.Id)">Test connection</button>
                                         <button class="ui-button secondary compact" type="button" @onclick="() => OpenEdit(server.Id)">Edit</button>
                                         <button class="ui-button ghost-danger compact" type="button" @onclick="() => AskDelete(server.Id)">Remove</button>
                                     </div>
@@ -179,6 +181,43 @@
     </div>
 }
 
+@if (_testDialogOpen)
+{
+    <div class="dialog-backdrop">
+        <section class="ui-card confirm-dialog capability-dialog" role="dialog" aria-modal="true" aria-labelledby="connection-test-title">
+            <div class="servers-heading">
+                <div>
+                    <p class="eyebrow">SSH capability probe</p>
+                    <h2 id="connection-test-title">@_testServerName</h2>
+                </div>
+                <button class="ui-button secondary compact" type="button" @onclick="CloseTestDialog">Close</button>
+            </div>
+            @if (_testingId.HasValue)
+            {
+                <p class="muted" role="status">Connecting and checking host capabilities…</p>
+            }
+            else if (_testResult is not null)
+            {
+                @if (!string.IsNullOrWhiteSpace(_testResult.Error))
+                {
+                    <div class="alert-message error" role="alert">@_testResult.Error</div>
+                }
+                else
+                {
+                    <dl class="capability-results">
+                        <div><dt>Connection</dt><dd>@(_testResult.Reachable ? "Reachable" : "Unavailable")</dd></div>
+                        <div><dt>Operating system</dt><dd>@(_testResult.OsInfo ?? "Not reported")</dd></div>
+                        <div><dt>Uptime</dt><dd class="mono">@(_testResult.Uptime ?? "Not reported")</dd></div>
+                        <div><dt>Passwordless sudo</dt><dd>@(_testResult.SudoCapable is true ? "Available" : "Unavailable")</dd></div>
+                        <div><dt>Available tools</dt><dd>@(_testResult.AvailableCommands.Count > 0 ? string.Join(", ", _testResult.AvailableCommands) : "None found")</dd></div>
+                    </dl>
+                }
+                <p class="field-helper">Checked @_testResult.TestedAtUtc.ToLocalTime().ToString("g")</p>
+            }
+        </section>
+    </div>
+}
+
 @code {
     private IReadOnlyList<ServerSummary> _servers = [];
     private IReadOnlyList<string> _keyFiles = [];
@@ -188,6 +227,10 @@
     private bool _formOpen;
     private bool _saving;
     private bool _hasPassphrase;
+    private bool _testDialogOpen;
+    private Guid? _testingId;
+    private string? _testServerName;
+    private ServerCapabilityResult? _testResult;
     private string? _pageError;
     private string? _formError;
 
@@ -229,6 +272,30 @@
     }
 
     private void CloseForm() => _formOpen = false;
+
+    private async Task TestConnectionAsync(Guid id)
+    {
+        _testDialogOpen = true;
+        _testingId = id;
+        _testResult = null;
+        _testServerName = _servers.FirstOrDefault(server => server.Id == id)?.Name ?? "Server connection test";
+        try
+        {
+            _testResult = await CapabilityService.TestAsync(id, CancellationToken.None);
+            await LoadAsync();
+        }
+        catch (Exception)
+        {
+            _testResult = new ServerCapabilityResult(id, false, null, null, null, [],
+                "Connection test failed unexpectedly. Review the server and SSH configuration.", DateTimeOffset.UtcNow);
+        }
+        finally
+        {
+            _testingId = null;
+        }
+    }
+
+    private void CloseTestDialog() => _testDialogOpen = false;
 
     private async Task SaveAsync()
     {

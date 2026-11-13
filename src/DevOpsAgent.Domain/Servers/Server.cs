@@ -58,4 +58,11 @@ public sealed class Server
             ProtectedKeyPassphrase = protectedKeyPassphrase;
         }
     }
+
+    public void RecordCapabilities(bool sudoCapable, string? osInfo, DateTimeOffset lastSeenAtUtc)
+    {
+        SudoCapable = sudoCapable;
+        OsInfo = osInfo;
+        LastSeenAtUtc = lastSeenAtUtc;
+    }
 }

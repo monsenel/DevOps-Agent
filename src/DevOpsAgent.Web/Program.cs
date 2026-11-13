@@ -15,6 +15,7 @@ builder.Services.AddDevOpsPersistence(builder.Configuration);
 builder.Services.AddScoped<ProviderService>();
 builder.Services.AddScoped<ChatService>();
 builder.Services.AddScoped<ServerService>();
+builder.Services.AddScoped<ServerCapabilityService>();
 builder.Services.AddScoped<ProviderStatusState>();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddRazorComponents()

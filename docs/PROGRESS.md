@@ -7,7 +7,7 @@
 ## Current
 
 - **Task:** T1.2 SSH pool and runner
-- **Status:** in-progress
+- **Status:** blocked
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
@@ -29,16 +29,39 @@ What is done so far:
 - Checked current official SSH.NET docs: stable `SSH.NET` 2026.0.0 targets .NET 8+; async connect/command, command timeout/status, and local port forwarding APIs are available.
 - Confirmed SSH.NET's `HostKeyEventArgs.CanTrust` defaults to true. The connection layer must override this and verify against pinned host keys.
 - Added SSH.NET 2026.0.0 with decision D-018 (exact host/port host-key pins in `/keys/known_hosts`); package restore and build pass with zero warnings/errors.
+- Implemented the connection pool, reconnect behavior, recursive jump-host tunnels, command runner, sudo wrapping, and OS/uptime/sudo/tool capability probe.
+- Added the Servers test-connection dialog with OS, uptime, sudo, tool, and actionable pinned-host-key failure results.
+- Added tests for exact host/port/key pin matching, mismatch reporting, and jump-route cycles; final build passes with zero warnings/errors and tests pass (13/13).
+- Verified dependency injection and migrations at app startup with an isolated SQLite database; checked both themes and the 390px layout.
 What is next (exact next step):
-- Implement `ISshRunner`, SSH client creation, synchronized pooled connections, and local jump-host forwarding; then add the capability probe and tests.
+- T1.2 cannot be marked done until a real direct host and a host reached through a jump server can be tested. Provide an authorized test target, identity keys, and verified `/keys/known_hosts` entries, then run both connection tests.
 Files touched:
 - `docs/PROGRESS.md`
+- `docs/DECISIONS.md`
+- `Directory.Packages.props`
+- `src/DevOpsAgent.Infrastructure/DevOpsAgent.Infrastructure.csproj`
+- `src/DevOpsAgent.Application/Abstractions/ISshRunner.cs`
+- `src/DevOpsAgent.Application/Servers/ServerTestContracts.cs`
+- `src/DevOpsAgent.Application/Servers/ServerCapabilityService.cs`
+- `src/DevOpsAgent.Application/Servers/ServerService.cs`
+- `src/DevOpsAgent.Domain/Servers/Server.cs`
+- `src/DevOpsAgent.Infrastructure/Ssh/*`
+- `src/DevOpsAgent.Infrastructure/Persistence/ServerKeyStore.cs`
+- `src/DevOpsAgent.Infrastructure/Persistence/PersistenceServiceCollectionExtensions.cs`
+- `src/DevOpsAgent.Web/Program.cs`
+- `src/DevOpsAgent.Web/Components/Pages/Servers.razor`
+- `src/DevOpsAgent.Web/wwwroot/css/app.css`
+- `tests/DevOpsAgent.Tests/ServerInventoryTests.cs`
+- `tests/DevOpsAgent.Tests/SshAndCapabilityTests.cs`
 Gotchas found:
 - T0.8 remains blocked on missing OpenRouter credentials.
+- T1.2 live verification needs a real direct target, jump-host target, identity keys, and pinned host-key entries; none are configured in the repository or `/keys`.
 
 ## Blockers
 
 T0.8 OpenRouter live chat verification is blocked because `.env`, `OPENROUTER_API_KEY`, and `OPENAI_API_KEY` are absent. The generic OpenAI-compatible fixture and prior Ollama smoke test verified the local provider flow, but cannot confirm the real OpenRouter service response. Generated untracked Graphify output was stashed as `orphaned WIP 2026-11-14` during resume reconciliation.
+
+T1.2 live SSH acceptance is blocked because there is no configured test host or jump host and `/keys` has no identity or `known_hosts` files. Fake-runner tests, exact host/port pin tests, route-cycle rejection, and isolated app startup are verified. No real SSH connection was attempted. To unblock, provide an authorized direct host and jump-host route with identity keys and independently verified `/keys/known_hosts` entries.
 
 ---
 
@@ -57,7 +80,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T0.7 | Settings › LLM connection page | done | `feat(T0.7): llm connection settings` |
 | T0.8 | Basic chat (no tools) | blocked | |
 | T1.1 | Server inventory | done | `feat(T1.1): server inventory` |
-| T1.2 | SSH pool and runner | in-progress | |
+| T1.2 | SSH pool and runner | blocked | |
 | T1.3 | Import ssh config | todo | |
 | T2.1 | Collector framework and snapshots | todo | |
 | T2.2 | Host collector | todo | |
@@ -112,4 +135,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · resumed T0.8; build/test pass, OpenRouter credential blocker confirmed, orphaned Graphify output stashed
 - 2026-11-14 · Codex · T1.1 · server CRUD, migration startup, jump guard, both themes, and 390px layout verified; build/test pass (7/7)
 - 2026-11-14 · Codex · T1.2 · started
-- 2026-11-14 · Codex · T1.1 · started
+- 2026-11-14 · Codex / GPT-6 · resumed T1.2; SSH pool, command runner, capability UI and safeguards implemented; build/test pass (13/13), live SSH blocked by missing test targets

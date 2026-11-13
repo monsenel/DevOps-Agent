@@ -18,6 +18,7 @@ public sealed class ServerKeyStore(IOptions<ServerInventoryOptions> options) : I
             .Select(Path.GetFileName)
             .Where(name => !string.IsNullOrWhiteSpace(name))
             .Select(name => name!)
+            .Where(name => !string.Equals(name, "known_hosts", StringComparison.OrdinalIgnoreCase))
             .Order(StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
@@ -25,4 +26,14 @@ public sealed class ServerKeyStore(IOptions<ServerInventoryOptions> options) : I
     public bool Contains(string fileName) =>
         string.Equals(Path.GetFileName(fileName), fileName, StringComparison.Ordinal)
         && File.Exists(Path.Combine(_directory, fileName));
+
+    public string GetFullPath(string fileName)
+    {
+        if (!Contains(fileName))
+        {
+            throw new FileNotFoundException("The selected SSH identity file was not found in /keys.", fileName);
+        }
+
+        return Path.Combine(_directory, fileName);
+    }
 }

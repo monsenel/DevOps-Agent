@@ -100,6 +100,27 @@ public sealed class ServerService(
             throw new ArgumentException("Choose an existing inventory server as the jump server.", nameof(input));
         }
 
+        if (input.JumpServerId is Guid jumpServerId)
+        {
+            var byId = servers.ToDictionary(server => server.Id);
+            var visited = new HashSet<Guid> { currentId ?? Guid.Empty };
+            var nextId = jumpServerId;
+            while (true)
+            {
+                if (!visited.Add(nextId))
+                {
+                    throw new ArgumentException("The configured jump-server route contains a cycle.", nameof(input));
+                }
+
+                if (!byId.TryGetValue(nextId, out var jumpServer) || jumpServer.JumpServerId is not Guid nextJumpId)
+                {
+                    break;
+                }
+
+                nextId = nextJumpId;
+            }
+        }
+
         if (input.Tags.Any(string.IsNullOrWhiteSpace))
         {
             throw new ArgumentException("Tags cannot be empty.", nameof(input));

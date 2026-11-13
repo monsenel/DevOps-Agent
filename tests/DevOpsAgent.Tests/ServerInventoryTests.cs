@@ -55,6 +55,20 @@ public sealed class ServerInventoryTests
     }
 
     [Fact]
+    public async Task JumpServerRouteCannotContainACycle()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var service = new ServerService(new ServerRepository(database.Context), new TestSecretProtector(), new TestKeyStore("id_ed25519"));
+        var gateway = await service.CreateAsync(Input("gateway", null), CancellationToken.None);
+        var target = await service.CreateAsync(Input("private-app", null) with { JumpServerId = gateway.Id }, CancellationToken.None);
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => service.UpdateAsync(
+            gateway.Id, Input("gateway", null) with { JumpServerId = target.Id }, CancellationToken.None));
+
+        Assert.Contains("cycle", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task KeyFileMustBeAnAvailableNameWithoutPathTraversal()
     {
         await using var database = await CreateDatabaseAsync();
@@ -100,5 +114,8 @@ public sealed class ServerInventoryTests
     {
         public IReadOnlyList<string> ListFileNames() => files;
         public bool Contains(string fileName) => files.Contains(fileName, StringComparer.Ordinal);
+        public string GetFullPath(string fileName) => Contains(fileName)
+            ? Path.Combine(Path.GetTempPath(), fileName)
+            : throw new FileNotFoundException("Test key file not found.", fileName);
     }
 }

@@ -2,6 +2,7 @@ using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Servers;
 using DevOpsAgent.Infrastructure.Security;
 using DevOpsAgent.Infrastructure.Llm;
+using DevOpsAgent.Infrastructure.Ssh;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -19,6 +20,7 @@ public static class PersistenceServiceCollectionExtensions
     {
         services.Configure<PersistenceOptions>(configuration.GetSection(PersistenceOptions.SectionName));
         services.Configure<ServerInventoryOptions>(configuration.GetSection(ServerInventoryOptions.SectionName));
+        services.Configure<SshConnectionOptions>(configuration.GetSection(SshConnectionOptions.SectionName));
         services.AddDbContext<AppDbContext>((serviceProvider, options) =>
         {
             var persistenceOptions = serviceProvider.GetRequiredService<IOptions<PersistenceOptions>>().Value;
@@ -29,6 +31,9 @@ public static class PersistenceServiceCollectionExtensions
         services.AddScoped<IChatConversationRepository, ChatConversationRepository>();
         services.AddScoped<IServerRepository, ServerRepository>();
         services.AddSingleton<IServerKeyStore, ServerKeyStore>();
+        services.AddSingleton<SshConnectionPool>();
+        services.AddSingleton<ISshConnectionPool>(serviceProvider => serviceProvider.GetRequiredService<SshConnectionPool>());
+        services.AddSingleton<ISshRunner, SshRunner>();
         services.AddHttpClient("llm", client => client.Timeout = Timeout.InfiniteTimeSpan);
         services.AddSingleton<OpenAiCompatibleChatClientFactory>();
         services.AddSingleton<IChatClientFactory>(serviceProvider =>
