@@ -7,7 +7,7 @@
 ## Current
 
 - **Task:** T0.2 Docker and compose
-- **Status:** in-progress
+- **Status:** done
 - **Last updated:** 2026-11-13 by implementation session
 
 ## WIP notes
@@ -23,18 +23,7 @@ Gotchas found:
 -
 -->
 
-What is done so far:
-- T0.5 design system and app shell is committed and verified.
-- Added a multi-stage .NET 10 image, Docker Compose app/Ollama services, optional `.env`, ignored build/data secrets, and `/healthz` returning status plus assembly version.
-- Added an ownership initialization entrypoint that drops from root to the configured numeric non-root UID/GID.
-- Compose config resolves to a non-root UID/GID for the host data bind mount.
-- Docker image builds successfully, but the first container start failed because Compose created `./data` as root-owned; `/data/keys` was not writable by UID 1000.
-What is next (exact next step):
-- Add a root initialization entrypoint that fixes `/data` ownership and drops privileges to `DVA_UID:DVA_GID`, then rebuild and verify `/healthz`, page response, migration, key ring, and effective process UID.
-Files touched:
-- `docs/PROGRESS.md`, `docs/DECISIONS.md`, `src/DevOpsAgent.Web/Program.cs`, `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `.env.example`, `docker-entrypoint.sh`.
-Gotchas found:
-- Compose creates bind paths as root on this host; matching IDs alone cannot initialize a fresh volume unless ownership is fixed first.
+_(empty)_
 
 ## Blockers
 
@@ -49,9 +38,8 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | Task | Title | Status | Commit |
 |---|---|---|---|
 | T0.1 | Solution skeleton | done | `feat(T0.1): solution skeleton` |
+| T0.2 | Docker and compose | done | `feat(T0.2): docker and compose` |
 | T0.3 | Persistence | done | `feat(T0.3): sqlite persistence` |
-| T0.2 | Docker and compose | in-progress | |
-| T0.3 | Persistence | todo | |
 | T0.4 | Single-user login | todo | |
 | T0.5 | Design system and app shell | done | `feat(T0.5): design system and app shell` |
 | T0.6 | LLM providers — domain, storage, client | todo | |
@@ -100,3 +88,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-13 · Codex · T0.5 · started
 - 2026-11-13 · Codex · T0.5 · build/test pass; checked both themes and 390px layout in browser
 - 2026-11-13 · Codex · T0.2 · started
+- 2026-11-13 · Codex · T0.2 · Compose build and run verified; health endpoint, host DB/migration/key ring, and non-root process checked
