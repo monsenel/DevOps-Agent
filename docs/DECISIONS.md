@@ -42,3 +42,8 @@ Format: `D-<number> · <date> · <title>` then Decision / Why / Consequences.
 - **Decision:** Pin the initial test tooling centrally in `Directory.Packages.props`: Microsoft.NET.Test.Sdk 17.14.1, xunit 2.9.3, xunit.runner.visualstudio 3.1.4, and coverlet.collector 6.0.4.
 - **Why:** T0.1 requires centrally managed package versions, and the .NET 10 xUnit template supplied these compatible versions.
 - **Consequences:** New NuGet dependencies require a corresponding decision entry and package version in the central file.
+
+### D-012 · 2026-11-13 · Map public NuGet packages to nuget.org
+- **Decision:** Use package source mapping in the repository's `NuGet.Config` to resolve packages from nuget.org.
+- **Why:** The development environment has multiple globally configured feeds; NuGet central package management raises NU1507 unless source mapping is configured.
+- **Consequences:** Package restore remains independent of machine-wide feed configuration; private feeds must be explicitly mapped if future packages require them.

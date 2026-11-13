@@ -28,11 +28,12 @@ What is done so far:
 - Configured the Blazor Web App with Interactive Server using the .NET 10 template setup.
 - Added `.editorconfig`, `.gitignore`, and the placeholder xUnit test.
 What is next (exact next step):
-- Build and test `DevOpsAgent.slnx`, then run the Web project and confirm its default page responds over HTTP.
+- Add package source mapping for the host's multiple NuGet feeds, rerun build and tests, then run the Web project and confirm its default page responds over HTTP.
 Files touched:
 - `DevOpsAgent.slnx`, `Directory.Build.props`, `Directory.Packages.props`, `.editorconfig`, `.gitignore`, `src/**`, `tests/**`, `docs/DECISIONS.md`, `docs/PROGRESS.md`.
 Gotchas found:
 - The installed .NET 10 SDK supports `.slnx`; `dotnet new blazor --interactivity Server` generated the matching service and endpoint setup.
+- Central package management surfaced NU1507 because the host has two NuGet sources; repository package source mapping is required with TreatWarningsAsErrors.
 
 ## Blockers
 
@@ -46,7 +47,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 
 | Task | Title | Status | Commit |
 |---|---|---|---|
-| T0.1 | Solution skeleton | todo | |
+| T0.1 | Solution skeleton | in-progress | |
 | T0.2 | Docker and compose | todo | |
 | T0.3 | Persistence | todo | |
 | T0.4 | Single-user login | todo | |
