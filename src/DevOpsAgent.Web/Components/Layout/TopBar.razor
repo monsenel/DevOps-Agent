@@ -1,0 +1,53 @@
+@inject NavigationManager Navigation
+@inject IJSRuntime JavaScript
+
+<header class="top-bar">
+    <h1>@PageTitle</h1>
+    <div class="top-bar-spacer"></div>
+    <div class="search-field">
+        <Icon Name="search" Small="true" />
+        <label class="visually-hidden" for="global-search">Search</label>
+        <input id="global-search" type="search" placeholder="Search name, IP or port" />
+    </div>
+    <button class="ui-button secondary" type="button" @onclick="ToggleTheme">Theme: @ThemeName</button>
+    @if (IsOverview)
+    {
+        <Button>Run discovery</Button>
+    }
+</header>
+
+@code {
+    private string ThemeName { get; set; } = "Light";
+
+    private bool IsOverview => Navigation.ToBaseRelativePath(Navigation.Uri).TrimEnd('/') is "";
+
+    private string PageTitle => Navigation.ToBaseRelativePath(Navigation.Uri).Trim('/') switch
+    {
+        "" => "Overview",
+        "topology" => "Topology",
+        "servers" => "Servers",
+        "alerts" => "Alerts",
+        "updates" => "Updates",
+        "agent-chat" => "Agent chat",
+        "action-log" => "Action log",
+        "settings" => "Settings",
+        "dev/components" => "Components",
+        _ => "DevOps Agent"
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var current = await JavaScript.InvokeAsync<string>("dvaTheme.current");
+            ThemeName = current == "dark" ? "Dark" : "Light";
+            StateHasChanged();
+        }
+    }
+
+    private async Task ToggleTheme()
+    {
+        var current = await JavaScript.InvokeAsync<string>("dvaTheme.toggle");
+        ThemeName = current == "dark" ? "Dark" : "Light";
+    }
+}

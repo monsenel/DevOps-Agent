@@ -26,12 +26,15 @@ Gotchas found:
 What is done so far:
 - T0.3 persistence is committed and verified.
 - Read the Overview and Settings mockups and added self-hosted WOFF2 fonts with their license texts.
+- Implemented light/dark tokens, the interactive theme toggle, responsive shell and navigation, Overview structure, placeholder nav pages, all required UI primitives, and `/dev/components` previews for both themes.
+- `dotnet build DevOpsAgent.slnx` passes with zero warnings.
 What is next (exact next step):
-- Implement the token sheets, responsive shell and theme toggle, then add reusable UI components and the hidden component preview route.
+- Launch the app and inspect the Overview plus component preview in both themes at desktop and 390px widths; fix any layout or accessibility issues, then rerun build/tests.
 Files touched:
-- `docs/PROGRESS.md`, `docs/DECISIONS.md`, `src/DevOpsAgent.Web/wwwroot/fonts/**`.
+- `docs/PROGRESS.md`, `docs/DECISIONS.md`, `src/DevOpsAgent.Web/Components/**`, `src/DevOpsAgent.Web/wwwroot/**`.
 Gotchas found:
 - The Google Fonts CSS endpoint returned TTF assets; Fontsource packages provided the requested WOFF2 files and bundled SIL license texts.
+- The .NET template's ReconnectModal included hard-coded colors; it was removed because the design system requires all UI colors to use `--dva-*` tokens.
 
 ## Blockers
 

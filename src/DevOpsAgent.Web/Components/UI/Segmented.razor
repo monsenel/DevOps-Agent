@@ -1,0 +1,14 @@
+<div class="segmented @(InsetActive ? "inset-active" : null)" role="group" aria-label="@Label">
+    @foreach (var option in Options)
+    {
+        <button type="button" class="@(option == Value ? "active" : null)" aria-pressed="@(option == Value)" @onclick="() => ValueChanged.InvokeAsync(option)">@option</button>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter] public IReadOnlyList<string> Options { get; set; } = [];
+    [Parameter] public string Value { get; set; } = string.Empty;
+    [Parameter] public bool InsetActive { get; set; }
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+}

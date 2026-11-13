@@ -1,0 +1,18 @@
+<section class="proposed-action-card" aria-label="Proposed action awaiting approval">
+    <div class="proposed-action-header">
+        <strong>@Title</strong>
+        <Badge Variant="warn">Needs approval</Badge>
+    </div>
+    <p>@Reason</p>
+    <CodeBlock Content="@Commands" />
+    <div class="proposed-action-buttons">
+        <Button>Approve and run</Button>
+        <Button Variant="secondary">Reject</Button>
+    </div>
+</section>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Proposed action";
+    [Parameter] public string Reason { get; set; } = string.Empty;
+    [Parameter] public string Commands { get; set; } = string.Empty;
+}

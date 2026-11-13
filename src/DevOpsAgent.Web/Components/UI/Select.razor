@@ -1,0 +1,25 @@
+<div class="select-field">
+    <label for="@Id">@Label</label>
+    <select id="@Id" class="@(Mono ? "mono" : null)" value="@Value" @onchange="HandleChange">
+        @foreach (var option in Options)
+        {
+            <option value="@option">@option</option>
+        }
+    </select>
+    @if (!string.IsNullOrWhiteSpace(Helper))
+    {
+        <span class="field-helper">@Helper</span>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Id { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter] public IReadOnlyList<string> Options { get; set; } = [];
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public string? Helper { get; set; }
+    [Parameter] public bool Mono { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    private Task HandleChange(ChangeEventArgs args) => ValueChanged.InvokeAsync(args.Value?.ToString());
+}

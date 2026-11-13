@@ -1,0 +1,21 @@
+<div class="switch-row">
+    <span class="switch-copy">
+        <strong>@Title</strong>
+        @if (!string.IsNullOrWhiteSpace(Helper))
+        {
+            <span>@Helper</span>
+        }
+    </span>
+    <button class="switch-control" type="button" role="switch" aria-checked="@Value.ToString().ToLowerInvariant()" aria-label="@Title" @onclick="Toggle">
+        <span class="switch-knob"></span>
+    </button>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? Helper { get; set; }
+    [Parameter] public bool Value { get; set; }
+    [Parameter] public EventCallback<bool> ValueChanged { get; set; }
+
+    private Task Toggle() => ValueChanged.InvokeAsync(!Value);
+}

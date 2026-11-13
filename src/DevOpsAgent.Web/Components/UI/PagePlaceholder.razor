@@ -1,0 +1,8 @@
+<Card Title="@Title">
+    <EmptyState Title="@Title" Description="@Description" />
+</Card>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string Description { get; set; } = "This page will be built in its planned milestone.";
+}

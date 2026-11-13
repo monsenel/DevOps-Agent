@@ -1,0 +1,12 @@
+<div class="progress-bar" aria-label="@Label load: @Percent%">
+    <span>@Label</span>
+    <span class="progress-track" aria-hidden="true"><span class="progress-fill @(IsHighLoad ? "high-load" : null)" style="width: @Percent%"></span></span>
+    <span class="progress-value @(IsHighLoad ? "high-load" : null)">@Percent%</span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter] public int Percent { get; set; }
+
+    private bool IsHighLoad => Percent >= 85;
+}

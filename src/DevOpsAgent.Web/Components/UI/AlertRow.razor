@@ -1,0 +1,17 @@
+<div class="alert-row @SeverityClass">
+    <span class="alert-severity">@Severity</span>
+    <span>@Text</span>
+</div>
+
+@code {
+    [Parameter] public string Severity { get; set; } = "Low";
+    [Parameter, EditorRequired] public string Text { get; set; } = string.Empty;
+
+    private string SeverityClass => Severity.ToLowerInvariant() switch
+    {
+        "critical" => "critical",
+        "high" => "high",
+        "medium" => "medium",
+        _ => "low"
+    };
+}

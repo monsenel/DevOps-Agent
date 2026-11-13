@@ -1,0 +1,33 @@
+<aside class="sidebar-card" aria-label="Application sidebar">
+    <a class="brand-row" href="/" aria-label="DevOps Agent home">
+        <span class="brand-mark" aria-hidden="true">
+            <svg class="icon" viewBox="0 0 18 18"><circle cx="4" cy="9" r="2.25"></circle><circle cx="14" cy="4" r="2.25"></circle><circle cx="14" cy="14" r="2.25"></circle><path d="m6 8 5.8-3M6 10l5.8 3"></path></svg>
+        </span>
+        <span>DevOps Agent</span>
+    </a>
+
+    <nav class="sidebar-nav" aria-label="Main">
+        <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">Overview</NavLink>
+        <NavLink class="nav-link" href="/topology">Topology</NavLink>
+        <NavLink class="nav-link" href="/servers">Servers</NavLink>
+        <NavLink class="nav-link" href="/alerts"><span>Alerts</span><span class="nav-badge">0</span></NavLink>
+        <NavLink class="nav-link" href="/updates">Updates</NavLink>
+        <NavLink class="nav-link" href="/agent-chat">Agent chat</NavLink>
+        <NavLink class="nav-link" href="/action-log">Action log</NavLink>
+        <NavLink class="nav-link" href="/settings">Settings</NavLink>
+    </nav>
+
+    <section class="nav-group" aria-label="Server groups">
+        <h2 class="nav-section-label">Groups</h2>
+        <p class="muted">No groups yet</p>
+    </section>
+
+    <div class="sidebar-spacer"></div>
+
+    <section class="model-card" aria-label="Default model status">
+        <span class="micro-label">Model</span>
+        <strong>Not configured</strong>
+        <span class="model-muted">Add a provider to enable chat.</span>
+        <NavLink class="ui-button primary" href="/settings">LLM settings</NavLink>
+    </section>
+</aside>

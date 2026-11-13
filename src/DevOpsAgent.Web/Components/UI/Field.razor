@@ -1,0 +1,22 @@
+<div class="field">
+    <label for="@Id">@Label</label>
+    <input id="@Id" type="@Type" class="@(Mono ? "mono" : null)" value="@Value" placeholder="@Placeholder" autocomplete="@Autocomplete" @onchange="HandleChange" />
+    @if (!string.IsNullOrWhiteSpace(Helper))
+    {
+        <span class="field-helper">@Helper</span>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Id { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public string Type { get; set; } = "text";
+    [Parameter] public string? Placeholder { get; set; }
+    [Parameter] public string? Helper { get; set; }
+    [Parameter] public string? Autocomplete { get; set; }
+    [Parameter] public bool Mono { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    private Task HandleChange(ChangeEventArgs args) => ValueChanged.InvokeAsync(args.Value?.ToString());
+}

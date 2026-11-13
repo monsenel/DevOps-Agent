@@ -1,0 +1,15 @@
+<div class="empty-state">
+    <strong>@Title</strong>
+    <p>@Description</p>
+    @if (!string.IsNullOrWhiteSpace(ActionLabel))
+    {
+        <Button OnClick="OnAction">@ActionLabel</Button>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string Description { get; set; } = string.Empty;
+    [Parameter] public string? ActionLabel { get; set; }
+    [Parameter] public EventCallback OnAction { get; set; }
+}

@@ -1,0 +1,54 @@
+@page "/dev/components"
+<PageTitle>Component preview · DevOps Agent</PageTitle>
+
+<Card Title="Component library preview" Class="component-preview-card">
+    <p class="muted">Every reusable component shown side by side in both themes.</p>
+    <div class="theme-preview-grid">
+        <section class="theme-preview" data-theme="light" aria-label="Light theme components">
+            <h2>Light theme</h2>
+            <div class="preview-component-grid">
+                <Card Title="Card"><p>Cards organize related information.</p></Card>
+                <div><StatTile Label="Servers online" Value="11" Suffix="of 11" IconName="server" /></div>
+                <div class="preview-controls"><Button>Primary</Button><Button Variant="secondary">Secondary</Button><Button Variant="ghost-destructive">Remove</Button></div>
+                <div class="preview-controls"><Badge>Neutral</Badge><Badge Variant="soft">Added</Badge><Badge Variant="warn">High</Badge><Badge Variant="danger">Critical</Badge></div>
+                <Field Id="preview-field" Label="Field" Value="example" Helper="Helper text" />
+                <Select Id="preview-select" Label="Select" Options="SelectOptions" Value="Ollama" />
+                <SwitchRow Title="Switch row" Helper="Control a setting" Value="true" />
+                <Segmented Label="Preview tabs" Options="PreviewTabs" Value="ActiveTab" ValueChanged="SetActiveTab" />
+                <AlertRow Severity="High" Text="High severity alert row" />
+                <CodeBlock Content="systemctl status nginx" />
+                <ProposedActionCard Title="Proposed action · srv-edge" Reason="Review this planned operation." Commands="sudo systemctl restart nginx" />
+                <ProgressBar Label="srv-edge" Percent="62" />
+                <EmptyState Title="Empty state" Description="A short sentence explains what appears here." ActionLabel="Add server" />
+                <div class="preview-controls"><Icon Name="network" /><Icon Name="server" /><Icon Name="alert" /><Icon Name="chat" /></div>
+            </div>
+        </section>
+        <section class="theme-preview" data-theme="dark" aria-label="Dark theme components">
+            <h2>Dark theme</h2>
+            <div class="preview-component-grid">
+                <Card Title="Card"><p>Cards organize related information.</p></Card>
+                <div><StatTile Label="Servers online" Value="11" Suffix="of 11" IconName="server" /></div>
+                <div class="preview-controls"><Button>Primary</Button><Button Variant="secondary">Secondary</Button><Button Variant="ghost-destructive">Remove</Button></div>
+                <div class="preview-controls"><Badge>Neutral</Badge><Badge Variant="soft">Added</Badge><Badge Variant="warn">High</Badge><Badge Variant="danger">Critical</Badge></div>
+                <Field Id="preview-field-dark" Label="Field" Value="example" Helper="Helper text" />
+                <Select Id="preview-select-dark" Label="Select" Options="SelectOptions" Value="Ollama" />
+                <SwitchRow Title="Switch row" Helper="Control a setting" Value="true" />
+                <Segmented Label="Preview tabs" Options="PreviewTabs" Value="ActiveTab" ValueChanged="SetActiveTab" />
+                <AlertRow Severity="High" Text="High severity alert row" />
+                <CodeBlock Content="systemctl status nginx" />
+                <ProposedActionCard Title="Proposed action · srv-edge" Reason="Review this planned operation." Commands="sudo systemctl restart nginx" />
+                <ProgressBar Label="srv-edge" Percent="91" />
+                <EmptyState Title="Empty state" Description="A short sentence explains what appears here." ActionLabel="Add server" />
+                <div class="preview-controls"><Icon Name="network" /><Icon Name="server" /><Icon Name="alert" /><Icon Name="chat" /></div>
+            </div>
+        </section>
+    </div>
+</Card>
+
+@code {
+    private static readonly IReadOnlyList<string> SelectOptions = ["Ollama", "LM Studio", "OpenRouter"];
+    private static readonly IReadOnlyList<string> PreviewTabs = ["First", "Second", "Third"];
+    private string ActiveTab { get; set; } = "First";
+
+    private void SetActiveTab(string value) => ActiveTab = value;
+}

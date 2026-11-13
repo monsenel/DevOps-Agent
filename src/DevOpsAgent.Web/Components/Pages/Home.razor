@@ -1,7 +1,50 @@
-﻿@page "/"
+@page "/"
+<PageTitle>Overview · DevOps Agent</PageTitle>
 
-<PageTitle>Home</PageTitle>
+<div class="bento-row">
+    <section class="ui-card bento-hero overview-hero">
+        <h2>Your server map starts here</h2>
+        <p class="muted">Add servers to discover how your services connect and monitor their health.</p>
+        <div class="flex-spacer"></div>
+        <Button>Ask the agent</Button>
+    </section>
+    <div class="bento-stat"><StatTile Label="Servers online" Value="0" Suffix="of 0" IconName="server" /></div>
+    <div class="bento-stat"><StatTile Label="Pending updates" Value="0" Suffix="packages" IconName="updates" /></div>
+    <div class="bento-stat"><StatTile Label="Open alerts" Value="0" Suffix="alerts" IconName="alert" Emphasized="true" /></div>
+</div>
 
-<h1>Hello, world!</h1>
+<div class="bento-row">
+    <section class="ui-card bento-main">
+        <div class="ui-card-header">
+            <h2>Topology</h2>
+            <Segmented Label="Topology view" Options="TopologyViews" Value="Service" InsetActive="true" />
+            <div class="top-bar-spacer"></div>
+            <Badge Variant="soft">Trace · add a server first</Badge>
+        </div>
+        <EmptyState Title="No topology yet" Description="Run discovery after adding your first server to see the service graph." ActionLabel="Open servers" OnAction="OpenServers" />
+    </section>
+    <div class="bento-side">
+        <Card Title="Alerts">
+            <EmptyState Title="No open alerts" Description="Alerts from monitored servers will appear here." />
+        </Card>
+        <Card Title="Agent">
+            <EmptyState Title="No provider configured" Description="Connect a model to chat with the agent." ActionLabel="Open settings" OnAction="OpenSettings" />
+        </Card>
+    </div>
+</div>
 
-Welcome to your new app.
+<div class="overview-three">
+    <div class="bento-third"><Card Title="Drift since yesterday"><EmptyState Title="No snapshots yet" Description="Changes between discoveries will appear here." /></Card></div>
+    <div class="bento-third"><Card Title="Server load"><EmptyState Title="No server metrics" Description="Add a server to see recent load." /></Card></div>
+    <div class="bento-third"><Card Title="Selected edge"><EmptyState Title="Select an edge" Description="Connection details and evidence will appear here." /></Card></div>
+</div>
+
+@code {
+    private static readonly IReadOnlyList<string> TopologyViews = ["Service", "Network"];
+
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    private void OpenServers() => Navigation.NavigateTo("/servers");
+
+    private void OpenSettings() => Navigation.NavigateTo("/settings");
+}

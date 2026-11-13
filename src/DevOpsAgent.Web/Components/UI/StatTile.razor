@@ -1,0 +1,25 @@
+<section class="stat-tile @(Emphasized ? "emphasized" : null)" aria-label="@Label: @Value @Suffix">
+    <span class="stat-icon"><Icon Name="@IconName" /></span>
+    <span class="stat-label">@Label</span>
+    <div class="stat-value-row">
+        <span class="stat-value">@Value</span>
+        @if (!string.IsNullOrWhiteSpace(Suffix))
+        {
+            <span class="stat-suffix">@Suffix</span>
+        }
+        @if (BadgeText is not null)
+        {
+            <Badge Variant="@BadgeVariant">@BadgeText</Badge>
+        }
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Value { get; set; } = string.Empty;
+    [Parameter] public string? Suffix { get; set; }
+    [Parameter] public string IconName { get; set; } = "server";
+    [Parameter] public string? BadgeText { get; set; }
+    [Parameter] public string BadgeVariant { get; set; } = "soft";
+    [Parameter] public bool Emphasized { get; set; }
+}
