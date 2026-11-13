@@ -1,3 +1,307 @@
 @page "/servers"
+@inject ServerService ServersService
 <PageTitle>Servers · DevOps Agent</PageTitle>
-<PagePlaceholder Title="Servers" Description="Add and manage the Linux servers that DevOps Agent can monitor." />
+
+<div class="page-stack">
+    <section class="ui-card servers-card" aria-labelledby="servers-title">
+        <div class="servers-heading">
+            <div>
+                <p class="eyebrow">Inventory</p>
+                <h2 id="servers-title">Servers</h2>
+                <p class="muted">Manage the Linux hosts DevOps Agent can connect to.</p>
+            </div>
+            <button class="ui-button primary" type="button" @onclick="OpenCreate">Add server</button>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_pageError))
+        {
+            <div class="alert-message error" role="alert">@_pageError</div>
+        }
+
+        @if (_servers.Count == 0)
+        {
+            <div class="servers-empty">
+                <h3>No servers yet</h3>
+                <p class="muted">Add a host to start building your inventory.</p>
+                <button class="ui-button primary" type="button" @onclick="OpenCreate">Add server</button>
+            </div>
+        }
+        else
+        {
+            <div class="table-scroll">
+                <table class="servers-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Name</th>
+                            <th scope="col">Host</th>
+                            <th scope="col">Group</th>
+                            <th scope="col">Tags</th>
+                            <th scope="col">Jump server</th>
+                            <th scope="col">Sudo</th>
+                            <th scope="col">Last seen</th>
+                            <th scope="col"><span class="sr-only">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var server in _servers)
+                        {
+                            <tr @key="server.Id">
+                                <th scope="row">@server.Name</th>
+                                <td><span class="mono">@server.User@@@server.Host:@server.Port</span></td>
+                                <td><span class="ui-badge neutral">@server.Group</span></td>
+                                <td>
+                                    <div class="tag-list">
+                                        @foreach (var tag in server.Tags)
+                                        {
+                                            <span class="ui-badge neutral" @key="tag">@tag</span>
+                                        }
+                                    </div>
+                                </td>
+                                <td>@(server.JumpServerName ?? "—")</td>
+                                <td>@(server.SudoCapable is true ? "Yes" : server.SudoCapable is false ? "No" : "Not tested")</td>
+                                <td>@(server.LastSeenAtUtc?.ToLocalTime().ToString("g") ?? "Never")</td>
+                                <td>
+                                    <div class="table-actions">
+                                        <button class="ui-button secondary compact" type="button" @onclick="() => OpenEdit(server.Id)">Edit</button>
+                                        <button class="ui-button ghost-danger compact" type="button" @onclick="() => AskDelete(server.Id)">Remove</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+</div>
+
+@if (_formOpen)
+{
+    <div class="dialog-backdrop">
+        <section class="ui-card inventory-dialog" role="dialog" aria-modal="true" aria-labelledby="server-dialog-title">
+            <div class="servers-heading">
+                <div>
+                    <p class="eyebrow">Server inventory</p>
+                    <h2 id="server-dialog-title">@(_editingId.HasValue ? "Edit server" : "Add server")</h2>
+                </div>
+                <button class="ui-button secondary compact" type="button" @onclick="CloseForm">Close</button>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(_formError))
+            {
+                <div class="alert-message error" role="alert">@_formError</div>
+            }
+            <EditForm Model="_form" OnValidSubmit="SaveAsync">
+                <DataAnnotationsValidator />
+                <div class="inventory-form-grid">
+                    <div class="field">
+                        <label for="server-name">Name</label>
+                        <InputText id="server-name" @bind-Value="_form.Name" autocomplete="off" />
+                        <ValidationMessage For="() => _form.Name" />
+                    </div>
+                    <div class="field">
+                        <label for="server-group">Group</label>
+                        <InputSelect id="server-group" @bind-Value="_form.Group">
+                            <option value="prod">Production</option>
+                            <option value="staging">Staging</option>
+                        </InputSelect>
+                    </div>
+                    <div class="field">
+                        <label for="server-host">Host</label>
+                        <InputText id="server-host" class="mono" @bind-Value="_form.Host" placeholder="server.example.com or 10.0.0.4" autocomplete="off" />
+                        <ValidationMessage For="() => _form.Host" />
+                    </div>
+                    <div class="field">
+                        <label for="server-port">SSH port</label>
+                        <InputNumber id="server-port" class="mono" @bind-Value="_form.Port" min="1" max="65535" />
+                        <ValidationMessage For="() => _form.Port" />
+                    </div>
+                    <div class="field">
+                        <label for="server-user">SSH user</label>
+                        <InputText id="server-user" @bind-Value="_form.User" autocomplete="username" />
+                        <ValidationMessage For="() => _form.User" />
+                    </div>
+                    <div class="field">
+                        <label for="server-key">Private key file</label>
+                        <InputSelect id="server-key" @bind-Value="_form.KeyFile">
+                            <option value="">Select a file from /keys</option>
+                            @foreach (var keyFile in _keyFiles)
+                            {
+                                <option value="@keyFile">@keyFile</option>
+                            }
+                        </InputSelect>
+                        <span class="field-helper">Keys are read from the mounted /keys directory.</span>
+                    </div>
+                    <div class="field">
+                        <label for="server-passphrase">Key passphrase</label>
+                        <InputText id="server-passphrase" type="password" @bind-Value="_form.KeyPassphrase" autocomplete="new-password" placeholder="@(_editingId.HasValue && _hasPassphrase ? "Saved · enter to replace" : "Optional")" />
+                        <span class="field-helper">Encrypted at rest. Leave blank to keep the saved passphrase.</span>
+                    </div>
+                    <div class="field">
+                        <label for="server-jump">Jump server</label>
+                        <InputSelect id="server-jump" @bind-Value="_form.JumpServerId">
+                            <option value="">None</option>
+                            @foreach (var server in _servers.Where(server => server.Id != _editingId))
+                            {
+                                <option value="@server.Id">@server.Name · @server.Host</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="field field-span">
+                        <label for="server-tags">Tags</label>
+                        <InputText id="server-tags" @bind-Value="_form.TagsText" placeholder="edge, web, database" />
+                        <span class="field-helper">Separate tags with commas.</span>
+                    </div>
+                </div>
+                <div class="dialog-actions">
+                    <button class="ui-button secondary" type="button" @onclick="CloseForm">Cancel</button>
+                    <button class="ui-button primary" type="submit" disabled="_saving">@(_saving ? "Saving…" : "Save server")</button>
+                </div>
+            </EditForm>
+        </section>
+    </div>
+}
+
+@if (_deleteId.HasValue)
+{
+    <div class="dialog-backdrop">
+        <section class="ui-card confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-server-title">
+            <h2 id="delete-server-title">Remove server?</h2>
+            <p class="muted">This removes the server from inventory. This action cannot be undone.</p>
+            @if (!string.IsNullOrWhiteSpace(_formError))
+            {
+                <div class="alert-message error" role="alert">@_formError</div>
+            }
+            <div class="dialog-actions">
+                <button class="ui-button secondary" type="button" @onclick="CancelDelete">Cancel</button>
+                <button class="ui-button ghost-danger" type="button" @onclick="DeleteAsync">Remove server</button>
+            </div>
+        </section>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<ServerSummary> _servers = [];
+    private IReadOnlyList<string> _keyFiles = [];
+    private ServerForm _form = new();
+    private Guid? _editingId;
+    private Guid? _deleteId;
+    private bool _formOpen;
+    private bool _saving;
+    private bool _hasPassphrase;
+    private string? _pageError;
+    private string? _formError;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _servers = await ServersService.ListAsync(CancellationToken.None);
+        _keyFiles = ServersService.ListKeyFiles();
+    }
+
+    private void OpenCreate()
+    {
+        _editingId = null;
+        _hasPassphrase = false;
+        _formError = null;
+        _form = new ServerForm();
+        _formOpen = true;
+    }
+
+    private void OpenEdit(Guid id)
+    {
+        var server = _servers.Single(item => item.Id == id);
+        _editingId = id;
+        _hasPassphrase = server.HasKeyPassphrase;
+        _formError = null;
+        _form = new ServerForm
+        {
+            Name = server.Name,
+            Host = server.Host,
+            Port = server.Port,
+            User = server.User,
+            KeyFile = server.KeyFile,
+            JumpServerId = server.JumpServerId,
+            Group = server.Group,
+            TagsText = string.Join(", ", server.Tags)
+        };
+        _formOpen = true;
+    }
+
+    private void CloseForm() => _formOpen = false;
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _formError = null;
+        try
+        {
+            var input = new ServerInput(
+                _form.Name, _form.Host, _form.Port, _form.User, _form.KeyFile, _form.KeyPassphrase, _form.JumpServerId,
+                _form.Group, _form.TagsText.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
+            if (_editingId is Guid id)
+            {
+                _ = await ServersService.UpdateAsync(id, input, CancellationToken.None);
+            }
+            else
+            {
+                _ = await ServersService.CreateAsync(input, CancellationToken.None);
+            }
+
+            _formOpen = false;
+            await LoadAsync();
+        }
+        catch (ArgumentException exception)
+        {
+            _formError = exception.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void AskDelete(Guid id)
+    {
+        _formError = null;
+        _deleteId = id;
+    }
+
+    private void CancelDelete() => _deleteId = null;
+
+    private async Task DeleteAsync()
+    {
+        if (_deleteId is not Guid id) return;
+        try
+        {
+            _ = await ServersService.DeleteAsync(id, CancellationToken.None);
+            _deleteId = null;
+            _pageError = null;
+            await LoadAsync();
+        }
+        catch (InvalidOperationException exception)
+        {
+            _formError = exception.Message;
+        }
+    }
+
+    private sealed class ServerForm
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.StringLength(120)]
+        public string Name { get; set; } = string.Empty;
+        [System.ComponentModel.DataAnnotations.Required]
+        public string Host { get; set; } = string.Empty;
+        [System.ComponentModel.DataAnnotations.Range(1, 65535)]
+        public int Port { get; set; } = 22;
+        [System.ComponentModel.DataAnnotations.Required]
+        public string User { get; set; } = string.Empty;
+        [System.ComponentModel.DataAnnotations.Required]
+        public string KeyFile { get; set; } = string.Empty;
+        public string? KeyPassphrase { get; set; }
+        public Guid? JumpServerId { get; set; }
+        [System.ComponentModel.DataAnnotations.Required]
+        public string Group { get; set; } = "prod";
+        public string TagsText { get; set; } = string.Empty;
+    }
+}

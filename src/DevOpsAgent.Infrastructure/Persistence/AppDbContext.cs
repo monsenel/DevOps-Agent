@@ -1,6 +1,7 @@
 using DevOpsAgent.Domain.Settings;
 using DevOpsAgent.Domain.Llm;
 using DevOpsAgent.Domain.Chat;
+using DevOpsAgent.Domain.Servers;
 using Microsoft.EntityFrameworkCore;
 
 namespace DevOpsAgent.Infrastructure.Persistence;
@@ -11,6 +12,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<LlmProvider> LlmProviders => Set<LlmProvider>();
     public DbSet<ChatConversation> ChatConversations => Set<ChatConversation>();
     public DbSet<ChatMessageRecord> ChatMessages => Set<ChatMessageRecord>();
+    public DbSet<Server> Servers => Set<Server>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -49,6 +51,24 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(message => message.Role).HasMaxLength(20).IsRequired();
             entity.Property(message => message.Content).IsRequired();
             entity.HasIndex(message => new { message.ConversationId, message.CreatedAtUtc });
+        });
+
+        modelBuilder.Entity<Server>(entity =>
+        {
+            entity.HasKey(server => server.Id);
+            entity.Property(server => server.Name).HasMaxLength(120).IsRequired();
+            entity.Property(server => server.Host).HasMaxLength(253).IsRequired();
+            entity.Property(server => server.User).HasMaxLength(120).IsRequired();
+            entity.Property(server => server.KeyFile).HasMaxLength(260).IsRequired();
+            entity.Property(server => server.ProtectedKeyPassphrase).HasMaxLength(4096);
+            entity.Property(server => server.Group).HasMaxLength(80).IsRequired();
+            entity.Property(server => server.TagsJson).IsRequired();
+            entity.Property(server => server.OsInfo).HasMaxLength(500);
+            entity.HasIndex(server => server.Name).IsUnique();
+            entity.HasOne<Server>()
+                .WithMany()
+                .HasForeignKey(server => server.JumpServerId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

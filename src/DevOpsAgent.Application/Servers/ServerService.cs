@@ -1,0 +1,149 @@
+using System.Text.Json;
+using DevOpsAgent.Application.Abstractions;
+using DevOpsAgent.Domain.Servers;
+
+namespace DevOpsAgent.Application.Servers;
+
+public sealed class ServerService(
+    IServerRepository repository,
+    ISecretProtector secretProtector,
+    IServerKeyStore keyStore)
+{
+    public async Task<IReadOnlyList<ServerSummary>> ListAsync(CancellationToken cancellationToken)
+    {
+        var servers = await repository.ListAsync(cancellationToken);
+        return ToSummaries(servers);
+    }
+
+    public async Task<ServerSummary> CreateAsync(ServerInput input, CancellationToken cancellationToken)
+    {
+        var servers = await repository.ListAsync(cancellationToken);
+        Validate(input, null, servers);
+        EnsureUniqueName(input.Name, servers, null);
+        var server = new Server(
+            input.Name.Trim(), input.Host.Trim(), input.Port, input.User.Trim(), input.KeyFile.Trim(), NormalizeGroup(input.Group));
+        server.Update(
+            input.Name.Trim(), input.Host.Trim(), input.Port, input.User.Trim(), input.KeyFile.Trim(), input.JumpServerId,
+            NormalizeGroup(input.Group), SerializeTags(input.Tags), ProtectPassphrase(input.KeyPassphrase));
+        await repository.AddAsync(server, cancellationToken);
+        return ToSummary(server, servers.Append(server));
+    }
+
+    public async Task<ServerSummary?> UpdateAsync(Guid id, ServerInput input, CancellationToken cancellationToken)
+    {
+        var server = await repository.GetAsync(id, cancellationToken);
+        if (server is null)
+        {
+            return null;
+        }
+
+        var servers = await repository.ListAsync(cancellationToken);
+        Validate(input, id, servers);
+        EnsureUniqueName(input.Name, servers, id);
+
+        server.Update(
+            input.Name.Trim(), input.Host.Trim(), input.Port, input.User.Trim(), input.KeyFile.Trim(), input.JumpServerId,
+            NormalizeGroup(input.Group), SerializeTags(input.Tags), ProtectPassphrase(input.KeyPassphrase));
+        await repository.SaveAsync(server, cancellationToken);
+        return ToSummary(server, servers);
+    }
+
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var server = await repository.GetAsync(id, cancellationToken);
+        if (server is null)
+        {
+            return false;
+        }
+
+        var servers = await repository.ListAsync(cancellationToken);
+        if (servers.Any(candidate => candidate.JumpServerId == id))
+        {
+            throw new InvalidOperationException("This server is a jump server for another inventory entry.");
+        }
+
+        await repository.DeleteAsync(server, cancellationToken);
+        return true;
+    }
+
+    public IReadOnlyList<string> ListKeyFiles()
+    {
+        return keyStore.ListFileNames();
+    }
+
+    private void Validate(ServerInput input, Guid? currentId, IReadOnlyCollection<Server> servers)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        if (string.IsNullOrWhiteSpace(input.Name)) throw new ArgumentException("Server name is required.", nameof(input));
+        if (string.IsNullOrWhiteSpace(input.Host)) throw new ArgumentException("Host is required.", nameof(input));
+        if (input.Host.Any(char.IsWhiteSpace)) throw new ArgumentException("Host cannot contain whitespace.", nameof(input));
+        if (input.Port is < 1 or > 65535) throw new ArgumentOutOfRangeException(nameof(input), "Port must be between 1 and 65535.");
+        if (string.IsNullOrWhiteSpace(input.User)) throw new ArgumentException("SSH user is required.", nameof(input));
+        if (input.User.Any(char.IsWhiteSpace)) throw new ArgumentException("SSH user cannot contain whitespace.", nameof(input));
+        if (string.IsNullOrWhiteSpace(input.Group)) throw new ArgumentException("Group is required.", nameof(input));
+        if (string.IsNullOrWhiteSpace(input.KeyFile)) throw new ArgumentException("A key file is required.", nameof(input));
+
+        var keyFile = Path.GetFileName(input.KeyFile.Trim());
+        if (!string.Equals(keyFile, input.KeyFile.Trim(), StringComparison.Ordinal) || !keyStore.Contains(keyFile))
+        {
+            throw new ArgumentException("Choose an existing key file from /keys.", nameof(input));
+        }
+
+        if (input.JumpServerId == currentId && currentId.HasValue)
+        {
+            throw new ArgumentException("A server cannot use itself as its jump server.", nameof(input));
+        }
+
+        if (input.JumpServerId.HasValue && !servers
+                .Any(server => server.Id == input.JumpServerId.Value && server.Id != currentId))
+        {
+            throw new ArgumentException("Choose an existing inventory server as the jump server.", nameof(input));
+        }
+
+        if (input.Tags.Any(string.IsNullOrWhiteSpace))
+        {
+            throw new ArgumentException("Tags cannot be empty.", nameof(input));
+        }
+    }
+
+    private string? ProtectPassphrase(string? passphrase) => string.IsNullOrWhiteSpace(passphrase)
+        ? null
+        : secretProtector.Protect(passphrase);
+
+    private static void EnsureUniqueName(string name, IEnumerable<Server> servers, Guid? currentId)
+    {
+        if (servers.Any(server => server.Id != currentId
+            && string.Equals(server.Name, name.Trim(), StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new ArgumentException("A server with this name already exists.", nameof(name));
+        }
+    }
+
+    private static string SerializeTags(IEnumerable<string> tags) =>
+        JsonSerializer.Serialize(tags.Select(tag => tag.Trim()).Where(tag => tag.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
+
+    private static string NormalizeGroup(string group) => group.Trim().ToLowerInvariant();
+
+    private static IReadOnlyList<ServerSummary> ToSummaries(IEnumerable<Server> servers)
+    {
+        var list = servers.ToArray();
+        return list.Select(server => ToSummary(server, list)).ToArray();
+    }
+
+    private static ServerSummary ToSummary(Server server, IEnumerable<Server> allServers) => new(
+        server.Id,
+        server.Name,
+        server.Host,
+        server.Port,
+        server.User,
+        server.KeyFile,
+        !string.IsNullOrEmpty(server.ProtectedKeyPassphrase),
+        server.JumpServerId,
+        allServers.FirstOrDefault(candidate => candidate.Id == server.JumpServerId)?.Name,
+        server.Group,
+        JsonSerializer.Deserialize<string[]>(server.TagsJson) ?? [],
+        server.SudoCapable,
+        server.LastSeenAtUtc,
+        server.OsInfo);
+}

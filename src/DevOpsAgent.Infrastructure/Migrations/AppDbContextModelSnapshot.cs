@@ -149,6 +149,74 @@ namespace DevOpsAgent.Infrastructure.Migrations
                     b.ToTable("LlmProviders");
                 });
 
+            modelBuilder.Entity("DevOpsAgent.Domain.Servers.Server", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Group")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Host")
+                        .IsRequired()
+                        .HasMaxLength(253)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("JumpServerId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("KeyFile")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("LastSeenAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OsInfo")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Port")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ProtectedKeyPassphrase")
+                        .HasMaxLength(4096)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool?>("SudoCapable")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("TagsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("User")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("JumpServerId");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Servers");
+                });
+
             modelBuilder.Entity("DevOpsAgent.Domain.Settings.AppSetting", b =>
                 {
                     b.Property<string>("Key")
@@ -173,6 +241,14 @@ namespace DevOpsAgent.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Conversation");
+                });
+
+            modelBuilder.Entity("DevOpsAgent.Domain.Servers.Server", b =>
+                {
+                    b.HasOne("DevOpsAgent.Domain.Servers.Server", null)
+                        .WithMany()
+                        .HasForeignKey("JumpServerId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("DevOpsAgent.Domain.Chat.ChatConversation", b =>

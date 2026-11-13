@@ -1,6 +1,7 @@
 using DevOpsAgent.Infrastructure.Persistence;
 using DevOpsAgent.Application.Llm;
 using DevOpsAgent.Application.Chat;
+using DevOpsAgent.Application.Servers;
 using DevOpsAgent.Web.Authentication;
 using DevOpsAgent.Web;
 using DevOpsAgent.Web.Components;
@@ -13,6 +14,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDevOpsPersistence(builder.Configuration);
 builder.Services.AddScoped<ProviderService>();
 builder.Services.AddScoped<ChatService>();
+builder.Services.AddScoped<ServerService>();
 builder.Services.AddScoped<ProviderStatusState>();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddRazorComponents()

@@ -1,4 +1,5 @@
 using DevOpsAgent.Application.Abstractions;
+using DevOpsAgent.Application.Servers;
 using DevOpsAgent.Infrastructure.Security;
 using DevOpsAgent.Infrastructure.Llm;
 using Microsoft.AspNetCore.DataProtection;
@@ -17,6 +18,7 @@ public static class PersistenceServiceCollectionExtensions
         IConfiguration configuration)
     {
         services.Configure<PersistenceOptions>(configuration.GetSection(PersistenceOptions.SectionName));
+        services.Configure<ServerInventoryOptions>(configuration.GetSection(ServerInventoryOptions.SectionName));
         services.AddDbContext<AppDbContext>((serviceProvider, options) =>
         {
             var persistenceOptions = serviceProvider.GetRequiredService<IOptions<PersistenceOptions>>().Value;
@@ -25,6 +27,8 @@ public static class PersistenceServiceCollectionExtensions
 
         services.AddScoped<ILlmProviderRepository, LlmProviderRepository>();
         services.AddScoped<IChatConversationRepository, ChatConversationRepository>();
+        services.AddScoped<IServerRepository, ServerRepository>();
+        services.AddSingleton<IServerKeyStore, ServerKeyStore>();
         services.AddHttpClient("llm", client => client.Timeout = Timeout.InfiniteTimeSpan);
         services.AddSingleton<OpenAiCompatibleChatClientFactory>();
         services.AddSingleton<IChatClientFactory>(serviceProvider =>
