@@ -6,8 +6,8 @@
 
 ## Current
 
-- **Task:** T1.1 Server inventory
-- **Status:** done
+- **Task:** T1.2 SSH pool and runner
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
@@ -22,6 +22,16 @@ Files touched:
 Gotchas found:
 -
 -->
+
+What is done so far:
+- T1.1 Server inventory is complete and committed; build/test pass (7/7).
+- T1.2 scope: SSH connection pool, timeout-aware command runner with optional `sudo -n`, jump-host local forwarding, and server capability probe.
+What is next (exact next step):
+- Check the current SSH.NET package and official API, add the package version and decision entry, then implement the pool, runner, and probe.
+Files touched:
+- `docs/PROGRESS.md`
+Gotchas found:
+- T0.8 remains blocked on missing OpenRouter credentials.
 
 ## Blockers
 
@@ -44,7 +54,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T0.7 | Settings › LLM connection page | done | `feat(T0.7): llm connection settings` |
 | T0.8 | Basic chat (no tools) | blocked | |
 | T1.1 | Server inventory | done | `feat(T1.1): server inventory` |
-| T1.2 | SSH pool and runner | todo | |
+| T1.2 | SSH pool and runner | in-progress | |
 | T1.3 | Import ssh config | todo | |
 | T2.1 | Collector framework and snapshots | todo | |
 | T2.2 | Host collector | todo | |
@@ -98,4 +108,5 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex · T0.8 · chat UI, streamed fixture response, reload persistence, theme and mobile layout verified; live OpenRouter check pending credentials
 - 2026-11-14 · Codex / GPT-6 · resumed T0.8; build/test pass, OpenRouter credential blocker confirmed, orphaned Graphify output stashed
 - 2026-11-14 · Codex · T1.1 · server CRUD, migration startup, jump guard, both themes, and 390px layout verified; build/test pass (7/7)
+- 2026-11-14 · Codex · T1.2 · started
 - 2026-11-14 · Codex · T1.1 · started
