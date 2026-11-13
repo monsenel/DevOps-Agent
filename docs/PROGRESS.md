@@ -7,7 +7,7 @@
 ## Current
 
 - **Task:** T0.4 Single-user login
-- **Status:** in-progress
+- **Status:** done
 - **Last updated:** 2026-11-13 by implementation session
 
 ## WIP notes
@@ -23,19 +23,7 @@ Gotchas found:
 -
 -->
 
-What is done so far:
-- T0.2 Docker and compose is committed and verified.
-- Reviewed official .NET 10 cookie authentication, Blazor auth-state, antiforgery, Razor Pages form, and static asset authorization guidance.
-- Added environment-backed admin credentials, password hash verification/plain-password hashing with warning, cookie auth, authenticated fallback, anonymous health/static assets, and Razor Pages sign-in/sign-out.
-- Built a token-styled 400px login card and added a protected, antiforgery-backed logout form to the sidebar.
-- `dotnet build DevOpsAgent.slnx` passes with zero warnings.
-- HTTP verification confirms `/` redirects to `/login`, `/healthz` and login assets remain anonymous, wrong credentials show an error, valid credentials reach Overview, and logout invalidates the cookie.
-What is next (exact next step):
-- Inspect the login card in the browser, rerun build/tests and the component token audit, then mark T0.4 done and start T0.6.
-Files touched:
-- `docs/PROGRESS.md`, `src/DevOpsAgent.Web/Program.cs`, `src/DevOpsAgent.Web/Authentication/**`, `src/DevOpsAgent.Web/Pages/**`, `src/DevOpsAgent.Web/Components/Layout/Sidebar.razor`, `src/DevOpsAgent.Web/Components/_Imports.razor`, `src/DevOpsAgent.Web/wwwroot/css/app.css`.
-Gotchas found:
-- The app uses globally Interactive Server rendering, so login must complete through a normal HTTP form response before the cookie can be set.
+_(clear when no task is in progress)_
 
 ## Blockers
 
@@ -52,7 +40,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T0.1 | Solution skeleton | done | `feat(T0.1): solution skeleton` |
 | T0.2 | Docker and compose | done | `feat(T0.2): docker and compose` |
 | T0.3 | Persistence | done | `feat(T0.3): sqlite persistence` |
-| T0.4 | Single-user login | in-progress | |
+| T0.4 | Single-user login | done | `feat(T0.4): single-user login` |
 | T0.5 | Design system and app shell | done | `feat(T0.5): design system and app shell` |
 | T0.6 | LLM providers — domain, storage, client | todo | |
 | T0.7 | Settings › LLM connection page | todo | |
@@ -102,3 +90,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-13 · Codex · T0.2 · started
 - 2026-11-13 · Codex · T0.2 · Compose build and run verified; health endpoint, host DB/migration/key ring, and non-root process checked
 - 2026-11-13 · Codex · T0.4 · started
+- 2026-11-13 · Codex · T0.4 · build/test pass; login, logout, health/static access, and both themes verified
