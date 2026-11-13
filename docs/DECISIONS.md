@@ -71,3 +71,8 @@ Format: `D-<number> · <date> · <title>` then Decision / Why / Consequences.
 ### D-017 · 2026-11-13 · OpenAI-compatible chat adapter and injectable HTTP transport
 - **Decision:** Use `Microsoft.Extensions.AI.Abstractions` and `Microsoft.Extensions.AI.OpenAI` 11.0.0 with the OpenAI .NET SDK. Create a chat client with `OpenAIClientOptions.Endpoint` from the saved provider base URL. Use the named `llm` `HttpClient` for both model listing and the SDK transport so connection tests can exercise the complete HTTP flow with a fake handler.
 - **Why:** The current official adapter implements `IChatClient` for OpenAI-compatible endpoints; package 11.0.0 supports net10.0. Reusing the named transport keeps endpoint behavior and tests consistent.
+
+### D-018 · 2026-11-14 · SSH.NET 2026 and pinned host keys
+- **Decision:** Use `SSH.NET` 2026.0.0 for managed SSH, async command execution, and local forwarding. Verify every host key against exact host/port entries in `/keys/known_hosts`; reject unknown or changed keys.
+- **Why:** This release targets .NET 8 and higher and documents cancellable async connect/command APIs. SSH.NET's host-key event defaults to trusting the received key, so the app must explicitly replace that behavior with pinned verification.
+- **Consequences:** Mount `/keys/known_hosts` alongside the identity keys before connecting to inventory servers. Do not log passphrases, private key data, or host key material.
