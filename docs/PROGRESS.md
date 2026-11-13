@@ -6,9 +6,9 @@
 
 ## Current
 
-- **Task:** T0.8 Basic chat (no tools)
-- **Status:** blocked
-- **Last updated:** 2026-11-14 by resume session
+- **Task:** T1.1 Server inventory
+- **Status:** in-progress
+- **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
@@ -24,17 +24,14 @@ Gotchas found:
 -->
 
 What is done so far:
-- T0.8 implementation and local verification are complete; resumed build passed with 0 warnings/errors and tests passed (4/4).
-- OpenRouter endpoint check is blocked: `.env`, `OPENROUTER_API_KEY`, and `OPENAI_API_KEY` are absent. Existing local fixture and Ollama checks are recorded in the prior session log.
-- Untracked generated `graphify-out/` did not match the T0.8 WIP notes and was stashed as `orphaned WIP 2026-11-14`.
+- T0.8 was resumed; build passed with 0 warnings/errors and tests passed (4/4). Its OpenRouter criterion is blocked for missing credentials and recorded in Blockers.
+- T1.1 scope reviewed: server entity + migration, inventory table, and add/edit dialog with validation and jump-server relation.
 What is next (exact next step):
-- Configure an OpenRouter provider and key in Settings, send a harmless prompt, and verify the real endpoint; if it passes, mark T0.8 done and commit `feat(T0.8): basic persisted chat`, otherwise fix the provider flow.
+- Inspect existing EF entities, repositories, page patterns, and `/keys` handling; then implement T1.1's domain/application/persistence and UI layers.
 Files touched:
 - `docs/PROGRESS.md`
 Gotchas found:
-- Stored API keys are not exposed in settings component state; use the app's blank replacement field and saved-key indicator.
-- SQLite EF Core does not translate `DateTimeOffset` sorting; sort loaded conversation summaries in application memory.
-- Newly created chat messages must be explicitly added to `ChatMessages`.
+- T0.8 remains blocked until an OpenRouter key is configured and the real endpoint check succeeds.
 
 ## Blockers
 
@@ -56,7 +53,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T0.6 | LLM providers — domain, storage, client | done | `feat(T0.6): llm providers backend` |
 | T0.7 | Settings › LLM connection page | done | `feat(T0.7): llm connection settings` |
 | T0.8 | Basic chat (no tools) | blocked | |
-| T1.1 | Server inventory | todo | |
+| T1.1 | Server inventory | in-progress | |
 | T1.2 | SSH pool and runner | todo | |
 | T1.3 | Import ssh config | todo | |
 | T2.1 | Collector framework and snapshots | todo | |
@@ -110,3 +107,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-13 · Codex · T0.8 · conversation persistence and provider-backed streaming service checkpointed; next implement the chat page
 - 2026-11-14 · Codex · T0.8 · chat UI, streamed fixture response, reload persistence, theme and mobile layout verified; live OpenRouter check pending credentials
 - 2026-11-14 · Codex / GPT-6 · resumed T0.8; build/test pass, OpenRouter credential blocker confirmed, orphaned Graphify output stashed
+- 2026-11-14 · Codex · T1.1 · started
