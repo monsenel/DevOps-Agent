@@ -11,7 +11,9 @@ RUN dotnet publish src/DevOpsAgent.Web/DevOpsAgent.Web.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 COPY --from=build --chown=1654:1654 /app/publish .
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod 755 /app/docker-entrypoint.sh
 ENV ASPNETCORE_HTTP_PORTS=8080
 EXPOSE 8080
 USER 1654:1654
-ENTRYPOINT ["dotnet", "DevOpsAgent.Web.dll"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

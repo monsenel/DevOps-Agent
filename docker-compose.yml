@@ -3,7 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    user: "${DVA_UID:-1000}:${DVA_GID:-1000}"
+    # The entrypoint fixes bind-mount ownership, then drops to this UID/GID.
+    user: "0:0"
     ports:
       - "8080:8080"
     env_file:
@@ -11,6 +12,8 @@ services:
         required: false
     environment:
       ASPNETCORE_URLS: ${ASPNETCORE_URLS:-http://+:8080}
+      DVA_UID: ${DVA_UID:-1000}
+      DVA_GID: ${DVA_GID:-1000}
       PersistenceOptions__ConnectionString: Data Source=/data/devops-agent.db
       PersistenceOptions__DataProtectionKeysDirectory: /data/keys
     volumes:

@@ -26,12 +26,13 @@ Gotchas found:
 What is done so far:
 - T0.5 design system and app shell is committed and verified.
 - Added a multi-stage .NET 10 image, Docker Compose app/Ollama services, optional `.env`, ignored build/data secrets, and `/healthz` returning status plus assembly version.
+- Added an ownership initialization entrypoint that drops from root to the configured numeric non-root UID/GID.
 - Compose config resolves to a non-root UID/GID for the host data bind mount.
 - Docker image builds successfully, but the first container start failed because Compose created `./data` as root-owned; `/data/keys` was not writable by UID 1000.
 What is next (exact next step):
 - Add a root initialization entrypoint that fixes `/data` ownership and drops privileges to `DVA_UID:DVA_GID`, then rebuild and verify `/healthz`, page response, migration, key ring, and effective process UID.
 Files touched:
-- `docs/PROGRESS.md`, `docs/DECISIONS.md`, `src/DevOpsAgent.Web/Program.cs`, `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `.env.example`, `docker-entrypoint.sh` (next).
+- `docs/PROGRESS.md`, `docs/DECISIONS.md`, `src/DevOpsAgent.Web/Program.cs`, `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `.env.example`, `docker-entrypoint.sh`.
 Gotchas found:
 - Compose creates bind paths as root on this host; matching IDs alone cannot initialize a fresh volume unless ownership is fixed first.
 
