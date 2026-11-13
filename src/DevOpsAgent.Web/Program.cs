@@ -1,4 +1,5 @@
 using DevOpsAgent.Infrastructure.Persistence;
+using DevOpsAgent.Application.Llm;
 using DevOpsAgent.Web.Authentication;
 using DevOpsAgent.Web.Components;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -8,6 +9,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddDevOpsPersistence(builder.Configuration);
+builder.Services.AddScoped<ProviderService>();
+builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddRazorPages();

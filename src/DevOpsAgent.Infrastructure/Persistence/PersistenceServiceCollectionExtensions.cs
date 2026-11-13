@@ -1,5 +1,6 @@
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Infrastructure.Security;
+using DevOpsAgent.Infrastructure.Llm;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -21,6 +22,13 @@ public static class PersistenceServiceCollectionExtensions
             var persistenceOptions = serviceProvider.GetRequiredService<IOptions<PersistenceOptions>>().Value;
             options.UseSqlite(persistenceOptions.ConnectionString);
         });
+
+        services.AddScoped<ILlmProviderRepository, LlmProviderRepository>();
+        services.AddHttpClient("llm", client => client.Timeout = Timeout.InfiniteTimeSpan);
+        services.AddSingleton<OpenAiCompatibleChatClientFactory>();
+        services.AddSingleton<IChatClientFactory>(serviceProvider =>
+            serviceProvider.GetRequiredService<OpenAiCompatibleChatClientFactory>());
+        services.AddSingleton<IModelLister, OpenAiModelLister>();
 
         var persistence = configuration.GetSection(PersistenceOptions.SectionName).Get<PersistenceOptions>() ?? new PersistenceOptions();
         var keysDirectory = Path.GetFullPath(persistence.DataProtectionKeysDirectory);
