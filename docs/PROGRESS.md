@@ -26,10 +26,15 @@ Gotchas found:
 What is done so far:
 - T1.2 SSH pool and runner is implemented and committed as `c439b13`, but its live direct-host and jump-host acceptance checks are blocked by missing targets and `/keys` credentials.
 - T1.3 scope: parse OpenSSH config host stanzas, skip wildcard host patterns, support `HostName`, `User`, `Port`, `IdentityFile`, and `ProxyJump`, then provide paste → preview → import UI.
+- Implemented deterministic `SshConfigParser` with exact host aliases, supported directives, quoted values, first-value semantics, and wildcard skips; fixture tests pass and the suite is green (15/15).
 What is next (exact next step):
-- Read the T1.3 acceptance criteria and server inventory contracts, then implement a deterministic `SshConfigParser` with fixture-based tests.
+- Complete the Servers import dialog: paste config, preview parsed rows with `/keys` basename mapping and ProxyJump resolution, then import jump hosts before dependent servers.
 Files touched:
 - `docs/PROGRESS.md`
+- `src/DevOpsAgent.Application/Servers/SshConfigParser.cs`
+- `tests/DevOpsAgent.Tests/DevOpsAgent.Tests.csproj`
+- `tests/DevOpsAgent.Tests/Fixtures/ssh-config/basic.conf`
+- `tests/DevOpsAgent.Tests/SshConfigParserTests.cs`
 - `docs/PROGRESS.md`
 Gotchas found:
 - T0.8 remains blocked on missing OpenRouter credentials.
