@@ -37,7 +37,20 @@ namespace DevOpsAgent.Infrastructure.Migrations
                     b.Property<bool>("IsDefault")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("LastTestError")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("LastTestModelCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool?>("LastTestStreamingSupported")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool?>("LastTestSucceeded")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool?>("LastTestToolCallingSupported")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTimeOffset?>("LastTestedAtUtc")

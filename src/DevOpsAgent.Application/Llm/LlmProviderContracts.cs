@@ -31,5 +31,9 @@ public sealed record LlmProviderSummary(
     bool StreamingEnabled,
     bool RedactSecretsBeforeSending,
     DateTimeOffset? LastTestedAtUtc,
-    bool? LastTestSucceeded);
+    bool? LastTestSucceeded,
+    int? LastTestModelCount,
+    bool? LastTestStreamingSupported,
+    bool? LastTestToolCallingSupported,
+    string? LastTestError);
 

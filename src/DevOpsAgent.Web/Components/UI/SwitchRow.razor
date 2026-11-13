@@ -6,7 +6,7 @@
             <span>@Helper</span>
         }
     </span>
-    <button class="switch-control" type="button" role="switch" aria-checked="@Value.ToString().ToLowerInvariant()" aria-label="@Title" @onclick="Toggle">
+    <button class="switch-control" type="button" role="switch" aria-checked="@Value.ToString().ToLowerInvariant()" aria-label="@Title" disabled="@Disabled" @onclick="Toggle">
         <span class="switch-knob"></span>
     </button>
 </div>
@@ -15,7 +15,8 @@
     [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
     [Parameter] public string? Helper { get; set; }
     [Parameter] public bool Value { get; set; }
+    [Parameter] public bool Disabled { get; set; }
     [Parameter] public EventCallback<bool> ValueChanged { get; set; }
 
-    private Task Toggle() => ValueChanged.InvokeAsync(!Value);
+    private Task Toggle() => Disabled ? Task.CompletedTask : ValueChanged.InvokeAsync(!Value);
 }

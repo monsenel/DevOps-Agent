@@ -35,6 +35,10 @@ public sealed class LlmProvider
     public DateTimeOffset CreatedAtUtc { get; private set; }
     public DateTimeOffset? LastTestedAtUtc { get; private set; }
     public bool? LastTestSucceeded { get; private set; }
+    public int? LastTestModelCount { get; private set; }
+    public bool? LastTestStreamingSupported { get; private set; }
+    public bool? LastTestToolCallingSupported { get; private set; }
+    public string? LastTestError { get; private set; }
 
     public void Update(
         string name,
@@ -65,10 +69,14 @@ public sealed class LlmProvider
         }
     }
 
-    public void MarkTested(bool succeeded, DateTimeOffset testedAtUtc)
+    public void MarkTested(ProviderTestResult result)
     {
-        LastTestSucceeded = succeeded;
-        LastTestedAtUtc = testedAtUtc;
+        LastTestSucceeded = result.Reachable;
+        LastTestedAtUtc = result.TestedAtUtc;
+        LastTestModelCount = result.Models.Count;
+        LastTestStreamingSupported = result.StreamingSupported;
+        LastTestToolCallingSupported = result.ToolCallingSupported;
+        LastTestError = result.Error;
     }
 
     public void SetDefault(bool isDefault) => IsDefault = isDefault;

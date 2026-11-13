@@ -25,6 +25,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(provider => provider.BaseUrl).HasMaxLength(1000).IsRequired();
             entity.Property(provider => provider.Model).HasMaxLength(300).IsRequired();
             entity.Property(provider => provider.ProtectedApiKey).HasMaxLength(4096);
+            entity.Property(provider => provider.LastTestError).HasMaxLength(500);
             entity.Property(provider => provider.Type).HasConversion<string>().HasMaxLength(40);
             entity.HasIndex(provider => provider.IsDefault).IsUnique().HasFilter("\"IsDefault\" = 1");
         });

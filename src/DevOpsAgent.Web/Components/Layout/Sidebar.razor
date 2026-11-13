@@ -1,3 +1,7 @@
+@implements IDisposable
+@inject ProviderService Providers
+@inject ProviderStatusState ProviderStatus
+
 <aside class="sidebar-card" aria-label="Application sidebar">
     <a class="brand-row" href="/" aria-label="DevOps Agent home">
         <span class="brand-mark" aria-hidden="true">
@@ -14,7 +18,7 @@
         <NavLink class="nav-link" href="/updates">Updates</NavLink>
         <NavLink class="nav-link" href="/agent-chat">Agent chat</NavLink>
         <NavLink class="nav-link" href="/action-log">Action log</NavLink>
-        <NavLink class="nav-link" href="/settings">Settings</NavLink>
+        <NavLink class="nav-link" href="/settings/llm">Settings</NavLink>
     </nav>
 
     <section class="nav-group" aria-label="Server groups">
@@ -26,9 +30,17 @@
 
     <section class="model-card" aria-label="Default model status">
         <span class="micro-label">Model</span>
-        <strong>Not configured</strong>
-        <span class="model-muted">Add a provider to enable chat.</span>
-        <NavLink class="ui-button primary" href="/settings">LLM settings</NavLink>
+        @if (ProviderStatus.DefaultProvider is { } defaultProvider)
+        {
+            <strong>@defaultProvider.Name</strong>
+            <span class="model-muted">@ModelStatus(defaultProvider)</span>
+        }
+        else
+        {
+            <strong>Not configured</strong>
+            <span class="model-muted">Add a provider to enable chat.</span>
+        }
+        <NavLink class="ui-button primary" href="/settings/llm">LLM settings</NavLink>
     </section>
 
     <AuthorizeView>
@@ -40,3 +52,23 @@
         </Authorized>
     </AuthorizeView>
 </aside>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        ProviderStatus.Changed += OnProviderStatusChanged;
+        var providers = await Providers.ListAsync(CancellationToken.None);
+        ProviderStatus.Set(providers.FirstOrDefault(provider => provider.IsDefault));
+    }
+
+    private void OnProviderStatusChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private static string ModelStatus(LlmProviderSummary provider) => provider.LastTestSucceeded switch
+    {
+        true => $"Connected · {provider.Model}",
+        false => "Connection test failed",
+        _ => "Not tested yet"
+    };
+
+    public void Dispose() => ProviderStatus.Changed -= OnProviderStatusChanged;
+}

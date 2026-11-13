@@ -1,3 +1,438 @@
 @page "/settings"
+@page "/settings/llm"
+@inject ProviderService Providers
+@inject ProviderStatusState ProviderStatus
+@inject IJSRuntime JavaScript
+
 <PageTitle>Settings · DevOps Agent</PageTitle>
-<PagePlaceholder Title="Settings" Description="Configure language model connections, servers, execution modes, and notifications." />
+
+<div class="settings-content">
+    <nav class="settings-tabs" aria-label="Settings sections">
+        @foreach (var section in Sections)
+        {
+            <button type="button" class="@(section == _section ? "active" : null)"
+                    aria-current="@(section == _section ? "page" : null)" @onclick="() => SelectSection(section)">
+                @section
+            </button>
+        }
+    </nav>
+
+    @if (_section != "LLM connection")
+    {
+        <PagePlaceholder Title="@_section" Description="This settings section will be available in a later task." />
+    }
+    else
+    {
+        <div class="settings-row llm-main-row">
+            <section class="ui-card providers-card" aria-labelledby="providers-heading">
+                <header class="ui-card-header"><h2 id="providers-heading">Providers</h2></header>
+                <div class="provider-list">
+                    @foreach (var provider in _providers)
+                    {
+                        <button type="button" class="provider-item @(_selectedProviderId == provider.Id ? "selected" : null)"
+                                aria-pressed="@(_selectedProviderId == provider.Id)" @onclick="() => SelectProviderAsync(provider)">
+                            <span class="provider-item-heading"><strong>@provider.Name</strong>
+                                @if (provider.IsDefault) { <span class="ui-badge soft">Default</span> }
+                            </span>
+                            <span class="provider-url mono">@provider.BaseUrl</span>
+                            <span class="provider-status @(provider.LastTestSucceeded == false ? "failed" : null)">@ProviderStatusText(provider)</span>
+                        </button>
+                    }
+                </div>
+                <div class="provider-list-spacer"></div>
+                <Button Variant="secondary" FullWidth="true" OnClick="AddProviderAsync">Add provider</Button>
+            </section>
+
+            <section class="ui-card connection-card" aria-labelledby="connection-heading">
+                <header class="ui-card-header">
+                    <h2 id="connection-heading">Connection</h2>
+                    @if (!string.IsNullOrWhiteSpace(_form.Name))
+                    {
+                        <span class="ui-badge soft">@_form.Name</span>
+                    }
+                </header>
+
+                @if (!string.IsNullOrWhiteSpace(_error))
+                {
+                    <div class="settings-message error" role="alert">@_error</div>
+                }
+                @if (!string.IsNullOrWhiteSpace(_message))
+                {
+                    <div class="settings-message success" role="status">@_message</div>
+                }
+
+                <div class="connection-form-grid">
+                    <div class="select-field">
+                        <label for="provider-type">Provider type</label>
+                        <select id="provider-type" @bind="_form.Type" @bind:after="OnTypeChanged">
+                            <option value="Ollama">Ollama</option>
+                            <option value="LmStudio">LM Studio</option>
+                            <option value="OpenRouter">OpenRouter</option>
+                            <option value="OpenAiCompatible">OpenAI-compatible (custom)</option>
+                        </select>
+                    </div>
+                    <Field Id="provider-name" Label="Display name" @bind-Value="_form.Name" />
+                    <Field Id="provider-url" Label="Base URL" @bind-Value="_form.BaseUrl" Mono="true"
+                           Helper="Any endpoint that speaks the OpenAI chat completions API." />
+                    <div class="field api-key-field">
+                        <label for="provider-key">API key</label>
+                        <input id="provider-key" class="mono" type="password" @bind="_form.ApiKey"
+                               @bind:event="oninput" autocomplete="new-password" placeholder="@ApiKeyPlaceholder" />
+                        <span class="field-helper">@ApiKeyHelper</span>
+                    </div>
+                    <div class="select-field model-select-field">
+                        <label for="provider-model">Model</label>
+                        <div class="model-refresh-row">
+                            <select id="provider-model" class="mono" @bind="_form.Model">
+                                @if (!_modelOptions.Contains(_form.Model, StringComparer.Ordinal))
+                                {
+                                    <option value="@_form.Model">@(_form.Model.Length == 0 ? "Select model" : _form.Model)</option>
+                                }
+                                @foreach (var model in _modelOptions)
+                                {
+                                    <option value="@model">@model</option>
+                                }
+                            </select>
+                            <Button Variant="secondary" Disabled="_isRefreshing" OnClick="RefreshModelsAsync">@(_isRefreshing ? "Refreshing…" : "Refresh")</Button>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label for="context-window">Context window (tokens)</label>
+                        <input id="context-window" class="mono" type="number" min="0" step="1" @bind="_form.ContextWindow" />
+                    </div>
+                    <div class="field">
+                        <label for="temperature">Temperature</label>
+                        <input id="temperature" class="mono" type="number" min="0" max="2" step="0.1" @bind="_form.Temperature" />
+                    </div>
+                    <div class="field">
+                        <label for="request-timeout">Request timeout (seconds)</label>
+                        <input id="request-timeout" class="mono" type="number" min="1" max="600" step="1" @bind="_form.TimeoutSeconds" />
+                    </div>
+                </div>
+
+                <div class="connection-switches">
+                    <SwitchRow Title="Native tool calling" Helper="Off falls back to JSON in the prompt" @bind-Value="_form.NativeToolCallingEnabled" />
+                    <SwitchRow Title="Streaming" Helper="Show answers as they are generated" @bind-Value="_form.StreamingEnabled" />
+                    <SwitchRow Title="Use as default" Helper="For chat and tool calls" @bind-Value="_form.IsDefault" />
+                </div>
+
+                <div class="connection-actions">
+                    <Button Disabled="_isSaving || _isTesting" OnClick="SaveAsync">@(_isSaving ? "Saving…" : "Save")</Button>
+                    <Button Variant="secondary" Disabled="_isSaving || _isTesting" OnClick="TestConnectionAsync">@(_isTesting ? "Testing…" : "Test connection")</Button>
+                    <span class="actions-spacer"></span>
+                    @if (_selectedProviderId is not null)
+                    {
+                        <Button Variant="ghost-destructive" Disabled="_isSaving || _isTesting" OnClick="RemoveProviderAsync">Remove provider</Button>
+                    }
+                </div>
+            </section>
+        </div>
+
+        <div class="settings-row llm-detail-row">
+            <section class="ui-card test-result-card @TestResultClass" aria-labelledby="test-result-heading">
+                <header class="ui-card-header"><h2 id="test-result-heading">@TestResultTitle</h2></header>
+                @if (_selectedProvider?.LastTestSucceeded is null)
+                {
+                    <p class="muted">Run a connection test to check endpoint reachability, models, streaming, and tool calling.</p>
+                }
+                else
+                {
+                    <dl class="test-result-grid">
+                        <dt>Endpoint reachable</dt><dd>@YesNo(_selectedProvider.LastTestSucceeded.Value)</dd>
+                        <dt>Models listed</dt><dd>@(_selectedProvider.LastTestModelCount?.ToString() ?? "—")</dd>
+                        <dt>Tool calling</dt><dd>@SupportText(_selectedProvider.LastTestToolCallingSupported)</dd>
+                        <dt>Streaming</dt><dd>@SupportText(_selectedProvider.LastTestStreamingSupported)</dd>
+                    </dl>
+                    @if (!string.IsNullOrWhiteSpace(_selectedProvider.LastTestError))
+                    {
+                        <p class="test-result-error">@_selectedProvider.LastTestError</p>
+                    }
+                    @if (_selectedProvider.LastTestedAtUtc is not null)
+                    {
+                        <p class="test-result-time">Last tested @(_selectedProvider.LastTestedAtUtc.Value.ToLocalTime().ToString("g"))</p>
+                    }
+                }
+            </section>
+
+            <section class="ui-card task-routing-card" aria-labelledby="task-routing-heading">
+                <header class="ui-card-header"><h2 id="task-routing-heading">Task routing</h2><span class="ui-badge neutral">v2</span></header>
+                <p class="muted">Choose different providers for chat and specialist tasks.</p>
+                <div class="disabled-feature-row"><span>Chat and tool calls</span><span>Unavailable</span></div>
+                <div class="disabled-feature-row"><span>Log triage</span><span>Unavailable</span></div>
+                <div class="disabled-feature-row"><span>Heavy analysis</span><span>Unavailable</span></div>
+            </section>
+
+            <section class="ui-card cloud-options-card" aria-labelledby="cloud-options-heading">
+                <header class="ui-card-header"><h2 id="cloud-options-heading">Cloud providers</h2></header>
+                <SwitchRow Title="Redact secrets and IPs before sending" Helper="Applies to cloud providers" @bind-Value="_form.RedactSecretsBeforeSending" />
+                <SwitchRow Title="Keep raw logs local" Helper="Available in v2" Value="false" Disabled="true" />
+                <SwitchRow Title="Fallback on failure" Helper="Available in v2" Value="false" Disabled="true" />
+            </section>
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly string[] Sections = ["LLM connection", "Servers and SSH", "Execution modes", "Notifications", "Discovery"];
+    private readonly List<LlmProviderSummary> _providers = [];
+    private readonly List<string> _modelOptions = [];
+    private ProviderForm _form = new();
+    private Guid? _selectedProviderId;
+    private string _section = "LLM connection";
+    private string? _error;
+    private string? _message;
+    private bool _hasSavedApiKey;
+    private bool _isRefreshing;
+    private bool _isSaving;
+    private bool _isTesting;
+    private LlmProviderSummary? _selectedProvider => _providers.SingleOrDefault(provider => provider.Id == _selectedProviderId);
+
+    private string ApiKeyPlaceholder => _form.Type switch
+    {
+        ProviderType.Ollama => "Not required for Ollama",
+        ProviderType.OpenRouter => "OpenRouter API key",
+        _ => "Optional API key"
+    };
+
+    private string ApiKeyHelper => _hasSavedApiKey
+        ? "A key is saved. Leave blank to keep it, or enter a replacement."
+        : "Stored encrypted and never shown again.";
+
+    private string TestResultClass => _selectedProvider?.LastTestSucceeded switch
+    {
+        true => "passed",
+        false => "failed",
+        _ => string.Empty
+    };
+
+    private string TestResultTitle => _selectedProvider?.LastTestSucceeded switch
+    {
+        true => "Last test passed",
+        false => "Last test failed",
+        _ => "Last test"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProvidersAsync();
+        if (_providers.Count > 0)
+        {
+            await SelectProviderAsync(_providers.FirstOrDefault(provider => provider.IsDefault) ?? _providers[0]);
+        }
+        else
+        {
+            ResetForm();
+        }
+    }
+
+    private async Task LoadProvidersAsync()
+    {
+        _providers.Clear();
+        _providers.AddRange(await Providers.ListAsync(CancellationToken.None));
+        ProviderStatus.Set(_providers.FirstOrDefault(provider => provider.IsDefault));
+    }
+
+    private async Task SelectProviderAsync(LlmProviderSummary provider)
+    {
+        _selectedProviderId = provider.Id;
+        _hasSavedApiKey = provider.HasApiKey;
+        _modelOptions.Clear();
+        if (!string.IsNullOrWhiteSpace(provider.Model)) _modelOptions.Add(provider.Model);
+        _form = ProviderForm.From(provider);
+        _error = null;
+        _message = null;
+        await Task.CompletedTask;
+    }
+
+    private Task AddProviderAsync()
+    {
+        _selectedProviderId = null;
+        _hasSavedApiKey = false;
+        _modelOptions.Clear();
+        ResetForm();
+        _error = null;
+        _message = null;
+        return Task.CompletedTask;
+    }
+
+    private void ResetForm() => _form = new ProviderForm { IsDefault = _providers.All(provider => !provider.IsDefault) };
+
+    private void SelectSection(string section) => _section = section;
+
+    private void OnTypeChanged()
+    {
+        _form.BaseUrl = _form.Type switch
+        {
+            ProviderType.Ollama => "http://ollama:11434/v1",
+            ProviderType.LmStudio => "http://host.docker.internal:1234/v1",
+            ProviderType.OpenRouter => "https://openrouter.ai/api/v1",
+            _ => _form.BaseUrl
+        };
+        if (string.IsNullOrWhiteSpace(_form.Name) || _form.Name == "New provider")
+        {
+            _form.Name = _form.Type switch
+            {
+                ProviderType.Ollama => "Ollama",
+                ProviderType.LmStudio => "LM Studio",
+                ProviderType.OpenRouter => "OpenRouter",
+                _ => "New provider"
+            };
+        }
+    }
+
+    private async Task RefreshModelsAsync()
+    {
+        _isRefreshing = true;
+        _error = null;
+        _message = null;
+        try
+        {
+            var models = await Providers.RefreshModelsAsync(_selectedProviderId, _form.BaseUrl, _form.ApiKey,
+                _form.TimeoutSeconds, CancellationToken.None);
+            _modelOptions.Clear();
+            _modelOptions.AddRange(models);
+            if (_modelOptions.Count > 0 && !_modelOptions.Contains(_form.Model, StringComparer.Ordinal))
+            {
+                _form.Model = _modelOptions[0];
+            }
+            _message = $"Found {_modelOptions.Count} model{(_modelOptions.Count == 1 ? string.Empty : "s")}.";
+        }
+        catch (Exception)
+        {
+            _error = "Could not list models. Check the endpoint and API key.";
+        }
+        finally
+        {
+            _isRefreshing = false;
+        }
+    }
+
+    private async Task SaveAsync() => await PersistAsync();
+
+    private async Task<LlmProviderSummary?> PersistAsync()
+    {
+        _isSaving = true;
+        _error = null;
+        _message = null;
+        try
+        {
+            var input = new LlmProviderInput(_form.Name, _form.Type, _form.BaseUrl, _form.Model,
+                _form.ContextWindow, _form.Temperature, _form.TimeoutSeconds, _form.IsDefault,
+                _form.NativeToolCallingEnabled, _form.StreamingEnabled, _form.RedactSecretsBeforeSending, _form.ApiKey);
+            var saved = _selectedProviderId is { } id
+                ? await Providers.UpdateAsync(id, input, CancellationToken.None)
+                : await Providers.CreateAsync(input, CancellationToken.None);
+            if (saved is null)
+            {
+                _error = "This provider no longer exists. Refresh and try again.";
+                return null;
+            }
+
+            _selectedProviderId = saved.Id;
+            _hasSavedApiKey = saved.HasApiKey;
+            _form.ApiKey = string.Empty;
+            await LoadProvidersAsync();
+            _message = "Provider saved.";
+            return saved;
+        }
+        catch (ArgumentException exception)
+        {
+            _error = exception.Message;
+            return null;
+        }
+        catch (Exception)
+        {
+            _error = "Could not save provider. Check the values and try again.";
+            return null;
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private async Task TestConnectionAsync()
+    {
+        var saved = await PersistAsync();
+        if (saved is null) return;
+
+        _isTesting = true;
+        _error = null;
+        _message = "Testing connection…";
+        try
+        {
+            _ = await Providers.TestAsync(saved.Id, CancellationToken.None);
+            await LoadProvidersAsync();
+            _message = _selectedProvider?.LastTestSucceeded == true
+                ? "Connection test completed."
+                : "Connection test failed. Review the result below.";
+        }
+        catch (Exception)
+        {
+            _error = "Could not complete the connection test.";
+        }
+        finally
+        {
+            _isTesting = false;
+        }
+    }
+
+    private async Task RemoveProviderAsync()
+    {
+        if (_selectedProvider is null) return;
+        var confirmed = await JavaScript.InvokeAsync<bool>("confirm", $"Remove provider ‘{_selectedProvider.Name}’?");
+        if (!confirmed) return;
+        await Providers.DeleteAsync(_selectedProvider.Id, CancellationToken.None);
+        await LoadProvidersAsync();
+        if (_providers.Count > 0)
+        {
+            await SelectProviderAsync(_providers.FirstOrDefault(provider => provider.IsDefault) ?? _providers[0]);
+        }
+        else
+        {
+            await AddProviderAsync();
+        }
+        _message = "Provider removed.";
+    }
+
+    private static string ProviderStatusText(LlmProviderSummary provider) => provider.LastTestSucceeded switch
+    {
+        true => "Connected",
+        false => $"Unreachable · {provider.LastTestedAtUtc?.ToLocalTime().ToString("g") ?? "last test"}",
+        _ => "Not tested"
+    };
+
+    private static string YesNo(bool value) => value ? "Yes" : "No";
+    private static string SupportText(bool? value) => value switch { true => "Supported", false => "Not supported", _ => "—" };
+
+    private sealed class ProviderForm
+    {
+        public ProviderType Type { get; set; } = ProviderType.Ollama;
+        public string Name { get; set; } = "Ollama";
+        public string BaseUrl { get; set; } = "http://ollama:11434/v1";
+        public string Model { get; set; } = string.Empty;
+        public int ContextWindow { get; set; } = 32768;
+        public double Temperature { get; set; } = 0.2;
+        public int TimeoutSeconds { get; set; } = 120;
+        public bool IsDefault { get; set; }
+        public bool NativeToolCallingEnabled { get; set; } = true;
+        public bool StreamingEnabled { get; set; } = true;
+        public bool RedactSecretsBeforeSending { get; set; } = true;
+        public string? ApiKey { get; set; }
+
+        public static ProviderForm From(LlmProviderSummary provider) => new()
+        {
+            Type = provider.Type,
+            Name = provider.Name,
+            BaseUrl = provider.BaseUrl,
+            Model = provider.Model,
+            ContextWindow = provider.ContextWindow,
+            Temperature = provider.Temperature,
+            TimeoutSeconds = provider.TimeoutSeconds,
+            IsDefault = provider.IsDefault,
+            NativeToolCallingEnabled = provider.NativeToolCallingEnabled,
+            StreamingEnabled = provider.StreamingEnabled,
+            RedactSecretsBeforeSending = provider.RedactSecretsBeforeSending
+        };
+    }
+}

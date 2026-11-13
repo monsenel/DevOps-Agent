@@ -71,7 +71,12 @@ public sealed class LlmProviderTests
         Assert.True(result.StreamingSupported);
         Assert.True(result.ToolCallingSupported);
         Assert.Equal(3, handler.RequestCount);
-        Assert.True((await repository.GetAsync(llm.Id, CancellationToken.None))!.LastTestSucceeded);
+        var saved = (await service.ListAsync(CancellationToken.None)).Single();
+        Assert.True(saved.LastTestSucceeded);
+        Assert.Equal(2, saved.LastTestModelCount);
+        Assert.True(saved.LastTestStreamingSupported);
+        Assert.True(saved.LastTestToolCallingSupported);
+        Assert.Null(saved.LastTestError);
     }
 
     private static LlmProviderInput Input(string name, string? apiKey, bool isDefault) => new(

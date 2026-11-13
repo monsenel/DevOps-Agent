@@ -59,6 +59,37 @@ public sealed class ProviderService(
         return true;
     }
 
+    public async Task<IReadOnlyList<string>> RefreshModelsAsync(
+        Guid? providerId,
+        string baseUrl,
+        string? apiKey,
+        int timeoutSeconds,
+        CancellationToken cancellationToken)
+    {
+        if (!Uri.TryCreate(baseUrl.Trim(), UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new ArgumentException("Base URL must be an absolute HTTP or HTTPS URL.", nameof(baseUrl));
+        }
+
+        if (timeoutSeconds is < 1 or > 600)
+        {
+            throw new ArgumentOutOfRangeException(nameof(timeoutSeconds));
+        }
+
+        var effectiveApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey;
+        if (effectiveApiKey is null && providerId.HasValue)
+        {
+            var provider = await repository.GetAsync(providerId.Value, cancellationToken);
+            if (provider is not null && !string.IsNullOrEmpty(provider.ProtectedApiKey))
+            {
+                effectiveApiKey = secretProtector.Unprotect(provider.ProtectedApiKey);
+            }
+        }
+
+        return await modelLister.ListAsync(NormalizeBaseUrl(baseUrl), effectiveApiKey, timeoutSeconds, cancellationToken);
+    }
+
     public async Task<ProviderTestResult?> TestAsync(Guid id, CancellationToken cancellationToken)
     {
         var provider = await repository.GetAsync(id, cancellationToken);
@@ -68,6 +99,7 @@ public sealed class ProviderService(
         }
 
         var testedAt = timeProvider.GetUtcNow();
+        ProviderTestResult result;
         try
         {
             var apiKey = string.IsNullOrEmpty(provider.ProtectedApiKey)
@@ -98,9 +130,7 @@ public sealed class ProviderService(
                 .SelectMany(message => message.Contents)
                 .Any(content => content is FunctionCallContent);
 
-            provider.MarkTested(true, testedAt);
-            await repository.SaveAsync(provider, provider.IsDefault, cancellationToken);
-            return new ProviderTestResult(true, models, streamed, toolSupported, null, testedAt);
+            result = new ProviderTestResult(true, models, streamed, toolSupported, null, testedAt);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -108,11 +138,13 @@ public sealed class ProviderService(
         }
         catch (Exception)
         {
-            provider.MarkTested(false, testedAt);
-            await repository.SaveAsync(provider, provider.IsDefault, cancellationToken);
-            return new ProviderTestResult(false, [], false, false,
+            result = new ProviderTestResult(false, [], false, false,
                 "Connection test failed. Check the URL, credentials, and model configuration.", testedAt);
         }
+
+        provider.MarkTested(result);
+        await repository.SaveAsync(provider, provider.IsDefault, cancellationToken);
+        return result;
     }
 
     private string? ProtectApiKey(string? apiKey) => string.IsNullOrWhiteSpace(apiKey)
@@ -124,7 +156,8 @@ public sealed class ProviderService(
         provider.Temperature, provider.TimeoutSeconds, provider.IsDefault,
         !string.IsNullOrEmpty(provider.ProtectedApiKey), provider.NativeToolCallingEnabled,
         provider.StreamingEnabled, provider.RedactSecretsBeforeSending,
-        provider.LastTestedAtUtc, provider.LastTestSucceeded);
+        provider.LastTestedAtUtc, provider.LastTestSucceeded, provider.LastTestModelCount,
+        provider.LastTestStreamingSupported, provider.LastTestToolCallingSupported, provider.LastTestError);
 
     private static void Validate(LlmProviderInput input)
     {

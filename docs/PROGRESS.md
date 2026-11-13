@@ -26,13 +26,31 @@ Gotchas found:
 What is done so far:
 - T0.6 provider domain, protected persistence, CRUD/default rules, chat client factory, model listing, and connection tests are committed and verified.
 - The current task spec is the Settings › LLM connection page in `docs/PLAN.md`; the UI must match `settings-llm.dc.html` and LLM-1 through LLM-8.
-- The page needs to show test details after reload; T0.6 currently stores only a pass/fail flag and timestamp, so extend the provider's persisted summary to satisfy LLM-3 before wiring the page.
+- Added persisted test details (model count, streaming, tool calling, error summary) and model refresh using either an entered key or the selected provider's protected key.
+- Implemented provider list and connection form, provider presets, field validation, refresh/test/save/remove actions, test result card, default selection, section placeholders, v2 routing/fallback cards, cloud redaction setting, and live sidebar model status.
+- Verified saved credentials remain blank in the password field after reload; only a saved-key indicator is shown. Verified add/save/test/default flow against a local OpenAI-compatible fixture: endpoint reachable, one model listed, streaming and tool calling supported, sidebar changed to Connected.
+- Verified light/dark theme switching and 390px layout without horizontal overflow. `dotnet build DevOpsAgent.slnx` passed with 0 warnings/errors, `dotnet test DevOpsAgent.slnx` passed (4/4), `git diff --check` and CSS color-token audit passed.
 What is next (exact next step):
-- Extend persisted connection-test summary fields and expose model refresh in `ProviderService`, then build the Settings page on those contracts.
+- Commit the completed T0.7 implementation as `feat(T0.7): llm connection settings`, then start T0.8 Basic chat (no tools) per `docs/PLAN.md`.
 Files touched:
-- `docs/PROGRESS.md`.
+- `src/DevOpsAgent.Application/Llm/LlmProviderContracts.cs`
+- `src/DevOpsAgent.Application/Llm/ProviderService.cs`
+- `src/DevOpsAgent.Domain/Llm/LlmProvider.cs`
+- `src/DevOpsAgent.Infrastructure/Migrations/20261113200840_PersistProviderTestSummary.*`
+- `src/DevOpsAgent.Infrastructure/Persistence/AppDbContext.cs`
+- `src/DevOpsAgent.Web/Components/Layout/Sidebar.razor`
+- `src/DevOpsAgent.Web/Components/Layout/TopBar.razor`
+- `src/DevOpsAgent.Web/Components/Pages/Settings.razor`
+- `src/DevOpsAgent.Web/Components/UI/Field.razor`
+- `src/DevOpsAgent.Web/Components/UI/SwitchRow.razor`
+- `src/DevOpsAgent.Web/Components/_Imports.razor`
+- `src/DevOpsAgent.Web/ProviderStatusState.cs`
+- `src/DevOpsAgent.Web/Program.cs`
+- `src/DevOpsAgent.Web/wwwroot/css/app.css`
+- `tests/DevOpsAgent.Tests/LlmProviderTests.cs`
+- `docs/PROGRESS.md`
 Gotchas found:
-- Show API keys only as an unspecific saved indicator; never pass stored key material to a component.
+- Keep API keys out of component state after loading; the form uses a blank password field plus an unspecific saved-key indicator, and blank input means retain the stored key.
 
 ## Blockers
 

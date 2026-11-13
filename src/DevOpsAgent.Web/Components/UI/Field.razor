@@ -1,6 +1,6 @@
 <div class="field">
     <label for="@Id">@Label</label>
-    <input id="@Id" type="@Type" class="@(Mono ? "mono" : null)" value="@Value" placeholder="@Placeholder" autocomplete="@Autocomplete" @onchange="HandleChange" />
+    <input id="@Id" type="@Type" class="@(Mono ? "mono" : null)" value="@Value" placeholder="@Placeholder" autocomplete="@Autocomplete" @oninput="HandleChange" />
     @if (!string.IsNullOrWhiteSpace(Helper))
     {
         <span class="field-helper">@Helper</span>
