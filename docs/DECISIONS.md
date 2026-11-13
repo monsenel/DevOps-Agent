@@ -67,3 +67,7 @@ Format: `D-<number> · <date> · <title>` then Decision / Why / Consequences.
 - **Decision:** The Compose entrypoint starts with root only long enough to create and assign `/data` and `/data/keys` to `DVA_UID:DVA_GID`, then uses `setpriv` to run the web process as that non-root identity.
 - **Why:** Compose creates fresh bind-mount directories as root on the target host, so a non-root process cannot initialize the required SQLite and Data Protection files by itself.
 - **Consequences:** The application process remains non-root; only the small entrypoint initialization runs with elevated privileges.
+
+### D-017 · 2026-11-13 · OpenAI-compatible chat adapter and injectable HTTP transport
+- **Decision:** Use `Microsoft.Extensions.AI.Abstractions` and `Microsoft.Extensions.AI.OpenAI` 11.0.0 with the OpenAI .NET SDK. Create a chat client with `OpenAIClientOptions.Endpoint` from the saved provider base URL. Use the named `llm` `HttpClient` for both model listing and the SDK transport so connection tests can exercise the complete HTTP flow with a fake handler.
+- **Why:** The current official adapter implements `IChatClient` for OpenAI-compatible endpoints; package 11.0.0 supports net10.0. Reusing the named transport keeps endpoint behavior and tests consistent.

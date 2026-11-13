@@ -26,10 +26,11 @@ Gotchas found:
 What is done so far:
 - T0.4 single-user login is committed and verified.
 - Read T0.6 scope: provider domain entity, protected API key persistence, CRUD with a single default, OpenAI-compatible `IChatClient` factory, model listing, and connection test routine.
+- Checked current official `IChatClient`, OpenAI adapter, and OpenAI custom-endpoint guidance; confirmed adapter package 11.0.0 targets net10.0 and recorded package/transport choice in D-017.
 What is next (exact next step):
-- Check the current official Microsoft.Extensions.AI and OpenAI client docs, then design T0.6 abstractions and package versions before implementation.
+- Add provider domain/application contracts and CRUD/default rules, then wire persistence and its migration.
 Files touched:
-- `docs/PROGRESS.md`.
+- `docs/DECISIONS.md`, `docs/PROGRESS.md`.
 Gotchas found:
 - Build the routine test against a fake HTTP handler; the manual Ollama check depends on a reachable Ollama endpoint.
 
