@@ -26,8 +26,10 @@ Gotchas found:
 What is done so far:
 - T1.1 Server inventory is complete and committed; build/test pass (7/7).
 - T1.2 scope: SSH connection pool, timeout-aware command runner with optional `sudo -n`, jump-host local forwarding, and server capability probe.
+- Checked current official SSH.NET docs: stable `SSH.NET` 2026.0.0 targets .NET 8+; async connect/command, command timeout/status, and local port forwarding APIs are available.
+- Confirmed SSH.NET's `HostKeyEventArgs.CanTrust` defaults to true. The connection layer must override this and verify against pinned host keys.
 What is next (exact next step):
-- Check the current SSH.NET package and official API, add the package version and decision entry, then implement the pool, runner, and probe.
+- Add SSH.NET 2026.0.0 and a decision for host-key pinning via `/keys/known_hosts`; then build the managed client/connection pool around the verified API.
 Files touched:
 - `docs/PROGRESS.md`
 Gotchas found:
