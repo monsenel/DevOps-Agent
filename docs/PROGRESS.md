@@ -7,7 +7,7 @@
 ## Current
 
 - **Task:** T0.6 LLM providers — domain, storage, client
-- **Status:** in-progress
+- **Status:** done
 - **Last updated:** 2026-11-13 by implementation session
 
 ## WIP notes
@@ -23,23 +23,11 @@ Gotchas found:
 -
 -->
 
-What is done so far:
-- T0.4 single-user login is committed and verified.
-- Read T0.6 scope: provider domain entity, protected API key persistence, CRUD with a single default, OpenAI-compatible `IChatClient` factory, model listing, and connection test routine.
-- Checked current official `IChatClient`, OpenAI adapter, and OpenAI custom-endpoint guidance; confirmed adapter package 11.0.0 targets net10.0 and recorded package/transport choice in D-017.
-- Added provider domain types, CRUD/default service, protected-key summaries, EF repository/configuration and migration, model lister, OpenAI-compatible `IChatClient` factory, and the provider connection test routine.
-- Added SQLite-backed CRUD/default tests and a fake-HTTP-handler test covering `/models`, streaming, and tool calls; `dotnet test DevOpsAgent.slnx` passes (4 tests).
-- Ran the Web app against a fresh SQLite database; `20261113195418_AddLlmProviders` applied, `/healthz` returned 200, and `/login` returned 200.
-What is next (exact next step):
-- Run the manual connection test against an available Ollama endpoint/model, then rerun build/tests and mark T0.6 done before starting T0.7.
-Files touched:
-- `Directory.Packages.props`, `docs/DECISIONS.md`, `docs/PROGRESS.md`, `src/DevOpsAgent.Application/**`, `src/DevOpsAgent.Domain/Llm/**`, `src/DevOpsAgent.Infrastructure/**`, `src/DevOpsAgent.Web/Program.cs`, `tests/DevOpsAgent.Tests/LlmProviderTests.cs`.
-Gotchas found:
-- Build the routine test against a fake HTTP handler; the manual Ollama check depends on a reachable Ollama endpoint.
+_(clear when no task is in progress)_
 
 ## Blockers
 
-- T0.6 manual acceptance: no Ollama server is listening on `127.0.0.1:11434` and no local `ollama` executable is installed. The fake-handler routine passes; provide/start an Ollama endpoint and model to complete the manual check.
+_(none)_
 
 ---
 
@@ -54,7 +42,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T0.3 | Persistence | done | `feat(T0.3): sqlite persistence` |
 | T0.4 | Single-user login | done | `feat(T0.4): single-user login` |
 | T0.5 | Design system and app shell | done | `feat(T0.5): design system and app shell` |
-| T0.6 | LLM providers — domain, storage, client | in-progress | |
+| T0.6 | LLM providers — domain, storage, client | done | `feat(T0.6): llm providers backend` |
 | T0.7 | Settings › LLM connection page | todo | |
 | T0.8 | Basic chat (no tools) | todo | |
 | T1.1 | Server inventory | todo | |
@@ -104,3 +92,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-13 · Codex · T0.4 · started
 - 2026-11-13 · Codex · T0.4 · build/test pass; login, logout, health/static access, and both themes verified
 - 2026-11-13 · Codex · T0.6 · started
+- 2026-11-13 · Codex · T0.6 · build/test pass; migration startup, fake HTTP routine, and Ollama qwen2.5:0.5b smoke verified
