@@ -39,7 +39,7 @@ Gotchas found:
 
 ## Blockers
 
-T0.8 OpenRouter live chat verification is blocked because `.env`, `OPENROUTER_API_KEY`, and `OPENAI_API_KEY` are absent. The generic OpenAI-compatible fixture and prior Ollama smoke test verified the local provider flow, but cannot confirm the real OpenRouter service response. Generated untracked Graphify output was stashed as `orphaned WIP 2026-11-14` during resume reconciliation.
+T0.8 OpenRouter live chat verification is blocked because `.env`, `OPENROUTER_API_KEY`, and `OPENAI_API_KEY` are absent. The generic OpenAI-compatible fixture and prior Ollama smoke test verified the local provider flow, but cannot confirm the real OpenRouter service response.
 
 T1.2 live SSH acceptance is blocked because there is no configured test host or jump host and `/keys` has no identity or `known_hosts` files. Fake-runner tests, exact host/port pin tests, route-cycle rejection, and isolated app startup are verified. No real SSH connection was attempted. To unblock, provide an authorized direct host and jump-host route with identity keys and independently verified `/keys/known_hosts` entries.
 
@@ -118,3 +118,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · resumed T1.2; SSH pool, command runner, capability UI and safeguards implemented; build/test pass (13/13), live SSH blocked by missing test targets
 - 2026-11-14 · Codex · T1.3 · started
 - 2026-11-14 · Codex / GPT-6 · T1.3 · parser fixtures and import dialog complete; paste/preview/import and jump mapping verified, both themes and 390px checked, build/test pass (15/15)
+- 2026-11-14 · Codex / GPT-6 · resumed T1.2 · refreshed Graphify output (869 nodes, 1,687 links); build/test pass; SSH blocker unchanged
