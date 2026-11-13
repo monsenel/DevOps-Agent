@@ -26,8 +26,9 @@ Gotchas found:
 What is done so far:
 - T0.6 provider domain, protected persistence, CRUD/default rules, chat client factory, model listing, and connection tests are committed and verified.
 - The current task spec is the Settings › LLM connection page in `docs/PLAN.md`; the UI must match `settings-llm.dc.html` and LLM-1 through LLM-8.
+- The page needs to show test details after reload; T0.6 currently stores only a pass/fail flag and timestamp, so extend the provider's persisted summary to satisfy LLM-3 before wiring the page.
 What is next (exact next step):
-- Read the full design-system spec and the Settings LLM mockup, then implement the page against the existing provider service and UI components.
+- Extend persisted connection-test summary fields and expose model refresh in `ProviderService`, then build the Settings page on those contracts.
 Files touched:
 - `docs/PROGRESS.md`.
 Gotchas found:
