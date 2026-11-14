@@ -3,6 +3,8 @@
 @inject ProviderService Providers
 @inject ProviderStatusState ProviderStatus
 @inject DiscoveryScheduleService DiscoverySchedule
+@inject ExecutionModeService ExecutionModes
+@inject ToolRegistry Tools
 @inject IJSRuntime JavaScript
 
 <PageTitle>Settings · DevOps Agent</PageTitle>
@@ -18,7 +20,61 @@
         }
     </nav>
 
-    @if (_section == "Discovery")
+    @if (_section == "Execution modes")
+    {
+        <section class="ui-card execution-modes-card" aria-labelledby="execution-modes-title">
+            <header class="ui-card-header"><h2 id="execution-modes-title">Execution modes</h2></header>
+            <p class="muted">Choose how tool calls are handled for each server group. Shell commands always wait for approval.</p>
+            @if (!string.IsNullOrWhiteSpace(_executionError))
+            {
+                <div class="settings-message error" role="alert">@_executionError</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(_executionMessage))
+            {
+                <div class="settings-message success" role="status">@_executionMessage</div>
+            }
+            @if (_executionPolicies.Count == 0)
+            {
+                <p class="empty-state-copy">Add a server to see its group execution settings.</p>
+            }
+            @foreach (var policy in _executionPolicies)
+            {
+                <section class="execution-group" aria-labelledby="execution-group-@policy.Group">
+                    <div class="execution-group-heading">
+                        <h3 id="execution-group-@policy.Group">@policy.Group</h3>
+                        <div class="select-field">
+                            <label for="execution-mode-@policy.Group">Mode</label>
+                            <select id="execution-mode-@policy.Group" value="@policy.Mode"
+                                    @onchange="args => UpdateExecutionModeForGroup(policy, args)">
+                                <option value="ReadOnly">Read-only</option>
+                                <option value="Confirm">Confirm each change</option>
+                                <option value="Auto">Auto within allowlist</option>
+                            </select>
+                        </div>
+                    </div>
+                    @if (policy.Mode == ExecutionMode.Auto)
+                    {
+                        <fieldset class="execution-allowlist">
+                            <legend>Automatic tools</legend>
+                            @foreach (var tool in AutomaticTools)
+                            {
+                                <label class="execution-tool-option">
+                                    <input type="checkbox" checked="@policy.AllowedTools.Contains(tool.Name)"
+                                           @onchange="args => ToggleExecutionTool(policy, tool.Name, args)" />
+                                    <span><strong>@tool.Name</strong><small>@tool.Description</small></span>
+                                </label>
+                            }
+                        </fieldset>
+                    }
+                    <button class="ui-button primary" type="button" disabled="@_savingExecutionGroup"
+                            @onclick="() => SaveExecutionPolicyAsync(policy)">
+                        @(_savingExecutionGroup ? "Saving…" : "Save group policy")
+                    </button>
+                </section>
+            }
+        </section>
+    }
+    else if (_section == "Discovery")
     {
         <section class="ui-card discovery-settings-card" aria-labelledby="discovery-settings-title">
             <header class="ui-card-header"><h2 id="discovery-settings-title">Scheduled discovery</h2></header>
@@ -218,6 +274,13 @@
     private bool _savingDiscovery;
     private string? _discoveryMessage;
     private string? _discoveryError;
+    private readonly List<ExecutionModePolicy> _executionPolicies = [];
+    private IReadOnlyList<ToolDescriptor> AutomaticTools => Tools.Tools
+        .Where(tool => tool.Access == ToolAccess.Mutating && tool.Name != "run_shell").ToArray();
+    private bool _executionLoaded;
+    private bool _savingExecutionGroup;
+    private string? _executionMessage;
+    private string? _executionError;
     private LlmProviderSummary? _selectedProvider => _providers.SingleOrDefault(provider => provider.Id == _selectedProviderId);
 
     private string ApiKeyPlaceholder => _form.Type switch
@@ -299,6 +362,57 @@
         {
             _discoveryIntervalHours = await DiscoverySchedule.GetIntervalHoursAsync(CancellationToken.None);
             _discoveryLoaded = true;
+        }
+        if (section == "Execution modes" && !_executionLoaded)
+        {
+            _executionPolicies.AddRange(await ExecutionModes.ListAsync(CancellationToken.None));
+            _executionLoaded = true;
+        }
+        _executionMessage = null;
+        _executionError = null;
+    }
+
+    private void UpdateExecutionModeForGroup(ExecutionModePolicy policy, ChangeEventArgs args)
+    {
+        if (Enum.TryParse<ExecutionMode>(args.Value?.ToString(), out var mode))
+        {
+            ReplaceExecutionPolicy(policy with { Mode = mode });
+        }
+    }
+
+    private void ToggleExecutionTool(ExecutionModePolicy policy, string toolName, ChangeEventArgs args)
+    {
+        var allowed = policy.AllowedTools.ToHashSet(StringComparer.Ordinal);
+        if (args.Value is bool isChecked && isChecked) allowed.Add(toolName);
+        else allowed.Remove(toolName);
+        ReplaceExecutionPolicy(policy with { AllowedTools = allowed.Order(StringComparer.Ordinal).ToArray() });
+    }
+
+    private void ReplaceExecutionPolicy(ExecutionModePolicy updated)
+    {
+        var index = _executionPolicies.FindIndex(policy => policy.Group == updated.Group);
+        if (index >= 0) _executionPolicies[index] = updated;
+        _executionMessage = null;
+        _executionError = null;
+    }
+
+    private async Task SaveExecutionPolicyAsync(ExecutionModePolicy policy)
+    {
+        _savingExecutionGroup = true;
+        _executionMessage = null;
+        _executionError = null;
+        try
+        {
+            await ExecutionModes.SaveAsync(policy, CancellationToken.None);
+            _executionMessage = $"Policy saved for {policy.Group}.";
+        }
+        catch (ArgumentException exception)
+        {
+            _executionError = exception.Message;
+        }
+        finally
+        {
+            _savingExecutionGroup = false;
         }
     }
 

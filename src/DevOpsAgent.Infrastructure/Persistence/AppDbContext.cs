@@ -4,6 +4,7 @@ using DevOpsAgent.Domain.Chat;
 using DevOpsAgent.Domain.Servers;
 using DevOpsAgent.Domain.Discovery;
 using DevOpsAgent.Domain.Graph;
+using DevOpsAgent.Domain.Agent;
 using Microsoft.EntityFrameworkCore;
 
 namespace DevOpsAgent.Infrastructure.Persistence;
@@ -21,6 +22,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<GraphEdge> GraphEdges => Set<GraphEdge>();
     public DbSet<GraphListener> GraphListeners => Set<GraphListener>();
     public DbSet<GraphEvidence> GraphEvidence => Set<GraphEvidence>();
+    public DbSet<ActionRecord> ActionRecords => Set<ActionRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -142,6 +144,17 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasOne<Snapshot>().WithMany().HasForeignKey(item => item.SnapshotId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<GraphNode>().WithMany().HasForeignKey(item => item.NodeId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<GraphEdge>().WithMany().HasForeignKey(item => item.EdgeId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ActionRecord>(entity =>
+        {
+            entity.HasKey(action => action.Id);
+            entity.Property(action => action.ToolName).HasMaxLength(80).IsRequired();
+            entity.Property(action => action.Group).HasMaxLength(500).IsRequired();
+            entity.Property(action => action.ServerIdsJson).IsRequired();
+            entity.Property(action => action.ArgumentsJson).IsRequired();
+            entity.Property(action => action.Status).HasConversion<string>().HasMaxLength(24).IsRequired();
+            entity.HasIndex(action => new { action.Status, action.CreatedAtUtc });
         });
     }
 }

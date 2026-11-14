@@ -30,6 +30,7 @@ public static class PersistenceServiceCollectionExtensions
 
         services.AddScoped<ILlmProviderRepository, LlmProviderRepository>();
         services.AddScoped<IAppSettingRepository, AppSettingRepository>();
+        services.AddScoped<IActionRecordRepository, ActionRecordRepository>();
         services.AddScoped<IChatConversationRepository, ChatConversationRepository>();
         services.AddScoped<IServerRepository, ServerRepository>();
         services.AddScoped<ISnapshotRepository, SnapshotRepository>();

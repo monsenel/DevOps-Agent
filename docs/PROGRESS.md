@@ -12,7 +12,7 @@
 
 ## WIP notes
 
-T5.1 (and dependent M5 tasks T5.2–T5.5) deferred at the owner's direction to skip M5 and start M6. Current task T6.1: inspect its acceptance criteria and existing SSH/server abstractions, then implement the typed tool registry, validation, execution modes, and approval behavior with tests. Keep the `run_shell` path proposed in every mode. Files touched so far: `docs/PROGRESS.md`.
+T5.1 (and dependent M5 tasks T5.2–T5.5) deferred at the owner's direction to skip M5 and start M6. T6.1 slice 1 is implemented: typed registry for all AGT-1 tools, DataAnnotations argument validation, per-group execution policy persistence/service, approval decision service, proposed ActionRecord persistence model/repository, and execution-modes settings UI. Build passes with 0 warnings/errors. Next: generate the ActionRecords migration, add policy/approval matrix and validation tests (including `run_shell` always pending), then verify Settings in both themes and run full build/tests. Files touched: `src/DevOpsAgent.Application/Agent/*`, `src/DevOpsAgent.Application/Abstractions/IActionRecordRepository.cs`, `src/DevOpsAgent.Domain/Agent/ExecutionPolicy.cs`, `src/DevOpsAgent.Infrastructure/Persistence/{AppDbContext,ActionRecordRepository,PersistenceServiceCollectionExtensions}.cs`, `src/DevOpsAgent.Web/Program.cs`, `src/DevOpsAgent.Web/Components/{_Imports.razor,Pages/Settings.razor}`, `src/DevOpsAgent.Web/wwwroot/css/app.css`.
 
 ## Blockers
 
