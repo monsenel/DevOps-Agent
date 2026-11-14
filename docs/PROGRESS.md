@@ -11,12 +11,12 @@
 
 ## Current
 
-- **Task:** T3.3 Evidence panel and Trace
-- **Status:** done
+- **Task:** T5.5 Overview with real data
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
-- Clear for completed T3.3. J2 follow-up remains: outbound app connection to srv-search is not yet represented as an Unknown node. Do not add srv-search. Never use a server tagged `prod`.
+- T3.3 passed live trace and evidence acceptance. Exact next step: read DESIGN.md and the overview mockup, then verify the Overview page against live lab data in both themes; record any mismatches and fix only T5.5 scope. J2 follow-up remains: outbound app connection to srv-search does not yet appear as Unknown; keep srv-search out of the inventory. Never use a server tagged `prod`.
 
 ## Blockers
 
@@ -62,7 +62,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T5.2 | Health checks | done | `feat(T5.2): scheduled health checks` |
 | T5.3 | Alert engine and Alerts page | done | `feat(T5.3): complete alert engine and live acceptance` |
 | T5.4 | Notifications | blocked | `wip(T5.4): implement notification delivery` |
-| T5.5 | Overview with real data | todo | |
+| T5.5 | Overview with real data | in-progress | |
 | T6.1 | Tool registry and execution modes | done | `feat(T6.1): tool policies and approvals` |
 | T6.2 | Action log | done | `feat(T6.2): approved action execution and log` |
 | T6.3 | Agent chat with tools | done | `feat(T6.3): complete J4 tool and approval flow` |
@@ -190,3 +190,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T2.7 · discovery 3/3 succeeded on the disposable lab, 17 nested nodes rendered; theme switching and api details/evidence passed; systemd skipped because the containers do not run it; collector compatibility fixes, build clean, 108/108 tests
 - 2026-11-14 · Codex / GPT-6 · started T3.3 · live trace acceptance found nginx include-context parsing gap; next add support for expanded nginx files and verify api.test.local trace/evidence
 - 2026-11-14 · Codex / GPT-6 · T3.3 · live trace `api.test.local` highlighted 4 nodes/3 connections; edge evidence identified `/etc/nginx/conf.d/demo.conf:10`; build clean and 109/109 tests pass
+- 2026-11-14 · Codex / GPT-6 · started T5.5 · inspect Overview against mockup and verify live data in both themes
