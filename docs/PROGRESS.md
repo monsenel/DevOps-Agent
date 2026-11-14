@@ -4,25 +4,24 @@
 
 ## Waiting on owner
 
-- **T5.4 — Notifications:** configure either Telegram bot token + chat ID or an ntfy URL + topic (and optional token), then send a test message and verify alert open/resolve delivery.
-- **T6.6 — MVP hardening:** end-to-end J7 still needs the T5.4 notification destination above; all supplied disposable lab details may be used for the server journeys.
+- **T5.4 — Notifications:** configure a Telegram bot token + chat ID or ntfy URL + topic (optional token), then send a test message and verify open/resolve delivery.
+- **T6.3 — Agent chat live J4:** add an LLM provider in DevOps Agent. Then I will run J4 on the disposable lab using the requested prompts and approve one `web` container restart on `srv-app`.
 
 ---
 
 ## Current
 
-- **Task:** T5.4 Notifications — repeat disposable alert lifecycle acceptance
-- **Status:** blocked
+- **Task:** T6.6 MVP hardening pass — verify journeys J1–J7 against the disposable lab (systemd-specific checks excepted)
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
-- T5.5 is complete. Overview uses the lab's 3 servers, latest snapshot, graph/evidence, open alerts, metric samples, update-scan state, and default provider; Run discovery now rerenders the TopBar when shared discovery state changes. Live discovery refreshed successfully, the button returned to enabled, and both light/dark themes were visually checked. Build passed with 0 warnings/errors and tests passed (109/109). Files: `src/DevOpsAgent.Web/Components/Pages/Home.razor`, `src/DevOpsAgent.Web/Components/Layout/TopBar.razor`, `src/DevOpsAgent.Web/DiscoveryTriggerState.cs`, `src/DevOpsAgent.Web/Program.cs`, `src/DevOpsAgent.Web/wwwroot/css/app.css`.
-- T6.3 J4 had previously passed with Ollama and OpenRouter (see session log). Repeat acceptance in the current isolated app could not run: its provider table is empty and no Ollama endpoint responded on `127.0.0.1:11434`. Exact unblock step for repeating the live flow: configure/launch a local Ollama model or save an OpenRouter provider in the isolated app. Continue with T6.4; do not wait for this repeat. J2 follow-up remains: outbound app connection to srv-search does not yet appear as Unknown; keep srv-search out of inventory. Never use a server tagged `prod`.
-- T6.4 live J5 passed on the disposable lab after two fixes: parser counts OpenSSH `Invalid user` lines, and scanner splits output at the final sentinels because sudo audit lines contain the command's earlier marker strings. The 60-login one-off attack opened `SSH login attack detected` with 59–60 failures, attacker IP and usernames; fail2ban reported the attacker banned. The loop completed, runtime maxretry was restored to 5, and `unban --all` confirmed 0 active bans. The lab has only the three `staging` targets; `srv-search` remains absent. Build clean, 110/110 tests. Docker CLI is blocked by Snap confinement; the test used the local Docker API and existing lab image.
-- T6.5's current-lab retry ran apt scans on `srv-app` and `srv-db` successfully; both had 0 pending updates. `srv-edge` timed out at five minutes during `apt-get update`; its orphan apt process was terminated on that disposable server. No package was installed. Earlier J6 steps 1–3 passed on a disposable Debian apt target (security/standard classification, approval, update report, no reboot/restarts). T6.5 remains complete based on that acceptance; the retry could not exercise the apply path because this lab has no pending packages and one mirror scan timed out.
-- T6.5 is complete; its original J6 steps 1–3 passed on a disposable apt target. The current-lab scan retry found no pending packages on app/db and timed out on edge; no package was installed in the retry.
-- T5.4 container alert lifecycle passed again on the disposable lab: stopping nested `web` opened `Container web is exited` within 30 seconds; starting it resolved the same alert in the following evaluation. The resolved item was visible under Alerts › Resolved. External notification delivery remains untested because no Telegram or ntfy destination exists.
-- Exact next step: configure Telegram bot token + chat ID or an ntfy URL + topic (optional token) in Settings › Notifications, send the test message, then verify notification delivery on alert open and resolve. No further alert test can verify the notification integration until that destination is configured. Never use a server tagged `prod`.
+- T5.5 is **done**: Overview uses live lab server/snapshot/graph/evidence/alerts/metrics/update/provider data. Run discovery rerenders correctly; live refresh and both themes were checked; build clean and 109/109 tests passed. Commit: `4e7a606`.
+- T6.3 implementation is complete, but the earlier J4 live result predates the disposable SSH lab and is invalid for the requested server journey. Live acceptance is **blocked** until the owner adds an LLM provider. After that, run on this lab exactly: ask “anything I should look at?”, then “why is disk usage on srv-app what it is?”, confirm read-only tools execute on lab servers, then propose and explicitly approve restarting container `web` on `srv-app`; record the tool/action-log result. Keep srv-search out of inventory.
+- T6.4 J5 passed on disposable staging: 60 failed SSH logins opened the attack alert and fail2ban ban; threshold restored and all bans cleared. Build clean, 110/110 tests.
+- T6.5 J6 update workflow passed earlier on a disposable apt target. Current lab retry found no pending updates on app/db and timed out on edge; no packages were installed.
+- T5.4 container alert lifecycle passed again on disposable staging: alert opened on `web` down and resolved after it came back. External notification delivery remains blocked on owner destination.
+- T6.6 started per owner request. Inspect and verify J1–J7 in order, capture any product gaps, fix only T6.6 hardening issues, then build/test and update status. J4 requires the T6.3 provider; J7 notification delivery requires T5.4 destination. systemd-only checks are explicitly excepted.
 
 ## Blockers
 
@@ -30,7 +29,7 @@ T5.4 live acceptance is blocked because no Telegram bot token/chat ID or ntfy UR
 
 The prior M5 deferral has been lifted by the owner's instruction to continue task by task. T5.1, T5.2, and T5.3 are complete. T5.3 live acceptance passed on 2026-11-14: the selected Docker container triggered an alert within 2 minutes, was restarted, and its alert auto-resolved. No other blocked SSH acceptance was changed.
 
-T6.6 remains blocked by T5.4's missing notification destination and the remaining end-to-end J7 destination check. Exact unblock step: configure the T5.4 notification destination, then walk J7 end to end after the requested live acceptance sequence.
+T6.3 live J4 acceptance is blocked until the owner adds an LLM provider; T5.4 live notification acceptance is blocked until the owner configures Telegram or ntfy. T6.6 is in progress; verify all other J1–J7 steps now, then finish the dependent J4/J7 steps when those owner actions are complete.
 
 ---
 
@@ -71,10 +70,10 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T5.5 | Overview with real data | done | `feat(T5.5): live Overview data and discovery state` |
 | T6.1 | Tool registry and execution modes | done | `feat(T6.1): tool policies and approvals` |
 | T6.2 | Action log | done | `feat(T6.2): approved action execution and log` |
-| T6.3 | Agent chat with tools | in-progress | `feat(T6.3): complete J4 tool and approval flow` |
+| T6.3 | Agent chat with tools | blocked | `feat(T6.3): complete J4 tool and approval flow` |
 | T6.4 | SSH attack detection and bans | done | `feat(T6.4): verify SSH attack detection in disposable lab` |
 | T6.5 | Updates | done | `feat(T6.5): updates inventory and approval flow` |
-| T6.6 | MVP hardening pass | blocked | |
+| T6.6 | MVP hardening pass | in-progress | |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
 
@@ -209,3 +208,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex · T5.4 live lifecycle retry · alert-down opened the nested `web` container alert within 30 seconds, alert-up resolved it on the next evaluation and UI showed Resolved; notification delivery still blocked by missing owner destination
 - 2026-11-14 · Codex · started T5.4 live alert lifecycle retry · verify the nested `web` container and use alert-down/up on disposable staging only
 - 2026-11-14 · Codex / GPT-6 · resumed T5.4 · disposable alert open/resolve verified; Graphify refreshed to 2,448 nodes / 6,353 edges / 169 communities; no excluded-source nodes or KC/Inb/jQb god-node labels; 4 self-loops, no dangling/missing endpoints; generated output remains local and ignored; next configure a Telegram or ntfy destination and verify test/open/resolve notifications
+- 2026-11-14 · Codex / GPT-6 · started T6.6 · corrected T6.3 live J4 to blocked because no lab target existed for its earlier run; confirmed T5.5 done; start verifying J1–J7 against the disposable lab, with systemd-only checks excepted
