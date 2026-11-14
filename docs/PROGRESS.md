@@ -7,15 +7,14 @@
 ## Current
 
 - **Task:** T5.4 Notifications
-- **Status:** in-progress
+- **Status:** blocked
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
-- T5.4 resumed with a clean tree after restoring only Graphify query timestamp noise. Baseline `dotnet build DevOpsAgent.slnx` passed with 0 warnings/errors; `dotnet test DevOpsAgent.slnx` passed 90/90. Existing `AppSetting`, Data Protection, alert lifecycle, and Settings section patterns inspected.
-- Implemented protected Telegram/ntfy settings, severity filtering, test-send, and alert open/reopen/resolve delivery. Settings UI is verified in light/dark and narrow mobile layout. Unit tests cover token protection/preservation, severity filtering, and alert dedupe.
-- Current verification: build clean (0 warnings/errors); 92/92 tests passed before adding HTTP sender tests.
-- Next: run full build/tests including HTTP payload tests, inspect diff, complete Graphify update, then commit. Live delivery criterion still needs a user-configured Telegram or ntfy destination to receive a real test message.
-- Files touched: Application notifications/alert service, Infrastructure HTTP notifier/DI, Settings UI/imports/CSS, notification and alert tests.
+- T5.4 implementation is complete: encrypted Telegram/ntfy credentials, severity threshold, test-send, and open/reopen/resolve alert notifications. HTTP sender contracts, secret preservation, severity filtering, and lifecycle dispatch are covered by tests. Settings checked in both themes and at 390px.
+- Verification passed: `dotnet build DevOpsAgent.slnx` (0 warnings/errors), `dotnet test DevOpsAgent.slnx` (94/94). Graphify refreshed and committed.
+- Exact next step: configure either a Telegram bot token + chat ID or an ntfy server URL + topic (and optional token) in Settings › Notifications, click “Send test message”, then verify a live alert opens and resolves through that destination. No destination credentials were configured or transmitted in this session. After live acceptance, mark T5.4 done and resume the next eligible PLAN task.
+- Files touched: Application notifications/alert service, Infrastructure HTTP notifier/DI, Settings UI/imports/CSS, notification and alert tests, Graphify outputs.
 
 ## Blockers
 
