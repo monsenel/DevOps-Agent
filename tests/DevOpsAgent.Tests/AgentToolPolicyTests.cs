@@ -52,6 +52,23 @@ public sealed class AgentToolPolicyTests
         Assert.Throws<ArgumentException>(() => registry.ValidateArguments("docker_ps", Json("{\"serverIds\":[]}")));
     }
 
+    [Fact]
+    public void UpdateApplyCommandReportsRestartedServicesAndRebootRequirementForOneServer()
+    {
+        var registry = new ToolRegistry();
+        var args = Json("{\"packages\":[\"nginx\"],\"serverIds\":[\"c4d7d14f-897d-4b31-8d33-455cc6e926d6\"]}");
+        _ = registry.ValidateArguments("apply_updates", args);
+        var command = new ToolCommandBuilder(registry).Build(new ActionRecord("apply_updates", "staging",
+            "[\"c4d7d14f-897d-4b31-8d33-455cc6e926d6\"]", args.GetRawText(), null, DateTimeOffset.UtcNow));
+
+        Assert.True(command.UseSudo);
+        Assert.Contains("apt-get install -y", command.Command, StringComparison.Ordinal);
+        Assert.Contains("RESTARTED_SERVICES_BEGIN", command.Command, StringComparison.Ordinal);
+        Assert.Contains("REBOOT_REQUIRED=true", command.Command, StringComparison.Ordinal);
+        Assert.Throws<ArgumentException>(() => registry.ValidateArguments("apply_updates",
+            Json("{\"packages\":[\"nginx\"],\"serverIds\":[\"c4d7d14f-897d-4b31-8d33-455cc6e926d6\",\"392b7bfc-677d-4613-9e34-8e7ccfd8ce5a\"]}")));
+    }
+
     [Theory]
     [InlineData(ExecutionMode.ReadOnly, ToolAccess.ReadOnly, ToolApprovalState.ExecuteReadOnly)]
     [InlineData(ExecutionMode.ReadOnly, ToolAccess.Mutating, ToolApprovalState.Denied)]
@@ -124,6 +141,24 @@ public sealed class AgentToolPolicyTests
     }
 
     [Fact]
+    public async Task PackageUpdatesAlwaysRequireExplicitApproval()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var server = await AddServerAsync(database.Context, "staging");
+        var registry = new ToolRegistry();
+        var executionModes = new ExecutionModeService(new AppSettingRepository(database.Context), new ServerRepository(database.Context), registry);
+        await executionModes.SaveAsync(new ExecutionModePolicy("staging", ExecutionMode.Auto, ["restart_service"]), CancellationToken.None);
+        var service = new ApprovalService(registry, executionModes, new ServerRepository(database.Context),
+            new ActionRecordRepository(database.Context), TimeProvider.System);
+
+        var result = await service.EvaluateAsync(new ToolApprovalRequest("apply_updates",
+            Json($"{{\"packages\":[\"nginx\"],\"serverIds\":[\"{server.Id}\"]}}"), [server.Id]), CancellationToken.None);
+
+        Assert.Equal(ToolApprovalState.PendingApproval, result.State);
+        Assert.Equal(ActionRecordStatus.Proposed, (await database.Context.ActionRecords.SingleAsync()).Status);
+    }
+
+    [Fact]
     public async Task AutomaticModeRequiresToolAllowlistAndReadOnlyGroupBlocksChanges()
     {
         await using var database = await CreateDatabaseAsync();
@@ -181,6 +216,8 @@ public sealed class AgentToolPolicyTests
         Assert.Equal(new[] { "block_ip" }, loaded.AllowedTools);
         await Assert.ThrowsAsync<ArgumentException>(() => service.SaveAsync(
             new ExecutionModePolicy("staging", ExecutionMode.Auto, ["run_shell"]), CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.SaveAsync(
+            new ExecutionModePolicy("staging", ExecutionMode.Auto, ["apply_updates"]), CancellationToken.None));
     }
 
     private static JsonElement Json(string value) => JsonDocument.Parse(value).RootElement.Clone();

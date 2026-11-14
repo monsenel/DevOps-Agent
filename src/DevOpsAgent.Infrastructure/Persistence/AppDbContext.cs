@@ -5,6 +5,7 @@ using DevOpsAgent.Domain.Servers;
 using DevOpsAgent.Domain.Discovery;
 using DevOpsAgent.Domain.Graph;
 using DevOpsAgent.Domain.Agent;
+using DevOpsAgent.Domain.Updates;
 using Microsoft.EntityFrameworkCore;
 
 namespace DevOpsAgent.Infrastructure.Persistence;
@@ -23,6 +24,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<GraphListener> GraphListeners => Set<GraphListener>();
     public DbSet<GraphEvidence> GraphEvidence => Set<GraphEvidence>();
     public DbSet<ActionRecord> ActionRecords => Set<ActionRecord>();
+    public DbSet<UpdatePackage> UpdatePackages => Set<UpdatePackage>();
+    public DbSet<UpdateScan> UpdateScans => Set<UpdateScan>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -158,6 +161,25 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(action => action.CommandsJson).IsRequired();
             entity.Property(action => action.ResultsJson).IsRequired();
             entity.HasIndex(action => new { action.Status, action.CreatedAtUtc });
+        });
+
+        modelBuilder.Entity<UpdatePackage>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Name).HasMaxLength(256).IsRequired();
+            entity.Property(item => item.CurrentVersion).HasMaxLength(256).IsRequired();
+            entity.Property(item => item.CandidateVersion).HasMaxLength(256).IsRequired();
+            entity.Property(item => item.Repository).HasMaxLength(256).IsRequired();
+            entity.HasIndex(item => new { item.ServerId, item.Name }).IsUnique();
+            entity.HasOne<Server>().WithMany().HasForeignKey(item => item.ServerId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UpdateScan>(entity =>
+        {
+            entity.HasKey(item => item.ServerId);
+            entity.Property(item => item.PackageManager).HasMaxLength(24);
+            entity.Property(item => item.Error).HasMaxLength(2000);
+            entity.HasOne<Server>().WithOne().HasForeignKey<UpdateScan>(item => item.ServerId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

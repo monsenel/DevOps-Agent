@@ -542,6 +542,70 @@ namespace DevOpsAgent.Infrastructure.Migrations
                     b.ToTable("AppSettings");
                 });
 
+            modelBuilder.Entity("DevOpsAgent.Domain.Updates.UpdatePackage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CandidateVersion")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CheckedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CurrentVersion")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsSecurity")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Repository")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ServerId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ServerId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("UpdatePackages");
+                });
+
+            modelBuilder.Entity("DevOpsAgent.Domain.Updates.UpdateScan", b =>
+                {
+                    b.Property<Guid>("ServerId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CheckedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PackageManager")
+                        .HasMaxLength(24)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("ServerId");
+
+                    b.ToTable("UpdateScans");
+                });
+
             modelBuilder.Entity("DevOpsAgent.Domain.Chat.ChatMessageRecord", b =>
                 {
                     b.HasOne("DevOpsAgent.Domain.Chat.ChatConversation", "Conversation")
@@ -632,6 +696,24 @@ namespace DevOpsAgent.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("JumpServerId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("DevOpsAgent.Domain.Updates.UpdatePackage", b =>
+                {
+                    b.HasOne("DevOpsAgent.Domain.Servers.Server", null)
+                        .WithMany()
+                        .HasForeignKey("ServerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DevOpsAgent.Domain.Updates.UpdateScan", b =>
+                {
+                    b.HasOne("DevOpsAgent.Domain.Servers.Server", null)
+                        .WithOne()
+                        .HasForeignKey("DevOpsAgent.Domain.Updates.UpdateScan", "ServerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("DevOpsAgent.Domain.Chat.ChatConversation", b =>

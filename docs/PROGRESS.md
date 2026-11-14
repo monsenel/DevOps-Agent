@@ -7,12 +7,12 @@
 ## Current
 
 - **Task:** T6.5 Updates (UPD-1, UPD-2)
-- **Status:** in-progress
+- **Status:** blocked
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
-T5.1 (and dependent M5 tasks T5.2–T5.5) remain deferred at the owner's direction. T6.3 implementation now includes inventory/relevant graph context, the native Microsoft.Extensions.AI tool loop, JSON fallback, server-side argument validation, read-only SSH tools, policy-governed audited writes, inline proposals with approve/reject, action-result continuation, and remote-provider secret redaction. Protocol/redaction tests pass (72 total); build is clean. The Agent chat page was inspected in both themes. T6.3 acceptance remains blocked: no local Ollama is listening and no OpenRouter credentials are configured, so J4 cannot be live-verified; metrics/alerts context is absent while M5 is deferred. T6.4 is also blocked by T6.3 and deferred T5.3. Continue with independent T6.5. Exact next step: read T6.5's UPD requirements and current collector/update UI contracts, then implement deterministic update collection and reporting with fake SSH coverage.
+T5.1 (and dependent M5 tasks T5.2–T5.5) remain deferred at the owner's direction. T6.3 implementation includes inventory/relevant graph context, native Microsoft.Extensions.AI tool calling, JSON fallback, validation, read-only SSH tools, policy-governed audited writes, inline proposals, action-result continuation, and remote-provider secret redaction. Protocol/redaction tests pass; J4 live verification remains blocked because local Ollama is unavailable and OpenRouter credentials are absent, and M5 context is deferred. T6.4 is dependency-blocked by T6.3 and T5.3 (deferred M5). T6.5 implementation includes persisted apt/dnf update scans, security classification, server-group review UI, and one-server `apply_updates` proposals that always require explicit approval and record restarted services/reboot requirement. Parser and service persistence tests pass; build is clean, and the update page/migration were checked in both themes against an isolated SQLite database. T6.5's J6 test-server acceptance remains blocked because no authorized SSH test server/key is configured. T6.6 depends on the blocked preceding tasks. Exact next step: provide an authorized test Linux server with apt or dnf, SSH identity, and pinned host key; then run J6 scan/propose/approve and verify the action report. After the blocked M6 tasks are completed, resume T6.6.
 
 ## Blockers
 
@@ -31,6 +31,10 @@ T5.1–T5.5 are deferred at the owner's direction to skip M5 and start M6. T5.1 
 T6.3 code and isolated tests are implemented, but its J4 live-provider acceptance is blocked because the local Ollama endpoint is unavailable and OpenRouter credentials are absent. M5 metrics/alerts context is also unavailable while M5 is deferred. Re-run J4 with an authorized local provider and OpenRouter credentials; restore M5 first if metrics/alerts context is required.
 
 T6.4 is deferred because it depends on incomplete T6.3 and T5.3; T5.3 depends on the deferred M5 phase. Resume after those dependencies are completed.
+
+T6.5 code and parser/service tests are implemented, but J6 live scan and apply verification requires an authorized Linux test server with apt or dnf and a pinned SSH key. No remote host was configured, so no SSH operation was attempted. Provide a disposable/authorized test target and key before marking T6.5 done.
+
+T6.6 is blocked until T6.3, T6.4, and T6.5 acceptance is resolved because it depends on all preceding tasks and requires end-to-end journey checks.
 
 ---
 
@@ -73,8 +77,8 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T6.2 | Action log | done | `feat(T6.2): approved action execution and log` |
 | T6.3 | Agent chat with tools | blocked | `wip(T6.3): add context and tool dispatch` |
 | T6.4 | SSH attack detection and bans | blocked | |
-| T6.5 | Updates | in-progress | |
-| T6.6 | MVP hardening pass | todo | |
+| T6.5 | Updates | blocked | `wip(T6.5): updates inventory and approval flow` |
+| T6.6 | MVP hardening pass | blocked | |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
 
@@ -147,3 +151,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T6.3 · context, native/JSON tool loops, read-only dispatch, approvals, redaction and inline review implemented; 72 tests pass; live J4 blocked by unavailable local Ollama/OpenRouter credentials and deferred M5 data
 - 2026-11-14 · Codex / GPT-6 · started T6.5 after deferring blocked T6.3 live acceptance and dependency-blocked T6.4
 - 2026-11-14 · Codex / GPT-6 · T6.5 · started update inventory and apply reporting implementation
+- 2026-11-14 · Codex / GPT-6 · T6.5 · apt/dnf parsers, persisted scans, security classification, single-server approval flow and restart/reboot report added; migration verified in isolated SQLite; build clean and 77/77 tests pass; J6 live SSH acceptance blocked by unavailable authorized test server

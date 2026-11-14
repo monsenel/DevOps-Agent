@@ -1,3 +1,210 @@
 @page "/updates"
+@using System.Text.Json
+@using DevOpsAgent.Application.Updates
+@using DevOpsAgent.Domain.Updates
+@inject UpdatesService UpdateService
+@inject ApprovalService Approvals
+@inject ActionExecutionService ActionExecution
+@inject ToolCommandBuilder CommandBuilder
+
 <PageTitle>Updates · DevOps Agent</PageTitle>
-<PagePlaceholder Title="Updates" Description="Pending package updates will appear here after server discovery." />
+
+<section class="ui-card updates-page" aria-labelledby="updates-title">
+    <header class="ui-card-header">
+        <div>
+            <h2 id="updates-title">Available updates</h2>
+            <p class="muted">Review package changes by server. Security updates are marked separately.</p>
+        </div>
+        <button class="ui-button secondary" type="button" disabled="@_scanning" @onclick="ScanAsync">
+            @(_scanning ? "Scanning…" : "Scan servers")
+        </button>
+    </header>
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="settings-message @(_isError ? "error" : "success")" role="status">@_message</div>
+    }
+    @if (_loading)
+    {
+        <p class="muted">Loading update status…</p>
+    }
+    else if (_servers.Count == 0)
+    {
+        <EmptyState Title="No servers configured" Description="Add a server before checking for package updates." />
+    }
+    else
+    {
+        @foreach (var group in _servers.GroupBy(item => item.Group).OrderBy(group => group.Key))
+        {
+            <section class="updates-group">
+                <h3>@group.Key</h3>
+                @foreach (var server in group.OrderBy(item => item.ServerName))
+                {
+                    <article class="updates-server">
+                        <header class="updates-server-header">
+                            <div>
+                                <h4>@server.ServerName</h4>
+                                <span class="muted">@(server.PackageManager?.ToString().ToLowerInvariant() ?? "Not scanned")
+                                    · @(server.CheckedAtUtc?.ToLocalTime().ToString("g") ?? "No scan yet")</span>
+                            </div>
+                            <div class="updates-server-badges">
+                                <span class="ui-badge neutral">@server.Packages.Count pending</span>
+                                @if (server.Packages.Any(item => item.IsSecurity))
+                                {
+                                    <span class="ui-badge warn">Security updates</span>
+                                }
+                            </div>
+                        </header>
+                        @if (!string.IsNullOrWhiteSpace(server.Error))
+                        {
+                            <div class="settings-message error" role="alert">@server.Error</div>
+                        }
+                        else if (server.Packages.Count == 0)
+                        {
+                            <p class="muted">No pending updates recorded.</p>
+                        }
+                        else
+                        {
+                            <div class="updates-package-table-wrap">
+                                <table class="updates-package-table">
+                                    <thead><tr><th>Select</th><th>Package</th><th>Installed</th><th>Candidate</th><th>Source</th><th>Type</th></tr></thead>
+                                    <tbody>
+                                        @foreach (var package in server.Packages.OrderByDescending(item => item.IsSecurity).ThenBy(item => item.Name))
+                                        {
+                                            var key = (server.ServerId, package.Name);
+                                            <tr>
+                                                <td><input type="checkbox" aria-label="Select @package.Name on @server.ServerName"
+                                                           checked="@_selected.Contains(key)" @onchange="eventArgs => SelectPackage(key, eventArgs)" /></td>
+                                                <td class="mono">@package.Name</td>
+                                                <td class="mono">@(string.IsNullOrEmpty(package.CurrentVersion) ? "—" : package.CurrentVersion)</td>
+                                                <td class="mono">@package.CandidateVersion</td>
+                                                <td>@package.Repository</td>
+                                                <td><span class="ui-badge @(package.IsSecurity ? "warn" : "neutral")">@(package.IsSecurity ? "Security" : "Standard")</span></td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="updates-actions">
+                                <button class="ui-button primary" type="button" disabled="@(_busy || !_selected.Any(item => item.ServerId == server.ServerId))"
+                                        @onclick="() => ProposeAsync(server)">Review selected updates</button>
+                            </div>
+                        }
+                    </article>
+                }
+            </section>
+        }
+    }
+    @if (_pendingId is Guid pendingId && _pendingCommands.Count > 0)
+    {
+        <section class="updates-proposal" aria-labelledby="proposal-title">
+            <h3 id="proposal-title">Proposed package update · @string.Join(", ", _pendingServers)</h3>
+            <p>Review the exact command before approving. The action runs on one server only.</p>
+            @foreach (var preview in _pendingCommands)
+            {
+                <CodeBlock Content="@preview" />
+            }
+            <div class="updates-actions">
+                <button class="ui-button primary" type="button" disabled="@_busy" @onclick="() => ApproveAsync(pendingId)">Approve and run</button>
+                <button class="ui-button secondary" type="button" disabled="@_busy" @onclick="() => RejectAsync(pendingId)">Reject</button>
+            </div>
+        </section>
+    }
+</section>
+
+@code {
+    private readonly List<ServerUpdateStatus> _servers = [];
+    private readonly HashSet<(Guid ServerId, string Package)> _selected = [];
+    private readonly List<string> _pendingCommands = [];
+    private readonly List<string> _pendingServers = [];
+    private string? _message;
+    private bool _isError;
+    private bool _loading = true;
+    private bool _scanning;
+    private bool _busy;
+    private Guid? _pendingId;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try { _servers.Clear(); _servers.AddRange(await UpdateService.ListAsync(CancellationToken.None)); }
+        catch (Exception exception) { _message = exception.Message; _isError = true; }
+        finally { _loading = false; }
+    }
+
+    private async Task ScanAsync()
+    {
+        _scanning = true; _message = null; _isError = false;
+        try
+        {
+            _servers.Clear();
+            _servers.AddRange(await UpdateService.ScanAsync(CancellationToken.None));
+            _selected.Clear();
+            var failures = _servers.Count(server => server.Error is not null);
+            _message = failures == 0 ? "Update scan completed." : $"Update scan completed with {failures} server error(s).";
+            _isError = failures > 0;
+        }
+        catch (Exception exception) { _message = exception.Message; _isError = true; }
+        finally { _scanning = false; }
+    }
+
+    private void SelectPackage((Guid ServerId, string Package) key, ChangeEventArgs args)
+    {
+        if (args.Value is true || string.Equals(args.Value?.ToString(), "true", StringComparison.OrdinalIgnoreCase)) _selected.Add(key);
+        else _selected.Remove(key);
+    }
+
+    private async Task ProposeAsync(ServerUpdateStatus server)
+    {
+        var names = _selected.Where(item => item.ServerId == server.ServerId).Select(item => item.Package).ToArray();
+        if (names.Length == 0) return;
+        _busy = true; _message = null; _isError = false;
+        try
+        {
+            var args = JsonSerializer.SerializeToElement(new { packages = names, serverIds = new[] { server.ServerId } });
+            var result = await Approvals.EvaluateAsync(new ToolApprovalRequest("apply_updates", args, [server.ServerId]), CancellationToken.None);
+            if (result.State == ToolApprovalState.Denied) throw new InvalidOperationException(result.Message);
+            if (result.ActionId is not Guid actionId) throw new InvalidOperationException("The update action was not recorded.");
+            if (result.State == ToolApprovalState.ExecuteAutomatically)
+            {
+                var completed = await ActionExecution.ApproveAndRunAsync(actionId, "execution policy", CancellationToken.None);
+                _message = $"Update action {completed.Status}.\n{completed.ResultsJson}";
+                _pendingId = null;
+            }
+            else
+            {
+                _pendingId = actionId;
+                var entry = (await ActionExecution.ListAsync(CancellationToken.None)).Single(item => item.Action.Id == actionId);
+                _pendingCommands.Clear(); _pendingServers.Clear();
+                _pendingCommands.AddRange(entry.PendingCommandPreviews.Select(item => $"{(entry.Action.ToolName == "run_shell" ? "" : "sudo ")}{item.Command}"));
+                _pendingServers.AddRange(entry.ServerNames);
+                _message = $"Proposed {names.Length} package update(s) on {server.ServerName}.";
+            }
+        }
+        catch (Exception exception) { _message = exception.Message; _isError = true; }
+        finally { _busy = false; }
+    }
+
+    private async Task ApproveAsync(Guid id)
+    {
+        _busy = true;
+        try
+        {
+            var action = await ActionExecution.ApproveAndRunAsync(id, "admin", CancellationToken.None);
+            _message = $"Action {action.Status}.\n{action.ResultsJson}";
+            _pendingId = null;
+            await LoadAsync();
+        }
+        catch (Exception exception) { _message = exception.Message; _isError = true; }
+        finally { _busy = false; }
+    }
+
+    private async Task RejectAsync(Guid id)
+    {
+        _busy = true;
+        try { await ActionExecution.RejectAsync(id, "admin", CancellationToken.None); _pendingId = null; _message = "Update proposal rejected."; }
+        catch (Exception exception) { _message = exception.Message; _isError = true; }
+        finally { _busy = false; }
+    }
+}

@@ -42,7 +42,7 @@ public sealed class ExecutionModeService(IAppSettingRepository settings, IServer
         var allowedTools = policy.AllowedTools.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
         foreach (var name in allowedTools)
         {
-            if (!tools.TryGet(name, out var descriptor) || descriptor.Access != ToolAccess.Mutating || name == "run_shell")
+            if (!tools.TryGet(name, out var descriptor) || descriptor.Access != ToolAccess.Mutating || name is "run_shell" or "apply_updates")
             {
                 throw new ArgumentException($"'{name}' cannot be included in the automatic execution allowlist.", nameof(policy));
             }

@@ -135,7 +135,7 @@ public sealed record ListUpdatesArgs([property: MinLength(1), MaxLength(50)] IRe
 
 public sealed record ApplyUpdatesArgs(
     [property: Required, MinLength(1), MaxLength(100)] IReadOnlyList<string> Packages,
-    [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IValidatableObject, IServerTargetArgs
+    [property: MinLength(1), MaxLength(1)] IReadOnlyList<Guid>? ServerIds = null) : IValidatableObject, IServerTargetArgs
 {
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {

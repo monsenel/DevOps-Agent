@@ -1,0 +1,4 @@
+Listing...
+nginx/jammy-updates 1.24.0-2ubuntu7.3 amd64 [upgradable from: 1.24.0-2ubuntu7.2]
+openssl/jammy-security 3.0.2-0ubuntu1.19 amd64 [upgradable from: 3.0.2-0ubuntu1.18]
+ca-certificates/jammy-updates 20240203~22.04.1 all [upgradable from: 20230311ubuntu0.22.04.1]

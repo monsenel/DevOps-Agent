@@ -31,6 +31,9 @@ public static class PersistenceServiceCollectionExtensions
         services.AddScoped<ILlmProviderRepository, LlmProviderRepository>();
         services.AddScoped<IAppSettingRepository, AppSettingRepository>();
         services.AddScoped<IActionRecordRepository, ActionRecordRepository>();
+        services.AddScoped<IUpdatePackageRepository, UpdatePackageRepository>();
+        services.AddScoped<IUpdateScanRepository, UpdateScanRepository>();
+        services.AddScoped<IUpdatesCollector, DevOpsAgent.Infrastructure.Collectors.UpdatesCollectorService>();
         services.AddScoped<IChatConversationRepository, ChatConversationRepository>();
         services.AddScoped<IServerRepository, ServerRepository>();
         services.AddScoped<ISnapshotRepository, SnapshotRepository>();

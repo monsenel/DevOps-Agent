@@ -90,7 +90,7 @@ public sealed class ApprovalService(
             return new(ToolApprovalState.Denied, "A target server group is in read-only mode.");
         }
 
-        var forceApproval = request.ToolName == "run_shell" || policies.Any(policy =>
+        var forceApproval = request.ToolName is "run_shell" or "apply_updates" || policies.Any(policy =>
             policy.Mode != ExecutionMode.Auto || !policy.AllowedTools.Contains(request.ToolName, StringComparer.Ordinal));
         var action = new ActionRecord(
             request.ToolName,

@@ -2169,6 +2169,83 @@ p {
     color: var(--dva-on-danger);
 }
 
+.updates-page {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.updates-group {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.updates-group > h3 {
+    margin: 0;
+    font-size: 16px;
+}
+
+.updates-server,
+.updates-proposal {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px;
+    border: 1px solid var(--dva-line);
+    border-radius: var(--dva-radius-row);
+    background: var(--dva-inset);
+}
+
+.updates-server-header,
+.updates-server-badges,
+.updates-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.updates-server-header h4,
+.updates-proposal h3 {
+    margin: 0 0 4px;
+}
+
+.updates-package-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.updates-package-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.updates-package-table th,
+.updates-package-table td {
+    padding: 10px 8px;
+    border-bottom: 1px solid var(--dva-line);
+    white-space: nowrap;
+}
+
+.updates-package-table th {
+    color: var(--dva-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.updates-package-table input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--dva-accent);
+}
+
+.updates-proposal {
+    border-color: var(--dva-accent);
+}
+
 .servers-card {
     min-width: 0;
 }

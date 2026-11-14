@@ -52,9 +52,18 @@ public sealed class ToolCommandBuilder(ToolRegistry tools)
     private static string BuildApplyUpdates(ApplyUpdatesArgs value)
     {
         var packages = string.Join(" ", value.Packages.Select(Quote));
-        return "if command -v apt-get >/dev/null 2>&1; then apt-get install -y -- " + packages
+        return "set -eu; before=$(mktemp); after=$(mktemp); trap 'rm -f \"$before\" \"$after\"' EXIT; "
+            + "units=$(systemctl list-units --type=service --state=running --no-legend --plain 2>/dev/null | awk '{print $1}' || true); "
+            + "for unit in $units; do printf '%s %s\\n' \"$unit\" \"$(systemctl show -p MainPID --value \"$unit\" 2>/dev/null || true)\"; done > \"$before\"; "
+            + "if command -v apt-get >/dev/null 2>&1; then apt-get install -y -- " + packages
             + "; elif command -v dnf >/dev/null 2>&1; then dnf upgrade -y -- " + packages
-            + "; else printf '%s\\n' 'No supported package manager found.' >&2; exit 127; fi";
+            + "; else printf '%s\\n' 'No supported package manager found.' >&2; exit 127; fi; "
+            + "units=$(systemctl list-units --type=service --state=running --no-legend --plain 2>/dev/null | awk '{print $1}' || true); "
+            + "for unit in $units; do printf '%s %s\\n' \"$unit\" \"$(systemctl show -p MainPID --value \"$unit\" 2>/dev/null || true)\"; done > \"$after\"; "
+            + "printf '%s\\n' 'RESTARTED_SERVICES_BEGIN'; awk 'NR==FNR {before[$1]=$2; next} ($1 in before) && before[$1]!=$2 {print $1}' \"$before\" \"$after\"; "
+            + "printf '%s\\n' 'RESTARTED_SERVICES_END'; if [ -e /var/run/reboot-required ]; then printf '%s\\n' 'REBOOT_REQUIRED=true'; "
+            + "elif command -v needs-restarting >/dev/null 2>&1 && needs-restarting -r >/dev/null 2>&1; then printf '%s\\n' 'REBOOT_REQUIRED=true'; "
+            + "else printf '%s\\n' 'REBOOT_REQUIRED=false'; fi";
     }
 
     private static string BuildBlockIp(BlockIpArgs value) =>
