@@ -51,7 +51,7 @@
                                     <div class="action-log-expanded">
                                         <section class="action-detail-section">
                                             <h3>Arguments</h3>
-                                            <CodeBlock Content="action.ArgumentsJson" />
+                                            <CodeBlock Content="@action.ArgumentsJson" />
                                         </section>
                                         @if (action.Status == ActionRecordStatus.Proposed)
                                         {
@@ -61,7 +61,7 @@
                                                 {
                                                     <section class="action-detail-section">
                                                         <h3>@preview.ServerName</h3>
-                                                        <CodeBlock Content="preview.Command" />
+                                                        <CodeBlock Content="@preview.Command" />
                                                     </section>
                                                 }
                                                 <button class="ui-button primary" type="button" disabled="@_executing"
@@ -75,7 +75,7 @@
                                             <section class="action-detail-section">
                                                 <h3>@result.ServerName · Exit @(result.ExitCode?.ToString() ?? "—")</h3>
                                                 <label>Command</label>
-                                                <CodeBlock Content="result.Command" />
+                                                <CodeBlock Content="@result.Command" />
                                                 @if (!string.IsNullOrWhiteSpace(result.Error))
                                                 {
                                                     <p class="action-result-error">@result.Error</p>
@@ -83,12 +83,12 @@
                                                 @if (!string.IsNullOrWhiteSpace(result.StandardOutput))
                                                 {
                                                     <label>Standard output</label>
-                                                    <CodeBlock Content="result.StandardOutput" />
+                                                    <CodeBlock Content="@result.StandardOutput" />
                                                 }
                                                 @if (!string.IsNullOrWhiteSpace(result.StandardError))
                                                 {
                                                     <label>Standard error</label>
-                                                    <CodeBlock Content="result.StandardError" />
+                                                    <CodeBlock Content="@result.StandardError" />
                                                 }
                                             </section>
                                         }

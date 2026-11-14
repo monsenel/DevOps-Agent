@@ -7,12 +7,12 @@
 ## Current
 
 - **Task:** T6.2 Action log
-- **Status:** in-progress
+- **Status:** done
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
-T5.1 (and dependent M5 tasks T5.2–T5.5) remain deferred at the owner's direction. T6.2 implementation is complete: approved actions are policy-checked, run per target with a four-server concurrency cap, and store per-server command/output/error/exit details and final status. Command plans cover restart, package updates, IP block/unblock, and explicit `run_shell`. Action log lists records, expands to arguments/command/output, previews exact commands for proposals, and supports approve/reject. Added lifecycle/output migration and fake SSH tests. Fresh database migration, build (0 warnings/errors), and 66/66 tests pass. Next: visually verify the Action log proposal view in light/dark, then mark T6.2 done, commit, and continue to T6.3. Files touched: `src/DevOpsAgent.Domain/Agent/ExecutionPolicy.cs`, `src/DevOpsAgent.Application/Agent/{ActionExecutionService,ToolCommandBuilder}.cs`, `src/DevOpsAgent.Application/Abstractions/IActionRecordRepository.cs`, `src/DevOpsAgent.Infrastructure/Persistence/{ActionRecordRepository,AppDbContext}.cs`, `src/DevOpsAgent.Infrastructure/Migrations/*AddActionExecutionResults*`, `src/DevOpsAgent.Web/Components/Pages/ActionLog.razor`, `src/DevOpsAgent.Web/Program.cs`, `src/DevOpsAgent.Web/wwwroot/css/app.css`, `tests/DevOpsAgent.Tests/ActionExecutionTests.cs`.
+No active WIP. T6.2 is complete. T5.1 (and dependent M5 tasks T5.2–T5.5) remain deferred at the owner's direction.
 
 ## Blockers
 
@@ -66,7 +66,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T5.4 | Notifications | todo | |
 | T5.5 | Overview with real data | todo | |
 | T6.1 | Tool registry and execution modes | done | `feat(T6.1): tool policies and approvals` |
-| T6.2 | Action log | in-progress | |
+| T6.2 | Action log | done | `feat(T6.2): approved action execution and log` |
 | T6.3 | Agent chat with tools | todo | |
 | T6.4 | SSH attack detection and bans | todo | |
 | T6.5 | Updates | todo | |
@@ -138,3 +138,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · resumed T6.1 · owner directed skipping M5; initial build passed with 0 warnings/errors and tests passed (49/49)
 - 2026-11-14 · Codex / GPT-6 · T6.1 · typed tool registry and policy/approval matrix; migration applied, settings checked in both themes, build clean and 62/62 tests pass
 - 2026-11-14 · Codex / GPT-6 · resumed T6.2 · started approved-action execution and action log
+- 2026-11-14 · Codex / GPT-6 · T6.2 · per-server approved execution, persisted output and Action log verified in both themes; fresh migration, clean build and 66/66 tests pass

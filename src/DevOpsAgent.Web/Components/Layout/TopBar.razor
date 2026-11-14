@@ -1,5 +1,6 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JavaScript
+@implements IDisposable
 
 <header class="top-bar">
     <h1>@PageTitle</h1>
@@ -20,6 +21,8 @@
     private string ThemeName { get; set; } = "Light";
 
     private bool IsOverview => Navigation.ToBaseRelativePath(Navigation.Uri).TrimEnd('/') is "";
+
+    protected override void OnInitialized() => Navigation.LocationChanged += OnLocationChanged;
 
     private string PageTitle => Navigation.ToBaseRelativePath(Navigation.Uri).Trim('/') switch
     {
@@ -52,4 +55,9 @@
         var current = await JavaScript.InvokeAsync<string>("dvaTheme.toggle");
         ThemeName = current == "dark" ? "Dark" : "Light";
     }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs args) =>
+        _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
 }
