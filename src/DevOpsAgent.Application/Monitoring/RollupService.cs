@@ -9,7 +9,8 @@ public sealed class RollupService(IMetricRepository metrics, TimeProvider timePr
     {
         var now = timeProvider.GetUtcNow();
         var before = new DateTimeOffset(now.Year, now.Month, now.Day, now.Hour, now.Minute / 5 * 5, 0, TimeSpan.Zero);
-        var cutoff = before.AddHours(-24);
+        var rawCutoff = before.AddHours(-24);
+        var rollupCutoff = before.AddDays(-30);
         var samples = await metrics.GetUnrolledAsync(before, cancellationToken);
         var rollups = samples.Where(sample => !sample.Metric.StartsWith('_'))
             .GroupBy(sample => (sample.ServerId, sample.Metric,
@@ -18,6 +19,6 @@ public sealed class RollupService(IMetricRepository metrics, TimeProvider timePr
             .Select(group => new MetricRollup(group.Key.ServerId, group.Key.Metric, group.Key.Bucket,
                 group.Min(item => item.Value), group.Average(item => item.Value), group.Max(item => item.Value), group.Count()))
             .ToArray();
-        await metrics.SaveRollupsAsync(rollups, cutoff, cancellationToken);
+        await metrics.SaveRollupsAsync(rollups, rawCutoff, rollupCutoff, cancellationToken);
     }
 }

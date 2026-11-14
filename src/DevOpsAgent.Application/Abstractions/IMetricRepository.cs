@@ -8,5 +8,5 @@ public interface IMetricRepository
     Task<IReadOnlyList<MetricSample>> GetRecentAsync(Guid serverId, DateTimeOffset sinceUtc, CancellationToken cancellationToken);
     Task<IReadOnlyList<MetricSample>> GetLatestAsync(Guid serverId, CancellationToken cancellationToken);
     Task<IReadOnlyList<MetricSample>> GetUnrolledAsync(DateTimeOffset beforeUtc, CancellationToken cancellationToken);
-    Task SaveRollupsAsync(IReadOnlyCollection<MetricRollup> rollups, DateTimeOffset pruneBeforeUtc, CancellationToken cancellationToken);
+    Task SaveRollupsAsync(IReadOnlyCollection<MetricRollup> rollups, DateTimeOffset rawPruneBeforeUtc, DateTimeOffset rollupPruneBeforeUtc, CancellationToken cancellationToken);
 }

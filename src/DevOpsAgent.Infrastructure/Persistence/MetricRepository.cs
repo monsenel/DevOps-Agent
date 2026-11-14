@@ -33,8 +33,8 @@ public sealed class MetricRepository(AppDbContext dbContext) : IMetricRepository
         return samples.Where(item => item.AtUtc < beforeUtc).OrderBy(item => item.AtUtc).ToArray();
     }
 
-    public async Task SaveRollupsAsync(IReadOnlyCollection<MetricRollup> rollups, DateTimeOffset pruneBeforeUtc,
-        CancellationToken cancellationToken)
+    public async Task SaveRollupsAsync(IReadOnlyCollection<MetricRollup> rollups, DateTimeOffset rawPruneBeforeUtc,
+        DateTimeOffset rollupPruneBeforeUtc, CancellationToken cancellationToken)
     {
         var serverIds = rollups.Select(item => item.ServerId).Distinct().ToArray();
         var existingRollups = serverIds.Length == 0
@@ -58,8 +58,11 @@ public sealed class MetricRepository(AppDbContext dbContext) : IMetricRepository
         }
 
         var allSamples = await dbContext.MetricSamples.ToArrayAsync(cancellationToken);
-        var stale = allSamples.Where(item => item.AtUtc < pruneBeforeUtc).ToArray();
-        dbContext.MetricSamples.RemoveRange(stale);
+        var staleSamples = allSamples.Where(item => item.AtUtc < rawPruneBeforeUtc).ToArray();
+        dbContext.MetricSamples.RemoveRange(staleSamples);
+        var allRollups = await dbContext.MetricRollups.ToArrayAsync(cancellationToken);
+        var staleRollups = allRollups.Where(item => item.BucketStartUtc < rollupPruneBeforeUtc).ToArray();
+        dbContext.MetricRollups.RemoveRange(staleRollups);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 }

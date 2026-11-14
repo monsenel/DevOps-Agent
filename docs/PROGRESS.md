@@ -91,6 +91,7 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · resumed T6.3 · fixed full-height sidebar verified and committed; Graphify incremental refresh completed (5,415 nodes, 18,841 edges, 299 communities); next resume T5.1 when M5 is requested
 - 2026-11-14 · Codex / GPT-6 · resumed T5.1 · clean tree; build passed with 0 warnings/errors and tests passed (79/79); owner lifted M5 deferral
 - 2026-11-14 · Codex / GPT-6 · T5.1 · combined read-only polling, CPU/network deltas, raw samples, five-minute rollups, 24-hour raw retention, and server detail complete; SQLite migration/startup verified; values shown in both themes, mobile layout checked; build clean and 84/84 tests pass
+- 2026-11-14 · Codex / GPT-6 · T5.1 follow-up · enforced PRD's 30-day rollup retention; build clean and 84/84 tests pass
 
 - 2026-11-14 · Codex / GPT-6 · T6.5 · J6 steps 1–3 passed on disposable Debian apt target; security and standard updates classified, explicit approval executed both, report exit 0/no restarts/reboot false, follow-up scan showed 0 pending; temporary test environment removed
 

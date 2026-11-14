@@ -32,9 +32,10 @@ public sealed class MetricRepositoryTests
         var recent = await repository.GetRecentAsync(server.Id, now.AddHours(-1), CancellationToken.None);
         Assert.Equal(2, recent.Count);
         var rollup = new MetricRollup(server.Id, "load_1m", new DateTimeOffset(2026, 11, 14, 12, 5, 0, TimeSpan.Zero), 1, 2, 3, 2);
-        await repository.SaveRollupsAsync([rollup], now.AddDays(-1), CancellationToken.None);
+        var expiredRollup = new MetricRollup(server.Id, "load_1m", now.AddDays(-31), 0, 0, 0, 1);
+        await repository.SaveRollupsAsync([expiredRollup, rollup], now.AddDays(-1), now.AddDays(-30), CancellationToken.None);
         var refreshedRollup = new MetricRollup(server.Id, "load_1m", new DateTimeOffset(2026, 11, 14, 12, 5, 0, TimeSpan.Zero), 1, 2.5, 4, 3);
-        await repository.SaveRollupsAsync([refreshedRollup], now.AddDays(-1), CancellationToken.None);
+        await repository.SaveRollupsAsync([refreshedRollup], now.AddDays(-1), now.AddDays(-30), CancellationToken.None);
 
         Assert.Equal(1, await database.Context.MetricRollups.CountAsync());
         var savedRollup = await database.Context.MetricRollups.SingleAsync();
