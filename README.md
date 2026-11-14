@@ -30,7 +30,7 @@ Requirements: Docker Compose v2, a Linux server reachable over SSH, its private 
 
 4. Add an LLM provider in **Settings → LLM** to enable Agent chat and proposed actions. Ollama can also run with `docker compose --profile ollama up --build -d`.
 
-The app container has `host.docker.internal` mapped to the Docker host gateway. Use that name for SSH targets reachable through a host-published port, such as a local test lab; `127.0.0.1` inside the app container refers to the container itself.
+The app container has `host.docker.internal` mapped to the Docker host gateway. Use that name for SSH targets reachable through a host-published port, such as a local test lab; `127.0.0.1` inside the app container refers to the container itself. On Linux, a port published only on host loopback (`127.0.0.1`) is not reachable through the Docker gateway; bind the test port to the Docker gateway address or use a temporary forward bound only to that bridge.
 
 ### Test lab and safe first run
 

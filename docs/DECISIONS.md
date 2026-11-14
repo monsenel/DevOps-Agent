@@ -100,4 +100,4 @@ Format: `D-<number> · <date> · <title>` then Decision / Why / Consequences.
 ### D-023 · 2026-11-14 · Reach host-published SSH targets from the app container
 - **Decision:** Map `host.docker.internal` to Docker's host gateway for the app service.
 - **Why:** On Linux, a disposable SSH lab may publish its port on the host loopback; the app container needs a stable route to that host port, and its own `127.0.0.1` cannot reach it.
-- **Consequences:** Configure those inventory entries with `host.docker.internal` and the published port. Keep ordinary server routing and VPN requirements unchanged.
+- **Consequences:** Configure those inventory entries with `host.docker.internal` and the published port. A port bound only to Linux host loopback also needs a Docker-bridge-reachable bind or temporary bridge-scoped forward. Keep ordinary server routing and VPN requirements unchanged.

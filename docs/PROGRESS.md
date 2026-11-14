@@ -4,14 +4,14 @@
 
 ## Waiting on owner
 
-- **T6.3 — Agent chat live J4:** add an LLM provider in DevOps Agent. Then I will run J4 on the disposable lab using the requested prompts and approve one `web` container restart on `srv-app`.
+- **T6.3 — Agent chat live J4:** add and test an LLM provider in DevOps Agent, then tell me it is configured so I can run J4 on the disposable lab using the requested prompts and approve one `web` container restart on `srv-app`.
 
 ---
 
 ## Current
 
-- **Task:** T6.6 MVP hardening pass — finish provider-dependent J4/J7 acceptance
-- **Status:** in-progress
+- **Task:** T6.6 MVP hardening pass — provider-dependent J4/J7 acceptance remains
+- **Status:** blocked
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
@@ -22,15 +22,17 @@
 - T6.4 J5 passed on disposable staging: 60 failed SSH logins opened the attack alert and fail2ban ban; threshold restored and all bans cleared. Build clean, 110/110 tests.
 - T6.5/J6 is now **done** after the prior acceptance claim was retracted and re-run on this lab. Updates now use a configurable update-only SSH command timeout (default 300s) and bounded package-repository retries/timeouts. On `srv-edge`, `libexpat1` was downgraded to `2.5.0-1+deb12u2`, scanned as a `bookworm-security` Security update (`2.5.0-1+deb12u5` candidate), approved in Updates, and applied; action log: exit 0, no restarted services, `REBOOT_REQUIRED=false`. `srv-db` completed its scan quickly with `Repositories unreachable (apt)`; fake offline coverage passes. Build clean, 115/115 tests pass.
 - T5.4 is **done**: owner configured ntfy and confirmed the test message, alert-open, and alert-resolve notifications were all received.
-- T6.6 journey results on the disposable lab: J1 direct/jump inventory confirmed for srv-edge, srv-app and srv-db; srv-search remains unregistered. J2 passed after fixing the parser for four-column `ss -tnH state established` output, retaining outbound unknown peers in `GraphBuilder`, and normalizing IPv4-mapped IPv6 endpoints; latest discovery recorded 3/3 successes with 27 nodes/16 connections, including srv-app → Unknown for srv-search :9200. J3 passed: `api.test.local` traced 4 nodes/3 connections with `/etc/nginx/conf.d/demo.conf:10` evidence. J4 is blocked per T6.3 until the owner adds an LLM provider; the old pre-lab pass is invalid. J5 attack/ban passed via disposable `attack` script (60 failed SSH attempts, alert + fail2ban ban); threshold restored and bans cleared. J6 now passed on the current lab as recorded above. J7 detected a new `python3` listener on :9000 and removal of worker-redis after temporary staging changes; nginx config, listener and worker-redis were restored and verified. No systemd acceptance was attempted, per owner exception.
+- T6.6 journey results on the disposable lab: J1 direct/jump inventory confirmed for srv-edge, srv-app and srv-db; srv-search remains unregistered. J2 passed after fixing the parser for four-column `ss -tnH state established` output, retaining outbound unknown peers in `GraphBuilder`, and normalizing IPv4-mapped IPv6 endpoints; latest discovery recorded 3/3 successes with 27 nodes/16 connections, including srv-app → Unknown for srv-search :9200. J3 passed: `api.test.local` traced 4 nodes/3 connections with `/etc/nginx/conf.d/demo.conf:10` evidence. J4 is blocked per T6.3 until the owner adds an LLM provider; the old pre-lab pass is invalid. J5 attack/ban passed via disposable `attack` script (60 failed SSH attempts, alert + fail2ban ban); threshold restored and bans cleared. J6 now passed on the current lab as recorded above. J7 detected a new `python3` listener on :9000 and removal of worker-redis after temporary staging changes; nginx config, listener and worker-redis were restored and verified. The systemd container was attempted, caused a host hang, and was removed; verify systemd on a real LXC/VM only.
 - T6.6 hardening: fixed IPv4-mapped endpoint handling, duplicate `server-unreachable` alert keys across servers (with a regression test), and 390px horizontal overflow; README now covers setup, keys/known_hosts, notifications, LLM providers, VPN, disposable lab use, and starting in read-only mode. Compose maps `host.docker.internal` to the Docker host gateway for host-published lab SSH ports (D-023). 390px layout has no document overflow on Overview and all main routes. Both theme palettes and contrast were checked. Build is clean with 0 warnings/errors; 115/115 tests pass. Graphify output remains ignored and excludes vendored/generated files; god nodes contain no minified KC/Inb/jQb names.
-- T6.6 restore discovery is verified: after restoring the lab's J7 changes, isolated review app discovery completed at 2026-11-14 22:38 with 3 succeeded/0 failed and persisted a new snapshot; graph showed 27 nodes/16 connections and the restored baseline. No discovery bug found. Systemd container attempt caused a host hang; container/image were removed and the script reverted. README and Linux Docker host-gateway routing guidance are now complete. Exact next step: run the requested isolated fresh-clone Docker startup/login/add-srv-edge/discovery check, then run the release build/tests and record J4 as the remaining owner blocker. Keep srv-search unregistered; systemd: verify on a real LXC/VM.
+- T6.6 restore discovery is verified: after restoring the lab's J7 changes, isolated review app discovery completed at 2026-11-14 22:38 with 3 succeeded/0 failed and persisted a new snapshot; graph showed 27 nodes/16 connections and the restored baseline. No discovery bug found. Systemd container attempt caused a host hang; container/image were removed and the script reverted. README and Linux Docker host-gateway routing guidance are complete. Keep srv-search unregistered; systemd: verify on a real LXC/VM.
+- Fresh-start acceptance passed from a clean clone under `/home/mohsen/Projects`: copied `.env.example`, private lab key and pinned host keys; Docker build passed; `/healthz` returned 200; temporary credentials logged in and reached Overview. App container reached the lab over `host.docker.internal:2201`; because the lab publishes that port on host loopback only, a temporary forward bound only to Docker's bridge was used and then stopped. Added `srv-edge` to the fresh app database, confirmed SSH and passwordless sudo, then ran discovery: snapshot `f2892100-1759-4f05-96f6-ef24511e5bb9`, 1 succeeded/0 failed. The disposable app and forward were stopped; the lab and all other servers were left as they were. Graphify code-only update completed: 2,488 nodes, 6,612 edges, 181 communities; full semantic update needs an API key, which was not available.
+- Release checks: `dotnet build DevOpsAgent.slnx` succeeded with 0 warnings/errors; `dotnet test DevOpsAgent.slnx --no-build` passed 115/115. J1, J2, J3, J5, J6 and J7 have lab acceptance recorded; J4 remains unverified because this app has no configured provider. Exact next step: when the owner adds an LLM provider and says it is configured, run J4's three requested prompts on the lab, approve the `web` restart, verify read-only calls and Action log, then close T6.3/T6.6. Systemd: verify on a real LXC/VM; this does not block release.
 
 ## Blockers
 
 The prior M5 deferral has been lifted by the owner's instruction to continue task by task. T5.1, T5.2, T5.3, and T5.4 are complete. T5.3 live acceptance passed on 2026-11-14: the selected container triggered an alert within 2 minutes, was restarted, and its alert auto-resolved. T5.4 live acceptance passed per the owner: ntfy test, open, and resolve messages were all received.
 
-T6.3 live J4 acceptance is blocked until the owner adds an LLM provider. T6.6 remains in progress for fresh-start/doc/release checks and will remain blocked on provider-dependent J4/J7 acceptance if the provider is still absent. systemd live verification is deferred: systemd: verify on a real LXC/VM; it does not block this release.
+T6.3 live J4 acceptance is blocked until the owner adds an LLM provider. T6.6 is blocked on that same provider-dependent J4 acceptance; all independent hardening, fresh-start, docs, build and test checks are complete. systemd live verification is deferred: systemd: verify on a real LXC/VM; it does not block this release.
 
 ---
 
@@ -74,7 +76,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T6.3 | Agent chat with tools | blocked | `feat(T6.3): complete J4 tool and approval flow` |
 | T6.4 | SSH attack detection and bans | done | `feat(T6.4): verify SSH attack detection in disposable lab` |
 | T6.5 | Updates | done | `feat(T6.5): verify security update workflow and resilient scans` |
-| T6.6 | MVP hardening pass | in-progress | |
+| T6.6 | MVP hardening pass | blocked | v0.1.0 release; J4 pending |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
 
@@ -86,6 +88,7 @@ One line per session: date · tool/model · tasks touched · result.
 
 - 2026-11-14 · Codex / GPT-6 · T6.6 systemd attempt · privileged Debian/systemd container reached PID 1 running with sshd/nginx/test listener but host hung; removed only srv-sys and its image, reverted lab script changes, no prod touched; note systemd: verify on a real LXC/VM, proceed without blocking
 - 2026-11-14 · Codex / GPT-6 · resumed T6.6 after host hang report · acknowledged that the disposable privileged systemd container likely caused resource pressure; verified it was removed and added README test-lab/read-only guidance plus host-gateway routing (D-023); next fresh-clone acceptance without systemd
+- 2026-11-14 · Codex / GPT-6 · T6.6 release acceptance · fresh clone Docker build/login and srv-edge discovery passed (1/1); app and temporary Docker-bridge forward stopped; Graphify code-only refreshed (2,488 nodes/6,612 edges/181 communities); build 0 warnings and 115/115 tests; J4 remains blocked until provider is configured
 
 - 2026-11-14 · Codex / GPT-6 · resumed T6.6 release acceptance · test app has no default LLM provider or last test result, so J4 remains blocked; proceed with systemd lab verification and release hardening
 
