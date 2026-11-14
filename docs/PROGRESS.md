@@ -7,36 +7,12 @@
 ## Current
 
 - **Task:** T2.1 Collector framework and snapshots
-- **Status:** in-progress
+- **Status:** done
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
-<!-- Fill while a task is in progress. Clear when it is done.
-What is done so far:
-- Owner directed deferring T1.2 live direct/jump SSH checks and proceeding with T2.1; T1.2 remains marked blocked until those checks can be run.
--
-What is next (exact next step):
--
-Files touched:
--
-Gotchas found:
--
--->
-
-What is done so far:
-- T1.2 implementation is committed as `c439b13`; connection pool, `sudo -n` runner, jump forwarding, capabilities probe, host-key pinning, and UI are implemented and covered by tests.
-- T1.3 Import SSH config is complete and committed as `feat(T1.3): import ssh config`; parser fixtures cover supported directives, wildcard skips, quoted identities, and ProxyJump.
-- Verified paste → preview → import with a temporary database and key directory. The exact host aliases imported, the wildcard was skipped, key basename mapped, and the target was linked to the imported gateway.
-- Final build passes with zero warnings/errors and tests pass (15/15). Checked the importer UI in light/dark themes and at 390px with no page-level horizontal overflow.
-What is next (exact next step):
-- Inspect current Application, Domain, Infrastructure persistence, and test patterns; implement T2.1 collector contracts, snapshot/run persistence and migration, and parallel per-server discovery with sequential collectors.
-Files touched:
-- `docs/PROGRESS.md`, `docs/DECISIONS.md`
-Gotchas found:
-- T0.8 remains blocked on missing OpenRouter credentials.
-- T1.2 live verification needs a real direct target, jump-host target, identity keys, and pinned host-key entries; none are configured in the repository or `/keys`.
-- T1.2's live check is explicitly deferred by the owner, so T2.1 may proceed using the existing SSH abstractions and fake-runner tests.
+_None; T2.1 is complete._
 
 ## Blockers
 
@@ -65,7 +41,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T1.1 | Server inventory | done | `feat(T1.1): server inventory` |
 | T1.2 | SSH pool and runner | blocked | |
 | T1.3 | Import ssh config | done | `feat(T1.3): import ssh config` |
-| T2.1 | Collector framework and snapshots | in-progress | |
+| T2.1 | Collector framework and snapshots | done | `feat(T2.1): collector framework and snapshots` |
 | T2.2 | Host collector | todo | |
 | T2.3 | Listener collector | todo | |
 | T2.4 | Docker collector | todo | |
@@ -124,3 +100,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · resumed T1.2 · refreshed Graphify output (869 nodes, 1,687 links); build/test pass; SSH blocker unchanged
 - 2026-11-14 · Codex / GPT-6 · resumed T1.2 · build/test pass (15/15); real SSH and jump-host verification remains blocked by missing test targets and keys
 - 2026-11-14 · Codex / GPT-6 · resumed T2.1 · owner directed defer T1.2 live check and proceed with collector framework
+- 2026-11-14 · Codex / GPT-6 · T2.1 · snapshot/run persistence, bounded server parallelism, progress events, failure isolation; build/test pass (18/18)

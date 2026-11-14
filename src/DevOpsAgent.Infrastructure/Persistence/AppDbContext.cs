@@ -2,6 +2,7 @@ using DevOpsAgent.Domain.Settings;
 using DevOpsAgent.Domain.Llm;
 using DevOpsAgent.Domain.Chat;
 using DevOpsAgent.Domain.Servers;
+using DevOpsAgent.Domain.Discovery;
 using Microsoft.EntityFrameworkCore;
 
 namespace DevOpsAgent.Infrastructure.Persistence;
@@ -13,6 +14,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<ChatConversation> ChatConversations => Set<ChatConversation>();
     public DbSet<ChatMessageRecord> ChatMessages => Set<ChatMessageRecord>();
     public DbSet<Server> Servers => Set<Server>();
+    public DbSet<Snapshot> Snapshots => Set<Snapshot>();
+    public DbSet<CollectorRun> CollectorRuns => Set<CollectorRun>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -69,6 +72,27 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .WithMany()
                 .HasForeignKey(server => server.JumpServerId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Snapshot>(entity =>
+        {
+            entity.HasKey(snapshot => snapshot.Id);
+            entity.Property(snapshot => snapshot.Status).HasConversion<string>().HasMaxLength(24).IsRequired();
+            entity.Property(snapshot => snapshot.ServerIdsJson).IsRequired();
+            entity.HasIndex(snapshot => snapshot.StartedAtUtc);
+        });
+
+        modelBuilder.Entity<CollectorRun>(entity =>
+        {
+            entity.HasKey(run => run.Id);
+            entity.Property(run => run.CollectorName).HasMaxLength(120).IsRequired();
+            entity.Property(run => run.Status).HasConversion<string>().HasMaxLength(24).IsRequired();
+            entity.Property(run => run.RawOutput).IsRequired();
+            entity.Property(run => run.StandardError).IsRequired();
+            entity.Property(run => run.Error).HasMaxLength(2000);
+            entity.Property(run => run.ResultJson);
+            entity.HasIndex(run => new { run.SnapshotId, run.ServerId });
+            entity.HasOne<Snapshot>().WithMany().HasForeignKey(run => run.SnapshotId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }
