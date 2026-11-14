@@ -71,7 +71,7 @@ function runLayout(view = "service", fit = true) {
     graph.layout({
         name: "elk", fit, padding: 28, animate: false, nodeDimensionsIncludeLabels: true,
         elk: {
-            algorithm: view === "network" ? "layered" : "layered",
+            algorithm: "layered",
             "elk.direction": view === "network" ? "DOWN" : "RIGHT",
             "elk.layered.spacing.nodeNodeBetweenLayers": "64",
             "elk.spacing.nodeNode": "28",
@@ -118,7 +118,10 @@ export function setData(elements, view, alertStatuses = {}) {
         } else if (data.kind === "Unknown") {
             displayLabel = `Unknown\n${attributes.Address || "unknown endpoint"}`;
         }
-        return { data: { ...data, displayLabel, edgeLabel: data.port ? `:${data.port}` : "", alertSeverity: alertStatuses[data.serverId] || "" } };
+        // Status is never color-only: the border colour is backed by a text marker in the label.
+        const alertSeverity = alertStatuses[data.serverId] || "";
+        if (alertSeverity) displayLabel = `${displayLabel}\n· ${alertSeverity} alert`;
+        return { data: { ...data, displayLabel, edgeLabel: data.port ? `:${data.port}` : "", alertSeverity } };
     }));
     applyStyles();
     runLayout(view, true);
