@@ -6,13 +6,13 @@
 
 ## Current
 
-- **Task:** T4.3 Drift and scheduled discovery
-- **Status:** done
+- **Task:** T6.1 Tool registry and execution modes
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
-No active WIP. T4.3 is complete.
+T5.1 (and dependent M5 tasks T5.2–T5.5) deferred at the owner's direction to skip M5 and start M6. Current task T6.1: inspect its acceptance criteria and existing SSH/server abstractions, then implement the typed tool registry, validation, execution modes, and approval behavior with tests. Keep the `run_shell` path proposed in every mode. Files touched so far: `docs/PROGRESS.md`.
 
 ## Blockers
 
@@ -25,6 +25,8 @@ Per owner direction, T1.2 live verification is deferred while T2.1 proceeds; ret
 T2.7 live acceptance is blocked by the same missing authorized SSH targets and pinned host keys. The topology UI was verified with a temporary two-host persisted graph, but that does not satisfy the plan's real two-server discovery criterion. Return to T2.7 once live SSH verification can run.
 
 T3.3's implementation and synthetic trace tests are complete, but PLAN requires J3 to work on real servers. Verification is blocked by the missing authorized SSH targets and pinned host keys recorded under T1.2/T2.7. Resume real trace/evidence verification when those are available; do not treat the synthetic UI check as satisfying J3.
+
+T5.1–T5.5 are deferred at the owner's direction to skip M5 and start M6. T5.1 is marked blocked; T5.2–T5.5 remain todo because they depend on M5 monitoring data and checks. Revisit M5 when the owner requests it.
 
 ---
 
@@ -58,12 +60,12 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T4.1 | Live connections | done | `feat(T4.1): observed connections` |
 | T4.2 | Unknown nodes | done | `feat(T4.2): unknown node expansion` |
 | T4.3 | Drift and scheduled discovery | done | `feat(T4.3): drift and scheduled discovery` |
-| T5.1 | Metric poller | todo | |
+| T5.1 | Metric poller | blocked | |
 | T5.2 | Health checks | todo | |
 | T5.3 | Alert engine and Alerts page | todo | |
 | T5.4 | Notifications | todo | |
 | T5.5 | Overview with real data | todo | |
-| T6.1 | Tool registry and execution modes | todo | |
+| T6.1 | Tool registry and execution modes | in-progress | |
 | T6.2 | Action log | todo | |
 | T6.3 | Agent chat with tools | todo | |
 | T6.4 | SSH attack detection and bans | todo | |
@@ -133,3 +135,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · resumed T4.3 · started drift comparison and scheduled discovery
 - 2026-11-14 · Codex / GPT-6 · T4.3 · drift service, persistent schedule and initial UI implemented; SQLite ordering adjusted, build clean and 49/49 tests pass
 - 2026-11-14 · Codex / GPT-6 · T4.3 · complete; synthetic snapshots showed add/remove/change graph highlights, schedule save/readback and both themes verified; build clean and 49/49 tests pass
+- 2026-11-14 · Codex / GPT-6 · resumed T6.1 · owner directed skipping M5; initial build passed with 0 warnings/errors and tests passed (49/49)
