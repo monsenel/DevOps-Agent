@@ -6,7 +6,7 @@ This folder is the **planning and handoff kit** for building it with an AI codin
 
 ## Run the app
 
-Requirements: Docker Compose v2, a Linux server reachable over SSH, its private key, and its SSH host key.
+Requirements: Docker Compose v2, a Linux server reachable over SSH, its private key, and its SSH host key. Keep the app behind your VPN or WireGuard.
 
 1. Create local data and key folders, then copy SSH material into `./keys`:
 
@@ -30,7 +30,15 @@ Requirements: Docker Compose v2, a Linux server reachable over SSH, its private 
 
 4. Add an LLM provider in **Settings → LLM** to enable Agent chat and proposed actions. Ollama can also run with `docker compose --profile ollama up --build -d`.
 
-Keep the app and its SSH access behind a VPN or WireGuard. The app must be able to route to the server addresses from inside its container; do not expose its unauthenticated network path or SSH keys to the public internet.
+The app container has `host.docker.internal` mapped to the Docker host gateway. Use that name for SSH targets reachable through a host-published port, such as a local test lab; `127.0.0.1` inside the app container refers to the container itself.
+
+### Test lab and safe first run
+
+The disposable lab script (`dva-testlab.sh`, kept outside this repository) can create the staging SSH targets used for acceptance checks. Start and inspect only the lab containers you need, then add their SSH key and verified host-key entries as described above. For a host-published SSH port, use `host.docker.internal` as the server address from the app. Do not register `srv-search` when checking the Unknown-node journey; it should be discovered as an unregistered peer.
+
+For a first run against real servers, add one server in **read-only** execution mode and run discovery before enabling Agent actions. Review the resulting inventory and graph, then configure notifications and an LLM provider as needed. Keep the app and its SSH access behind a VPN or WireGuard; do not expose the login or SSH keys to the public internet.
+
+Notifications can use ntfy (server URL, topic, optional token) or Telegram (bot token and chat ID) under **Settings → Notifications**. Configure a destination and use **Test** before relying on alert delivery. Agent chat requires a provider under **Settings → LLM**; local Ollama can be started with the command above, or use an OpenAI-compatible endpoint such as LM Studio or OpenRouter.
 
 ## Files
 

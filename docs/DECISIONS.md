@@ -96,3 +96,8 @@ Format: `D-<number> · <date> · <title>` then Decision / Why / Consequences.
 - **Decision:** Use Graphify's local knowledge graph to navigate first-party code relationships and review architecture changes. Exclude vendored browser libraries, `bin/`, `obj/`, and `*.min.js` through `.graphifyignore`. Keep generated `graphify-out/` output locally and ignore it in Git.
 - **Why:** The graph helps trace first-party cross-file relationships, while third-party/minified bundles and generated build artifacts add opaque symbols and duplicate noise. Generated graph JSON/HTML are reproducible and should not grow repository history.
 - **Consequences:** Rebuild the local graph after code changes when needed; do not commit `graphify-out/` artifacts.
+
+### D-023 · 2026-11-14 · Reach host-published SSH targets from the app container
+- **Decision:** Map `host.docker.internal` to Docker's host gateway for the app service.
+- **Why:** On Linux, a disposable SSH lab may publish its port on the host loopback; the app container needs a stable route to that host port, and its own `127.0.0.1` cannot reach it.
+- **Consequences:** Configure those inventory entries with `host.docker.internal` and the published port. Keep ordinary server routing and VPN requirements unchanged.
