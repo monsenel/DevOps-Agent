@@ -12,32 +12,22 @@
 ## Current
 
 - **Task:** T1.2 SSH pool and runner
-- **Status:** in-progress
+- **Status:** done
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 - The owner supplied a disposable SSH lab for T1.2, T2.7, T3.3, T6.4, and T6.5. The same target set supports T5.5. Add only `srv-edge`, `srv-app`, and `srv-db`; keep `srv-search` undiscovered so it can validate J2.
 - Done: verified all three lab containers are running and their private IPs and ED25519 fingerprints match the supplied values. Copied the private key into ignored `./keys` without displaying its contents; key and `known_hosts` are owned by the app user with mode 0600, and the folder is 0700. Only the three approved host keys are pinned.
-- Exact next step: start the local DevOps Agent with `ServerInventory__KeyDirectory` and `Ssh__KnownHostsFile` pointed at ignored `./keys` while preserving its existing local test database and login, then add `srv-edge`, `srv-app` (through `srv-edge`), and `srv-db`. Verify direct and jump connections. Never add `srv-search` and never use a server tagged `prod`.
+- T1.2 live acceptance passed: `srv-edge` connected directly; `srv-app` and `srv-db` connected through `srv-edge`. Capability probes reported Debian 12, uptime, passwordless sudo, and `docker`, `ip`, `ss` on all three. The app inventory contains only the requested three staging servers; `srv-search` was not added. Build passed with 0 warnings/errors; tests passed (106/106).
 - Files touched so far in this resumed session: `docs/PROGRESS.md`; ignored local `keys/dva_test_ed25519` and `keys/known_hosts`.
 
 ## Blockers
 
-T1.2 live SSH acceptance is blocked because there is no configured test host or jump host and `/keys` has no identity or `known_hosts` files. Fake-runner tests, exact host/port pin tests, route-cycle rejection, and isolated app startup are verified. No real SSH connection was attempted. To unblock, provide an authorized direct host and jump-host route with identity keys and independently verified `/keys/known_hosts` entries.
-
-Per owner direction, T1.2 live verification is deferred while T2.1 proceeds; return to those checks when authorized test hosts and keys are available.
-
-T2.7 live acceptance is blocked by the same missing authorized SSH targets and pinned host keys. The topology UI was verified with a temporary two-host persisted graph, but that does not satisfy the plan's real two-server discovery criterion. Return to T2.7 once live SSH verification can run.
-
-T3.3's implementation and synthetic trace tests are complete, but PLAN requires J3 to work on real servers. Verification is blocked by the missing authorized SSH targets and pinned host keys recorded under T1.2/T2.7. Resume real trace/evidence verification when those are available; do not treat the synthetic UI check as satisfying J3.
+T5.4 live acceptance is blocked because no Telegram bot token/chat ID or ntfy URL/topic/token is configured. Code and mocked HTTP contracts are verified; no message was sent to a third-party destination. Exact unblock step: configure one destination in Settings › Notifications, use Send test message, then verify both alert-open and alert-resolve delivery.
 
 The prior M5 deferral has been lifted by the owner's instruction to continue task by task. T5.1, T5.2, and T5.3 are complete. T5.3 live acceptance passed on 2026-11-14: the selected Docker container triggered an alert within 2 minutes, was restarted, and its alert auto-resolved. No other blocked SSH acceptance was changed.
 
-T5.4 live acceptance is blocked because no Telegram bot token/chat ID or ntfy topic/token is configured. Code and mocked HTTP contracts are verified; no message was sent to a third-party destination. Exact unblock step: configure one destination in Settings › Notifications, use Send test message, then verify both alert-open and alert-resolve delivery.
-
-T6.4 implementation and fake-based coverage are complete. Live J5 acceptance requires the disposable non-production SSH container and verified host key listed above. No `prod` server will be used or recommended for testing.
-
-T6.6 remains blocked because T6.3 and T6.4 acceptance is unresolved; it depends on all preceding tasks and requires end-to-end journey checks.
+T6.6 remains blocked by T5.4's missing notification destination and the remaining end-to-end J7 destination check. Exact unblock step: configure the T5.4 notification destination, then walk J7 end to end after the requested live acceptance sequence.
 
 ---
 
@@ -56,7 +46,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T0.7 | Settings › LLM connection page | done | `feat(T0.7): llm connection settings` |
 | T0.8 | Basic chat (no tools) | done | `feat(T0.8): basic chat with Ollama and OpenRouter` |
 | T1.1 | Server inventory | done | `feat(T1.1): server inventory` |
-| T1.2 | SSH pool and runner | in-progress | |
+| T1.2 | SSH pool and runner | done | `feat(T1.2): verify direct and jump SSH in disposable lab` |
 | T1.3 | Import ssh config | done | `feat(T1.3): import ssh config` |
 | T2.1 | Collector framework and snapshots | done | `feat(T2.1): collector framework and snapshots` |
 | T2.2 | Host collector | done | `feat(T2.2): host collector` |
@@ -64,10 +54,10 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T2.4 | Docker collector | done | `feat(T2.4): docker collector` |
 | T2.5 | systemd collector | done | `feat(T2.5): systemd collector` |
 | T2.6 | Graph builder | done | `feat(T2.6): graph builder` |
-| T2.7 | Topology page | blocked | `wip(T2.7): topology page and graph interop` |
+| T2.7 | Topology page | in-progress | `wip(T2.7): topology page and graph interop` |
 | T3.1 | nginx parser | done | `feat(T3.1): nginx parser` |
 | T3.2 | Edge resolution | done | `feat(T3.2): nginx edge resolution` |
-| T3.3 | Evidence panel and Trace | blocked | `wip(T3.3): trace evidence UI` |
+| T3.3 | Evidence panel and Trace | todo | `wip(T3.3): trace evidence UI` |
 | T4.1 | Live connections | done | `feat(T4.1): observed connections` |
 | T4.2 | Unknown nodes | done | `feat(T4.2): unknown node expansion` |
 | T4.3 | Drift and scheduled discovery | done | `feat(T4.3): drift and scheduled discovery` |
@@ -75,11 +65,11 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T5.2 | Health checks | done | `feat(T5.2): scheduled health checks` |
 | T5.3 | Alert engine and Alerts page | done | `feat(T5.3): complete alert engine and live acceptance` |
 | T5.4 | Notifications | blocked | `wip(T5.4): implement notification delivery` |
-| T5.5 | Overview with real data | blocked | |
+| T5.5 | Overview with real data | todo | |
 | T6.1 | Tool registry and execution modes | done | `feat(T6.1): tool policies and approvals` |
 | T6.2 | Action log | done | `feat(T6.2): approved action execution and log` |
 | T6.3 | Agent chat with tools | done | `feat(T6.3): complete J4 tool and approval flow` |
-| T6.4 | SSH attack detection and bans | blocked | `wip(T6.4): implement SSH attack detection` |
+| T6.4 | SSH attack detection and bans | todo | `wip(T6.4): implement SSH attack detection` |
 | T6.5 | Updates | done | `feat(T6.5): updates inventory and approval flow` |
 | T6.6 | MVP hardening pass | blocked | |
 
@@ -199,4 +189,5 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T6.4 · auth-log parser/scanner, rolling cursor state, SSH attack alerts and fail2ban/UFW/nftables tool support complete; build clean and 106/106 tests pass with fakes only; live J5 awaits a disposable non-production SSH container
 - 2026-11-14 · Codex / GPT-6 · Graphify · incremental refresh after T6.4 (2,317 nodes, 6,351 edges, 157 communities); minified god-node labels remain absent; output ignored/untracked
 - 2026-11-14 · Codex / GPT-6 · resumed T1.2 · owner supplied a disposable SSH lab; start live acceptance with only srv-edge, srv-app, and srv-db; preserve srv-search as Unknown
-- 2026-11-14 · Codex / GPT-6 · T1.2 checkpoint · copied the lab key into ignored local keys and verified all three supplied host fingerprints; next start app with the key directory configured, then exercise direct and jump SSH
+- 2026-11-14 · Codex / GPT-6 · T1.2 · live direct and jump SSH capability probes passed for the three staging targets; build clean and 106/106 tests pass; srv-search not added
+- 2026-11-14 · Codex / GPT-6 · started T2.7 · run discovery on the disposable lab, verify graph, Unknown srv-search, themes and node details
