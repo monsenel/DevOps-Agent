@@ -1,7 +1,7 @@
 # Graph Report - DevOps-Agent  (2026-11-14)
 
 ## Corpus Check
-- 222 files · ~139,650 words
+- 222 files · ~139,655 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 16 file(s) not represented in the graph (top: (none) 6, .woff2 3, .props 2)
 
@@ -1131,7 +1131,7 @@ Cohesion: 0.67
 Nodes (3): Tsb(), vsb(), WSb()
 
 ## Knowledge Gaps
-- **396 isolated node(s):** `KeyDirectory`, `IsConnected`, `CreatedAtUtc`, `Group`, `Host` (+391 more)
+- **396 isolated node(s):** `KeyDirectory`, `CreatedAtUtc`, `Group`, `Host`, `Id` (+391 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1043 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **88 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -1139,16 +1139,16 @@ Nodes (3): Tsb(), vsb(), WSb()
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Guid` connect `Guid` to `MigrationBuilder`, `Task`, `AppDbContext`, `DiscoveryService.RunInternalAsync`, `DriftService`, `DriftChange`, `Updates.razor`, `UpdateScan`, `AppDbContext`, `IReadOnlyList`, `ToolRegistry.ToolRegistry`?**
-  _High betweenness centrality (0.013) - this node is a cross-community bridge._
-- **What connects `KeyDirectory`, `IsConnected`, `CreatedAtUtc` to the rest of the system?**
+  _High betweenness centrality (0.012) - this node is a cross-community bridge._
+- **What connects `KeyDirectory`, `CreatedAtUtc`, `Group` to the rest of the system?**
   _396 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Fact` be split into smaller, more focused modules?**
   _Cohesion score 0.05621500559910415 - nodes in this community are weakly interconnected._
 - **Why does `xh()` connect `cytoscape.min.js` to `elk.bundled.js`?**
-  _High betweenness centrality (0.013) - this node is a cross-community bridge._
+  _High betweenness centrality (0.008) - this node is a cross-community bridge._
 - **Should `Web Pages and Services` be split into smaller, more focused modules?**
   _Cohesion score 0.07956989247311828 - nodes in this community are weakly interconnected._
 - **Why does `bh()` connect `cytoscape.min.js` to `elk.bundled.js`?**
-  _High betweenness centrality (0.013) - this node is a cross-community bridge._
+  _High betweenness centrality (0.008) - this node is a cross-community bridge._
 - **Should `Guid` be split into smaller, more focused modules?**
   _Cohesion score 0.0290519877675841 - nodes in this community are weakly interconnected._
