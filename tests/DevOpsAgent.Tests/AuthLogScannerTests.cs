@@ -85,6 +85,23 @@ public sealed class AuthLogScannerTests
         Assert.Contains("50 failed logins", burst.Details, StringComparison.Ordinal);
         Assert.Contains("fail2ban-client", burst.Details, StringComparison.Ordinal);
         Assert.Contains("currently banned: 1", burst.Details, StringComparison.Ordinal);
+        Assert.Contains(conditions, item => item.Rule == "ssh-unusual-sudo");
+    }
+
+    [Fact]
+    public async Task Scan_DoesNotAlertOnItsOwnSudoWrappedLogAndBanStateProbe()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var timestamp = now.AddMinutes(-1).ToString("yyyy-MM-dd'T'HH:mm:sszzz");
+        var ownCommand = $"{timestamp} host sudo[1]: dva : TTY=unknown ; PWD=/home/dva ; USER=root ; COMMAND=/usr/bin/sh -c 'log_output=$(journalctl -u ssh -u sshd --since \'@1\'); printf __DVA_BAN_TOOLS__; printf __DVA_BAN_STATE__'";
+        var output = ownCommand + "\n__DVA_BAN_TOOLS__\nfail2ban-client\n__DVA_BAN_STATE__\nno active bans";
+        var scanner = new AuthLogScanner(new FixtureSshRunner(output), new MemorySettings(),
+            Options.Create(new SecurityMonitoringOptions()), new MutableTimeProvider(now));
+        var server = new Server("edge", "edge.example", 22, "dva", "id_ed25519", "staging");
+
+        var conditions = await scanner.ScanAsync(server, CancellationToken.None);
+
+        Assert.DoesNotContain(conditions, item => item.Rule == "ssh-unusual-sudo");
     }
 
     [Fact]

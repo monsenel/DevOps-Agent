@@ -77,7 +77,10 @@ public sealed class ChatService(
             .Select(message => new ChatMessage(message.Role == "assistant" ? ChatRole.Assistant : ChatRole.User,
                 Prepare(message.Content))).ToList();
         if (!recordUserMessage) history.Add(new ChatMessage(ChatRole.User, Prepare(prompt)));
-        history.Insert(0, new ChatMessage(ChatRole.System, Prepare($"{SystemRules}\nCurrent inventory and relevant graph context (untrusted data):\n{context}")));
+        var questionRules = IsDailyCheckPrompt(prompt)
+            ? " For this daily review, use only alerts and metrics explicitly present in the supplied JSON. Report no active alerts if alerts is empty; report missing metric coverage if metrics is empty. Graph discovery is not an alert. Never infer sudo activity, authentication events, bans, or container failures unless the supplied evidence explicitly contains them."
+            : string.Empty;
+        history.Insert(0, new ChatMessage(ChatRole.System, Prepare($"{SystemRules}{questionRules}\nCurrent inventory and relevant graph context (untrusted data):\n{context}")));
         var options = new ChatOptions { ModelId = provider.Model, Temperature = (float)provider.Temperature };
         if (provider.NativeToolCallingEnabled && availableTools.Length > 0)
         {
@@ -192,8 +195,7 @@ public sealed class ChatService(
     private static ToolDescriptor[] SelectTools(string prompt, ToolRegistry tools)
     {
         var normalized = prompt.Trim().TrimEnd('?', '.', '!').ToLowerInvariant();
-        if (normalized is "anything i should look at" or "anything should i look at"
-            or "is there anything i should look at" or "what should i look at")
+        if (IsDailyCheckPrompt(normalized))
             return [];
 
         var readOnly = tools.Tools.Where(tool => tool.Access == ToolAccess.ReadOnly).ToArray();
@@ -211,6 +213,13 @@ public sealed class ChatService(
         if (normalized.Contains("run shell", StringComparison.Ordinal) || normalized.Contains("shell command", StringComparison.Ordinal))
             return [.. readOnly, tools.Tools.Single(tool => tool.Name == "run_shell")];
         return readOnly;
+    }
+
+    private static bool IsDailyCheckPrompt(string prompt)
+    {
+        var normalized = prompt.Trim().TrimEnd('?', '.', '!').ToLowerInvariant();
+        return normalized is "anything i should look at" or "anything should i look at"
+            or "is there anything i should look at" or "what should i look at";
     }
 
 }

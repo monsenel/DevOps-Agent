@@ -42,6 +42,7 @@ public sealed class AuthLogScanner(ISshRunner sshRunner, IAppSettingRepository s
             // a small overlap and de-duplicate by source-line fingerprint to avoid losing
             // entries written in the same second as the previous cursor.
             .Where(item => item.Timestamp > state.CursorUtc.AddSeconds(-2) && item.Timestamp <= now)
+            .Where(item => !IsOwnScanCommand(item))
             .ToArray();
         var recent = state.RecentEvents
             .Where(item => item.Timestamp >= now - Window)
@@ -100,6 +101,12 @@ public sealed class AuthLogScanner(ISshRunner sshRunner, IAppSettingRepository s
 
     private static IReadOnlyList<AuthLogEvent> ActiveWindow(IEnumerable<AuthLogEvent> events, DateTimeOffset now) =>
         events.Where(item => item.Timestamp >= now - Window).ToArray();
+
+    private static bool IsOwnScanCommand(AuthLogEvent item) => item.Kind == AuthLogEventKind.SudoCommand
+        && item.Command is { } command
+        && command.Contains("journalctl -u ssh -u sshd --since", StringComparison.Ordinal)
+        && command.Contains("__DVA_BAN_TOOLS__", StringComparison.Ordinal)
+        && command.Contains("__DVA_BAN_STATE__", StringComparison.Ordinal);
 
     private async Task<AuthLogState> ReadStateAsync(string key, DateTimeOffset now, CancellationToken cancellationToken)
     {
