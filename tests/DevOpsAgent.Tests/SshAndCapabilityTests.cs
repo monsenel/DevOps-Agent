@@ -14,7 +14,7 @@ public sealed class SshAndCapabilityTests
     {
         await using var database = await CreateDatabaseAsync();
         var repository = new ServerRepository(database.Context);
-        var inventory = new ServerService(repository, new TestSecretProtector(), new TestKeyStore("id_ed25519"));
+        var inventory = new ServerService(repository, new TestSecretProtector(), new TestKeyStore("id_ed25519"), new RecordingSshConnectionPool());
         var server = await inventory.CreateAsync(new ServerInput(
             "edge", "edge.example.test", 22, "deploy", "id_ed25519", null, null, "prod", []), CancellationToken.None);
         var runner = new FakeSshRunner();
@@ -47,7 +47,7 @@ public sealed class SshAndCapabilityTests
     {
         await using var database = await CreateDatabaseAsync();
         var repository = new ServerRepository(database.Context);
-        var inventory = new ServerService(repository, new TestSecretProtector(), new TestKeyStore("id_ed25519"));
+        var inventory = new ServerService(repository, new TestSecretProtector(), new TestKeyStore("id_ed25519"), new RecordingSshConnectionPool());
         var server = await inventory.CreateAsync(new ServerInput(
             "edge", "edge.example.test", 22, "deploy", "id_ed25519", null, null, "prod", []), CancellationToken.None);
         var service = new ServerCapabilityService(new RejectingHostKeyRunner(), repository, TimeProvider.System);
@@ -157,6 +157,7 @@ public sealed class SshAndCapabilityTests
     private sealed class FakeSshConnectionPool(FakeSshCommandSession session) : ISshConnectionPool
     {
         public Task<ISshCommandSession> GetSessionAsync(Guid serverId, CancellationToken cancellationToken) => Task.FromResult<ISshCommandSession>(session);
+        public void Evict(Guid serverId) { }
         public void Dispose() { }
     }
 

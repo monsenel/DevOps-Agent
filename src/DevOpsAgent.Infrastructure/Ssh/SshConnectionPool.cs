@@ -26,6 +26,12 @@ public sealed class SshConnectionPool(
         return new SshCommandSession(connection.Client, () => InvalidateAsync(serverId, connection));
     }
 
+    public void Evict(Guid serverId)
+    {
+        // Sessions that depend on this entry as a jump host notice the replaced entry on their next request and reconnect.
+        if (!_disposed) RemoveConnection(serverId);
+    }
+
     public void Dispose()
     {
         if (_disposed)

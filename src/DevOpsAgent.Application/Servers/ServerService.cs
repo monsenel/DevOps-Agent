@@ -7,7 +7,8 @@ namespace DevOpsAgent.Application.Servers;
 public sealed class ServerService(
     IServerRepository repository,
     ISecretProtector secretProtector,
-    IServerKeyStore keyStore)
+    IServerKeyStore keyStore,
+    ISshConnectionPool connectionPool)
 {
     public async Task<IReadOnlyList<ServerSummary>> ListAsync(CancellationToken cancellationToken)
     {
@@ -45,6 +46,8 @@ public sealed class ServerService(
             input.Name.Trim(), input.Host.Trim(), input.Port, input.User.Trim(), input.KeyFile.Trim(), input.JumpServerId,
             NormalizeGroup(input.Group), SerializeTags(input.Tags), ProtectPassphrase(input.KeyPassphrase));
         await repository.SaveAsync(server, cancellationToken);
+        // Connection settings may have changed (host, user, key, jump route); never reuse the old session.
+        connectionPool.Evict(id);
         return ToSummary(server, servers);
     }
 
@@ -63,6 +66,7 @@ public sealed class ServerService(
         }
 
         await repository.DeleteAsync(server, cancellationToken);
+        connectionPool.Evict(id);
         return true;
     }
 

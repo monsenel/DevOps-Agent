@@ -20,6 +20,9 @@ public sealed class SshHostKeyMismatchException(string host, int port, string? f
 public interface ISshConnectionPool : IDisposable
 {
     Task<ISshCommandSession> GetSessionAsync(Guid serverId, CancellationToken cancellationToken);
+
+    /// <summary>Drops any pooled connection for the server, e.g. after its host, user or key changed or it was removed.</summary>
+    void Evict(Guid serverId);
 }
 
 public interface ISshCommandSession

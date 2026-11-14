@@ -13,7 +13,7 @@ public sealed class ServerInventoryTests
     {
         await using var database = await CreateDatabaseAsync();
         var repository = new ServerRepository(database.Context);
-        var service = new ServerService(repository, new TestSecretProtector(), new TestKeyStore("id_ed25519"));
+        var service = new ServerService(repository, new TestSecretProtector(), new TestKeyStore("id_ed25519"), new RecordingSshConnectionPool());
         var first = await service.CreateAsync(Input("edge", "secret phrase"), CancellationToken.None);
 
         Assert.True(first.HasKeyPassphrase);
@@ -40,10 +40,29 @@ public sealed class ServerInventoryTests
     }
 
     [Fact]
+    public async Task UpdateAndDeleteEvictThePooledSshConnection()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var pool = new RecordingSshConnectionPool();
+        var service = new ServerService(new ServerRepository(database.Context), new TestSecretProtector(),
+            new TestKeyStore("id_ed25519"), pool);
+        var server = await service.CreateAsync(Input("edge", null), CancellationToken.None);
+        Assert.Empty(pool.Evicted);
+
+        await service.UpdateAsync(server.Id, Input("edge", null) with { Host = "other.example.internal" }, CancellationToken.None);
+        Assert.Equal([server.Id], pool.Evicted);
+
+        Assert.False(await service.DeleteAsync(Guid.NewGuid(), CancellationToken.None));
+        Assert.Single(pool.Evicted);
+        Assert.True(await service.DeleteAsync(server.Id, CancellationToken.None));
+        Assert.Equal([server.Id, server.Id], pool.Evicted);
+    }
+
+    [Fact]
     public async Task JumpServerMustExistAndCannotBeRemovedWhileReferenced()
     {
         await using var database = await CreateDatabaseAsync();
-        var service = new ServerService(new ServerRepository(database.Context), new TestSecretProtector(), new TestKeyStore("id_ed25519"));
+        var service = new ServerService(new ServerRepository(database.Context), new TestSecretProtector(), new TestKeyStore("id_ed25519"), new RecordingSshConnectionPool());
         var jump = await service.CreateAsync(Input("gateway", null), CancellationToken.None);
         var target = await service.CreateAsync(Input("private-app", null) with { JumpServerId = jump.Id }, CancellationToken.None);
 
@@ -58,7 +77,7 @@ public sealed class ServerInventoryTests
     public async Task JumpServerRouteCannotContainACycle()
     {
         await using var database = await CreateDatabaseAsync();
-        var service = new ServerService(new ServerRepository(database.Context), new TestSecretProtector(), new TestKeyStore("id_ed25519"));
+        var service = new ServerService(new ServerRepository(database.Context), new TestSecretProtector(), new TestKeyStore("id_ed25519"), new RecordingSshConnectionPool());
         var gateway = await service.CreateAsync(Input("gateway", null), CancellationToken.None);
         var target = await service.CreateAsync(Input("private-app", null) with { JumpServerId = gateway.Id }, CancellationToken.None);
 
@@ -72,7 +91,7 @@ public sealed class ServerInventoryTests
     public async Task KeyFileMustBeAnAvailableNameWithoutPathTraversal()
     {
         await using var database = await CreateDatabaseAsync();
-        var service = new ServerService(new ServerRepository(database.Context), new TestSecretProtector(), new TestKeyStore("id_ed25519"));
+        var service = new ServerService(new ServerRepository(database.Context), new TestSecretProtector(), new TestKeyStore("id_ed25519"), new RecordingSshConnectionPool());
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             service.CreateAsync(Input("missing", null) with { KeyFile = "missing-key" }, CancellationToken.None));
