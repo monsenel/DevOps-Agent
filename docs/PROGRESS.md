@@ -6,30 +6,19 @@
 
 ## Current
 
-- **Task:** T2.7 Topology page
-- **Status:** blocked
+- **Task:** T3.1 nginx parser
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
 What is done so far:
-- T2.6 is complete and committed as `95a461a`; discovery now persists stable graph nodes, network attachments, listeners, and evidence, with service/network JSON views.
-- Resume baseline: `dotnet build DevOpsAgent.slnx` passed with zero warnings/errors and `dotnet test DevOpsAgent.slnx` passed all 31 tests.
-- T2.7 implementation is committed as `wip(T2.7): topology page and graph interop`; a temporary two-host compound graph verified ELK rendering, theme restyling, filtering, listener/evidence details, and the accessible node list.
-- Final build has zero warnings/errors, all 31 tests pass, `node --check` passes for graph.js, and `git diff --check` is clean.
+- T2.7 is implemented and committed as `4d053ee`; synthetic two-host browser verification passed, but its real SSH acceptance remains blocked until authorized hosts and pinned keys are available.
+- T3.1's plan, parser architecture, and deterministic parser decision are reviewed.
 What is next (exact next step):
-- When two authorized SSH targets and pinned host keys are available, run discovery against both and verify the real collected graph; then resume T2.7 acceptance. T3.1 can proceed independently.
+- Inspect the existing collector/parser conventions, then implement the nginx tokenizer and block parser with the required fixture cases.
 Files touched:
 - `docs/PROGRESS.md`
-- `docs/DECISIONS.md`
-- `src/DevOpsAgent.Application/Abstractions/ISnapshotRepository.cs`
-- `src/DevOpsAgent.Infrastructure/Persistence/SnapshotRepository.cs`
-- `src/DevOpsAgent.Web/Components/App.razor`
-- `src/DevOpsAgent.Web/Components/Pages/Topology.razor`
-- `src/DevOpsAgent.Web/Components/_Imports.razor`
-- `src/DevOpsAgent.Web/wwwroot/css/app.css`
-- `src/DevOpsAgent.Web/wwwroot/js/graph.js`
-- `src/DevOpsAgent.Web/wwwroot/lib/{cytoscape,cytoscape-elk,elkjs}/`
 Gotchas found:
 - T1.2 live direct/jump SSH verification remains deferred by owner direction; its status stays blocked.
 - T2.7's real two-server discovery criterion cannot be verified until authorized targets and pinned keys are configured; the browser check used a temporary synthetic persisted graph.
@@ -70,7 +59,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T2.5 | systemd collector | done | `feat(T2.5): systemd collector` |
 | T2.6 | Graph builder | done | `feat(T2.6): graph builder` |
 | T2.7 | Topology page | blocked | `wip(T2.7): topology page and graph interop` |
-| T3.1 | nginx parser | todo | |
+| T3.1 | nginx parser | in-progress | |
 | T3.2 | Edge resolution | todo | |
 | T3.3 | Evidence panel and Trace | todo | |
 | T4.1 | Live connections | todo | |
@@ -136,3 +125,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T2.7 · started
 - 2026-11-14 · Codex / GPT-6 · resumed T2.7 · clean working tree; build passed with zero warnings/errors and tests passed (31/31); reviewed topology UI requirements and implementation contracts
 - 2026-11-14 · Codex / GPT-6 · T2.7 · topology UI and graph interop implemented; synthetic two-host browser check passed, real SSH acceptance blocked by missing targets/keys; build/test pass (31/31)
+- 2026-11-14 · Codex / GPT-6 · T3.1 · started
