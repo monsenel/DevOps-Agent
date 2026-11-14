@@ -163,33 +163,26 @@ public sealed class SshConnectionPool(
         {
             client?.Dispose();
             privateKey?.Dispose();
-            if (tunnel is not null)
-            {
-                try { tunnel.Stop(); } catch (ObjectDisposedException) { }
-                tunnel.Dispose();
-            }
-
+            ReleaseTunnel(tunnel, jumpConnection);
             throw new SshHostKeyMismatchException(server.Host, server.Port, rejectedFingerprint);
         }
         catch
         {
             client?.Dispose();
             privateKey?.Dispose();
-            if (tunnel is not null)
-            {
-                try
-                {
-                    tunnel.Stop();
-                }
-                catch (ObjectDisposedException)
-                {
-                }
-
-                tunnel.Dispose();
-            }
-
+            ReleaseTunnel(tunnel, jumpConnection);
             throw;
         }
+    }
+
+    // Stops the tunnel and detaches it from the jump client, which would otherwise keep every dead tunnel registered.
+    private static void ReleaseTunnel(ForwardedPortLocal? tunnel, ConnectionEntry? jumpConnection)
+    {
+        if (tunnel is null) return;
+        // The jump client may already be disposed or disconnected (for example when it was replaced first).
+        try { tunnel.Stop(); } catch (Exception exception) when (exception is ObjectDisposedException or SshException) { }
+        try { jumpConnection?.Client.RemoveForwardedPort(tunnel); } catch (Exception exception) when (exception is ObjectDisposedException or SshException) { }
+        tunnel.Dispose();
     }
 
     // A connection-level failure leaves a poisoned client in the pool; drop exactly that entry (not a newer replacement)
@@ -238,7 +231,7 @@ public sealed class SshConnectionPool(
         public void Dispose()
         {
             Client.Dispose();
-            tunnel?.Dispose();
+            ReleaseTunnel(tunnel, JumpConnection);
             privateKey.Dispose();
         }
     }
