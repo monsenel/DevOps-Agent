@@ -6,13 +6,21 @@
 
 ## Current
 
-- **Task:** T2.4 Docker collector (DSC-3)
-- **Status:** done
+- **Task:** T2.5 systemd collector (DSC-4)
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
-_None; T2.4 is complete._
+What is done so far:
+- T2.4 is complete and committed as `84c070e`; Docker inventory captures containers, networks, labels, published ports, environment names only, and main PIDs.
+- Build passes with zero warnings/errors; all 26 tests pass.
+What is next (exact next step):
+- Extend per-server collector context with typed results from earlier collectors, then implement systemd unit listing/show parsing and fixture tests for units owning listener PIDs.
+Files touched:
+- `docs/PROGRESS.md`
+Gotchas found:
+- T1.2 live direct/jump SSH verification remains deferred by owner direction; its status stays blocked.
 
 ## Blockers
 
@@ -45,7 +53,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T2.2 | Host collector | done | `feat(T2.2): host collector` |
 | T2.3 | Listener collector | done | `feat(T2.3): listener collector` |
 | T2.4 | Docker collector | done | `feat(T2.4): docker collector` |
-| T2.5 | systemd collector | todo | |
+| T2.5 | systemd collector | in-progress | |
 | T2.6 | Graph builder | todo | |
 | T2.7 | Topology page | todo | |
 | T3.1 | nginx parser | todo | |
@@ -107,3 +115,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T2.3 · listener parser and collector; fixture coverage for endpoints, wildcard/scoped addresses, missing process info, sudo behavior; build/test pass (23/23)
 - 2026-11-14 · Codex / GPT-6 · T2.4 · started
 - 2026-11-14 · Codex / GPT-6 · T2.4 · Docker container/network collection, env value redaction, ID validation and fixture parser; build/test pass (26/26)
+- 2026-11-14 · Codex / GPT-6 · T2.5 · started
