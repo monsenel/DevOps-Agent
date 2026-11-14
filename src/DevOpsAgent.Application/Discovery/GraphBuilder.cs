@@ -302,12 +302,20 @@ public sealed class GraphBuilder
             {
                 var localServerNode = FindLocalListenerNode(state.Data, connection.LocalAddress, connection.LocalPort);
                 var peerServerNode = FindPeerListenerNode(connection.PeerAddress, connection.PeerPort);
-                if ((localServerNode is null) == (peerServerNode is null)) continue;
+                if (localServerNode is not null && peerServerNode is not null) continue;
 
                 GraphNode sourceNode;
                 GraphNode targetNode;
                 int serverPort;
-                if (localServerNode is not null)
+                if (localServerNode is null && peerServerNode is null)
+                {
+                    if (FindUniqueOwnerNode(connection.PeerAddress) is not null) continue;
+
+                    sourceNode = FindConnectionSourceNode(state, connection);
+                    targetNode = AddObservedUnknown(state.Data.Server.Id, connection.PeerAddress, connection.PeerPort);
+                    serverPort = connection.PeerPort;
+                }
+                else if (localServerNode is not null)
                 {
                     var peerOwner = FindUniqueOwnerNode(connection.PeerAddress);
                     sourceNode = peerOwner ?? AddObservedUnknown(state.Data.Server.Id, connection.PeerAddress, connection.PeerPort);

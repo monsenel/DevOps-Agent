@@ -174,6 +174,29 @@ public sealed class EdgeResolverTests
     }
 
     [Fact]
+    public void GraphBuilder_AddsUnknownTargetForOutboundConnectionToUninventoriedHost()
+    {
+        var collectedAt = DateTimeOffset.Parse("2026-11-14T08:30:00Z");
+        var source = Data("app", host: Host("10.0.0.1")) with
+        {
+            Connections = new ConnectionDiscoveryResult(
+                [new EstablishedConnectionInfo("host", null, "tcp", "ESTAB", "10.0.0.1", 57006, "10.0.0.3", 9200)],
+                [], collectedAt)
+        };
+
+        var graph = new GraphBuilder().Build(Guid.NewGuid(), [source]);
+        var sourceNode = graph.Nodes.Single(node => node.Key == $"host:{source.Server.Id:N}");
+        var unknown = Assert.Single(graph.Nodes, node => node.Kind == GraphNodeKind.Unknown
+            && node.AttributesJson.Contains("10.0.0.3", StringComparison.Ordinal));
+        var observed = Assert.Single(graph.Edges, edge => edge.Kind == GraphEdgeKind.Observed
+            && edge.SourceNodeId == sourceNode.Id && edge.TargetNodeId == unknown.Id);
+
+        Assert.Equal(9200, observed.Port);
+        Assert.Contains(graph.Evidence, item => item.EdgeId == observed.Id
+            && item.Description.Contains("10.0.0.1:57006 ↔ 10.0.0.3:9200", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void GraphBuilder_MapsContainerNamespaceClientAndShowsCapabilityNotesOnHost()
     {
         var client = Data("api-host", docker: Docker(Container("api", "sample/api", "prod", "api",
