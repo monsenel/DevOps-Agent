@@ -176,7 +176,7 @@ public sealed class ChatService(
         });
         var requiredJson = requiredProperties.Count == 0 ? string.Empty : $",\"required\":[{string.Join(",", requiredProperties)}]";
         using var schema = JsonDocument.Parse($"{{\"type\":\"object\",\"properties\":{{{string.Join(",", properties)}}}{requiredJson},\"additionalProperties\":false}}");
-        return AIFunctionFactory.CreateDeclaration(descriptor.Name, descriptor.Description, schema.RootElement);
+        return AIFunctionFactory.CreateDeclaration(descriptor.Name, descriptor.Description, schema.RootElement.Clone());
     }
 
     private static string ToJsonType(Type type) => type == typeof(string) || type == typeof(Guid) ? "string"
