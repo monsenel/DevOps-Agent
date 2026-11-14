@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
+using System.Net.Sockets;
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Domain.Servers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Renci.SshNet;
+using Renci.SshNet.Common;
 
 namespace DevOpsAgent.Infrastructure.Ssh;
 
@@ -21,7 +23,7 @@ public sealed class SshConnectionPool(
     public async Task<ISshCommandSession> GetSessionAsync(Guid serverId, CancellationToken cancellationToken)
     {
         var connection = await GetOrConnectAsync(serverId, [], cancellationToken);
-        return new SshCommandSession(connection.Client);
+        return new SshCommandSession(connection.Client, () => InvalidateAsync(serverId, connection));
     }
 
     public void Dispose()
@@ -190,6 +192,32 @@ public sealed class SshConnectionPool(
         }
     }
 
+    // A connection-level failure leaves a poisoned client in the pool; drop exactly that entry (not a newer replacement)
+    // so the next request reconnects.
+    private async Task InvalidateAsync(Guid serverId, ConnectionEntry entry)
+    {
+        if (_disposed || !_connectionLocks.TryGetValue(serverId, out var gate)) return;
+        try
+        {
+            await gate.WaitAsync(CancellationToken.None);
+            try
+            {
+                if (_connections.TryRemove(new KeyValuePair<Guid, ConnectionEntry>(serverId, entry)))
+                {
+                    entry.Dispose();
+                }
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+            // The pool was disposed while the failure was being handled; nothing is left to invalidate.
+        }
+    }
+
     private void RemoveConnection(Guid serverId)
     {
         if (_connections.TryRemove(serverId, out var previous))
@@ -215,7 +243,7 @@ public sealed class SshConnectionPool(
         }
     }
 
-    private sealed class SshCommandSession(SshClient client) : ISshCommandSession
+    private sealed class SshCommandSession(SshClient client, Func<Task> onConnectionFailure) : ISshCommandSession
     {
         public bool IsConnected => client.IsConnected;
 
@@ -234,16 +262,26 @@ public sealed class SshConnectionPool(
                 throw new ArgumentOutOfRangeException(nameof(timeout), "Command timeout must be positive.");
             }
 
-            using var sshCommand = client.CreateCommand(command);
-            sshCommand.CommandTimeout = timeout;
-            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-            await sshCommand.ExecuteAsync(cancellationToken);
-            stopwatch.Stop();
-            return new RemoteCommandResult(
-                sshCommand.ExitStatus,
-                sshCommand.Result,
-                sshCommand.Error,
-                stopwatch.Elapsed);
+            try
+            {
+                using var sshCommand = client.CreateCommand(command);
+                sshCommand.CommandTimeout = timeout;
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                await sshCommand.ExecuteAsync(cancellationToken);
+                stopwatch.Stop();
+                return new RemoteCommandResult(
+                    sshCommand.ExitStatus,
+                    sshCommand.Result,
+                    sshCommand.Error,
+                    stopwatch.Elapsed);
+            }
+            catch (Exception exception) when (exception is SshOperationTimeoutException or SshConnectionException
+                or SocketException or ObjectDisposedException)
+            {
+                // INV-5: reconnect on failure. Drop the pooled client so the next call opens a fresh connection.
+                await onConnectionFailure();
+                throw;
+            }
         }
     }
 }
