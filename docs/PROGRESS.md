@@ -9,7 +9,7 @@
 - **Task:** T5.3 Alert engine and Alerts page
 - **Status:** blocked
 - **Last updated:** 2026-11-14 by Codex
-T5.3 implementation is complete; only live container stop/restart acceptance remains. Exact next step: run PLAN.md acceptance against an authorized Docker-capable SSH server with a pinned host key; confirm alert opens within 2 minutes and resolves after restart.
+T5.3 implementation is complete; only live container stop/restart acceptance remains. Exact next step: use the authorized Docker-capable SSH test server and pinned host key once they are supplied; run PLAN.md container stop/restart acceptance, then confirm alert opens within 2 minutes and resolves after restart. The owner authorized the attempt, but no target is configured locally.
 ## WIP notes
 
 T5.3 implementation is complete: persistent de-duplicated alert lifecycle; scheduled read-only SSH status polling for Docker and failed systemd units; disk, sustained memory/load, SSH reachability, health-check, TLS expiry, and new-listener rules; Alerts page, sidebar count, and graph severity overlay. Build is clean with 0 warnings/errors, 90/90 tests pass, AddAlerts migration applied in isolated SQLite, and the seeded Alerts page was verified in light/dark. Exact next step: run the PLAN.md container-stop/restart acceptance against an authorized Docker-capable SSH server with a pinned host key; confirm alert opens within 2 minutes and resolves after restart. No such target/key is configured.
@@ -24,7 +24,7 @@ T2.7 live acceptance is blocked by the same missing authorized SSH targets and p
 
 T3.3's implementation and synthetic trace tests are complete, but PLAN requires J3 to work on real servers. Verification is blocked by the missing authorized SSH targets and pinned host keys recorded under T1.2/T2.7. Resume real trace/evidence verification when those are available; do not treat the synthetic UI check as satisfying J3.
 
-The prior M5 deferral has been lifted by the owner's instruction to continue task by task. T5.1 and T5.2 are complete. T5.3 implementation is complete, but live acceptance is blocked: no authorized Docker-capable SSH target and pinned host key are configured. Continue when those are available; do not run container-stop tests against owner servers without authorization.
+The prior M5 deferral has been lifted by the owner's instruction to continue task by task. T5.1 and T5.2 are complete. T5.3 implementation is complete, but live acceptance is blocked: no authorized Docker-capable SSH target and pinned host key are configured. Continue when those are available; do not run container-stop tests against owner servers without authorization. The owner authorized the live acceptance attempt on 2026-11-14; inspection found `/keys` empty and the local app database contains zero server records, so there is no address or pinned key to connect to. No remote command was run.
 
 T6.4 is deferred because it depends on incomplete T6.3 and blocked T5.3. Resume after those dependencies are completed.
 
@@ -173,3 +173,5 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T5.3 · alert engine, rule signals, lifecycle, Alerts UI/sidebar badge/graph overlay implemented; 90/90 tests pass, 0-warning build, migration/runtime UI checked; container stop/restart acceptance blocked by missing authorized SSH target and pinned key
 
 - 2026-11-14 · Codex / GPT-6 · resumed T5.3 · confirmed blocked live acceptance; rebuilt Graphify (5,894 nodes, 20,083 edges, 306 communities), integrity check found 60 self-loops and no dangling/missing endpoints
+
+- 2026-11-14 · Codex / GPT-6 · T5.3 · owner authorized live acceptance; checked `/keys` and app inventory (empty); no SSH target or pinned host key exists locally, so remote test cannot run
