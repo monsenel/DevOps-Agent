@@ -17,8 +17,9 @@
 
 ## WIP notes
 - The owner supplied a disposable SSH lab for T1.2, T2.7, T3.3, T6.4, and T6.5. The same target set supports T5.5. Add only `srv-edge`, `srv-app`, and `srv-db`; keep `srv-search` undiscovered so it can validate J2.
-- Exact next step: inspect SSH/key-store configuration, verify the supplied host fingerprints, copy the private key into the configured local key directory with restrictive permissions, then add the three supplied servers and verify direct plus jump-host connections. Never add `srv-search` and never use a server tagged `prod`.
-- Files touched so far in this resumed session: `docs/PROGRESS.md`.
+- Done: verified all three lab containers are running and their private IPs and ED25519 fingerprints match the supplied values. Copied the private key into ignored `./keys` without displaying its contents; key and `known_hosts` are owned by the app user with mode 0600, and the folder is 0700. Only the three approved host keys are pinned.
+- Exact next step: start the local DevOps Agent with `ServerInventory__KeyDirectory` and `Ssh__KnownHostsFile` pointed at ignored `./keys` while preserving its existing local test database and login, then add `srv-edge`, `srv-app` (through `srv-edge`), and `srv-db`. Verify direct and jump connections. Never add `srv-search` and never use a server tagged `prod`.
+- Files touched so far in this resumed session: `docs/PROGRESS.md`; ignored local `keys/dva_test_ed25519` and `keys/known_hosts`.
 
 ## Blockers
 
@@ -198,3 +199,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T6.4 · auth-log parser/scanner, rolling cursor state, SSH attack alerts and fail2ban/UFW/nftables tool support complete; build clean and 106/106 tests pass with fakes only; live J5 awaits a disposable non-production SSH container
 - 2026-11-14 · Codex / GPT-6 · Graphify · incremental refresh after T6.4 (2,317 nodes, 6,351 edges, 157 communities); minified god-node labels remain absent; output ignored/untracked
 - 2026-11-14 · Codex / GPT-6 · resumed T1.2 · owner supplied a disposable SSH lab; start live acceptance with only srv-edge, srv-app, and srv-db; preserve srv-search as Unknown
+- 2026-11-14 · Codex / GPT-6 · T1.2 checkpoint · copied the lab key into ignored local keys and verified all three supplied host fingerprints; next start app with the key directory configured, then exercise direct and jump SSH
