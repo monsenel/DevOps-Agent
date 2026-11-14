@@ -23,8 +23,22 @@ namespace DevOpsAgent.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTimeOffset?>("ApprovedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ArgumentsJson")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CommandsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("CompletedAtUtc")
                         .HasColumnType("TEXT");
 
                     b.Property<Guid?>("ConversationId")
@@ -33,9 +47,19 @@ namespace DevOpsAgent.Infrastructure.Migrations
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<long?>("DurationMilliseconds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ExitCode")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Group")
                         .IsRequired()
                         .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ResultsJson")
+                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ServerIdsJson")

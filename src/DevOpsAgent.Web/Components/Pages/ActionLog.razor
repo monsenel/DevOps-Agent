@@ -27,7 +27,7 @@
         <div class="action-log-table-wrap">
             <table class="action-log-table">
                 <thead>
-                    <tr><th scope="col">Time</th><th scope="col">Tool</th><th scope="col">Servers</th><th scope="col">Status</th><th scope="col">Duration</th><th scope="col"><span class="sr-only">Details</span></th></tr>
+                    <tr><th scope="col">Time</th><th scope="col">Tool</th><th scope="col">Servers</th><th scope="col">Status</th><th scope="col">Duration</th><th scope="col">Details</th></tr>
                 </thead>
                 <tbody>
                     @foreach (var entry in _entries)
@@ -186,7 +186,7 @@
     {
         ActionRecordStatus.Proposed => "warn",
         ActionRecordStatus.Approved or ActionRecordStatus.Running => "soft",
-        ActionRecordStatus.Succeeded => "success",
+        ActionRecordStatus.Succeeded => "soft",
         ActionRecordStatus.Failed => "danger",
         ActionRecordStatus.Rejected => "neutral",
         _ => "neutral"
