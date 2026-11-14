@@ -204,7 +204,7 @@
         try
         {
             DevOpsAgent.Domain.Agent.ActionRecord action;
-            var reviewer = (await AuthenticationState.GetAuthenticationStateAsync()).User.Identity?.Name ?? "admin";
+            var reviewer = ApproverName.Resolve((await AuthenticationState.GetAuthenticationStateAsync()).User.Identity?.Name);
             if (approve)
             {
                 action = await ActionExecution.ApproveAndRunAsync(id, reviewer, CancellationToken.None);

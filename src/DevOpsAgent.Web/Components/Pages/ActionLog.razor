@@ -140,7 +140,7 @@
         try
         {
             var user = await AuthenticationState.GetAuthenticationStateAsync();
-            var approvedBy = user.User.Identity?.Name ?? "admin";
+            var approvedBy = ApproverName.Resolve(user.User.Identity?.Name);
             await ActionExecution.ApproveAndRunAsync(id, approvedBy, CancellationToken.None);
             await LoadAsync();
             _expandedId = id;
@@ -161,7 +161,7 @@
         try
         {
             var user = await AuthenticationState.GetAuthenticationStateAsync();
-            await ActionExecution.RejectAsync(id, user.User.Identity?.Name ?? "admin", CancellationToken.None);
+            await ActionExecution.RejectAsync(id, ApproverName.Resolve(user.User.Identity?.Name), CancellationToken.None);
             await LoadAsync();
             _expandedId = id;
         }

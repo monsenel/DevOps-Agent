@@ -188,7 +188,7 @@
     }
 
     private async Task<string> GetUserNameAsync() =>
-        (await AuthenticationState.GetAuthenticationStateAsync()).User.Identity?.Name ?? "admin";
+        ApproverName.Resolve((await AuthenticationState.GetAuthenticationStateAsync()).User.Identity?.Name);
 
     private async Task ApproveAsync(Guid id)
     {
