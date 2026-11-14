@@ -53,7 +53,11 @@ public sealed class JsonToolProtocolTests
     [InlineData("export GITHUB_TOKEN=ghp_abcdefghijklmnop", "ghp_abcdefghijklmnop")]
     [InlineData("Authorization: Bearer eyJhbGciOi.payload.signature", "eyJhbGciOi.payload.signature")]
     [InlineData("curl -H 'Authorization: Bearer abcdef1234567890' https://api.example", "abcdef1234567890")]
-    [InlineData("the proxy replied Bearer abcdef1234567890 unexpectedly", "abcdef1234567890")]
+    [InlineData("X-Api-Token: tok_live_123456", "tok_live_123456")]
+    [InlineData("{\"clientSecret\": \"it's a \\\"quoted\\\" secret\"}", "quoted")]
+    [InlineData("{\"apiKey\": 123456789}", "123456789")]
+    [InlineData("password: \"unterminated-secret", "unterminated-secret")]
+    [InlineData("Proxy-Authorization: Basic dXNlcjpwYXNzd29yZA==", "dXNlcjpwYXNzd29yZA==")]
     [InlineData("-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXk\n-----END OPENSSH PRIVATE KEY-----", "b3BlbnNzaC1rZXk")]
     public void RedactsBroadSecretShapes(string input, string secret)
     {
@@ -71,5 +75,37 @@ public sealed class JsonToolProtocolTests
         Assert.Contains("Authorization: Bearer [REDACTED]", redacted, StringComparison.Ordinal);
         Assert.Contains("DB_PASSWORD=[REDACTED]", redacted, StringComparison.Ordinal);
         Assert.Contains("host=db1 port=5432 \"user\": \"deploy\"", redacted, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("max_tokens=4096 tokens_used: 1200 PWD=/home/deploy")]
+    [InlineData("Basic monitoring is enabled; the Bearer of bad news arrived")]
+    [InlineData("The token count is high and the password policy is documented")]
+    [InlineData("keyboard=us monkey=banana author=ops")]
+    public void LeavesNamesAndProseThatOnlyContainSecretWordsAlone(string input) =>
+        Assert.Equal(input, ChatContentRedactor.Redact(input));
+
+    [Fact]
+    public void MaskedJsonStaysValidJson()
+    {
+        var redacted = ChatContentRedactor.Redact("{\"password\": \"hunter2\", \"api_key\": 42, \"user\": \"deploy\", \"max_tokens\": 10}");
+
+        using var document = System.Text.Json.JsonDocument.Parse(redacted);
+        Assert.Equal("[REDACTED]", document.RootElement.GetProperty("password").GetString());
+        Assert.Equal("[REDACTED]", document.RootElement.GetProperty("api_key").GetString());
+        Assert.Equal("deploy", document.RootElement.GetProperty("user").GetString());
+        Assert.Equal(10, document.RootElement.GetProperty("max_tokens").GetInt32());
+    }
+
+    [Fact]
+    public void HugeAdversarialInputFinishesQuicklyAndNeverLeaksUnscannedText()
+    {
+        var hostile = string.Concat(Enumerable.Repeat("a=\"", 200_000)) + "password=hunter2";
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        var redacted = ChatContentRedactor.Redact(hostile);
+
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(10), $"took {stopwatch.Elapsed}");
+        Assert.DoesNotContain("hunter2", redacted, StringComparison.Ordinal);
     }
 }
