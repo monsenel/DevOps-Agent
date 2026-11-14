@@ -119,9 +119,11 @@
                     <div class="field">
                         <label for="server-group">Group</label>
                         <InputSelect id="server-group" @bind-Value="_form.Group">
+                            <option value="">Select a group</option>
                             <option value="prod">Production</option>
                             <option value="staging">Staging</option>
                         </InputSelect>
+                        <ValidationMessage For="() => _form.Group" />
                     </div>
                     <div class="field">
                         <label for="server-host">Host</label>
@@ -223,9 +225,21 @@
                 <label for="ssh-config-text">SSH config</label>
                 <textarea id="ssh-config-text" class="mono" @bind="_sshConfigText" @bind:event="oninput" rows="9" spellcheck="false" placeholder="Paste an OpenSSH config snippet"></textarea>
             </div>
+            <div class="field">
+                <label for="ssh-import-group">Group for imported servers</label>
+                <select id="ssh-import-group" @bind="_importGroup">
+                    <option value="">Select a group</option>
+                    <option value="prod">Production</option>
+                    <option value="staging">Staging</option>
+                </select>
+            </div>
             @if (!string.IsNullOrWhiteSpace(_importError))
             {
                 <div class="alert-message error" role="alert">@_importError</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(_importMessage))
+            {
+                <div class="settings-message success" role="status">@_importMessage</div>
             }
             @if (_importRows.Count > 0)
             {
@@ -263,7 +277,7 @@
             <div class="dialog-actions">
                 <button class="ui-button secondary" type="button" @onclick="CloseImport">Cancel</button>
                 <button class="ui-button secondary" type="button" @onclick="PreviewSshConfig" disabled="@_importing">Preview</button>
-                <button class="ui-button primary" type="button" @onclick="ImportSshConfigAsync" disabled="@(_importing || !_importRows.Any(row => row.CanImport))">@(_importing ? "Importing…" : "Import ready servers")</button>
+                <button class="ui-button primary" type="button" @onclick="ImportSshConfigAsync" disabled="@(_importing || string.IsNullOrWhiteSpace(_importGroup) || !_importRows.Any(row => row.CanImport))">@(_importing ? "Importing…" : "Import ready servers")</button>
             </div>
         </section>
     </div>
@@ -324,6 +338,8 @@
     private bool _importing;
     private string _sshConfigText = string.Empty;
     private string? _importError;
+    private string? _importMessage;
+    private string _importGroup = string.Empty;
     private IReadOnlyList<SshConfigImportRow> _importRows = [];
     private int _skippedWildcardCount;
     private string? _pageError;
@@ -428,6 +444,8 @@
         _sshConfigText = string.Empty;
         _importRows = [];
         _importError = null;
+        _importMessage = null;
+        _importGroup = string.Empty;
         _skippedWildcardCount = 0;
         _importDialogOpen = true;
     }
@@ -480,8 +498,15 @@
 
     private async Task ImportSshConfigAsync()
     {
-        _importing = true;
         _importError = null;
+        _importMessage = null;
+        if (string.IsNullOrWhiteSpace(_importGroup))
+        {
+            _importError = "Choose the group for the imported servers.";
+            return;
+        }
+
+        _importing = true;
         try
         {
             var remaining = _importRows.Where(row => row.CanImport).ToList();
@@ -540,7 +565,7 @@
                 {
                     var created = await ServersService.CreateAsync(new ServerInput(
                         row.Entry.Alias, row.Entry.HostName, row.Entry.Port, row.Entry.User, row.KeyFile!, null,
-                        jumpServerId, "prod", []), CancellationToken.None);
+                        jumpServerId, _importGroup, []), CancellationToken.None);
                     importedByAlias[row.Entry.Alias] = created.Id;
                     importedCount++;
                 }
@@ -553,7 +578,7 @@
             await LoadAsync();
             if (importedCount > 0)
             {
-                _importError = $"Imported {importedCount} server(s). Review any rows marked with an error before importing them separately.";
+                _importMessage = $"Imported {importedCount} server(s). Review any rows marked with an error before importing them separately.";
                 _importRows = _importRows.Where(row => row.Error is not null).ToArray();
                 if (_importRows.Count == 0)
                 {
@@ -679,8 +704,8 @@
         public string KeyFile { get; set; } = string.Empty;
         public string? KeyPassphrase { get; set; }
         public Guid? JumpServerId { get; set; }
-        [System.ComponentModel.DataAnnotations.Required]
-        public string Group { get; set; } = "prod";
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Choose a group.")]
+        public string Group { get; set; } = string.Empty;
         public string TagsText { get; set; } = string.Empty;
     }
 
