@@ -17,7 +17,7 @@
 
 ## WIP notes
 
-None. The 2026-11-15 review fixed small issues in 41 `fix(review): …` commits (build 0 warnings, 246/246 tests) and filed T7.R1–T7.R13 in PLAN.md › M7.
+None. The 2026-11-15 review fixed small issues in 50 `fix(review): …` commits (build 0 warnings, 290/290 tests) and filed T7.R1–T7.R13 in PLAN.md › M7.
 
 ### MVP review (2026-11-15)
 
@@ -104,7 +104,7 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 
 One line per session: date · tool/model · tasks touched · result.
 
-- 2026-11-15 · ZCode / Claude · MVP review M0–M6 · static + live lab review; 41 `fix(review)` commits (atomic approvals, fail-closed execution modes, sudo alert de-dup, SSH pool hygiene, redaction, sensitive paths, snapshot status, secrets in logs/URLs); build 0 warnings, 246/246 tests; larger findings filed as T7.R1–T7.R13
+- 2026-11-15 · ZCode / Claude · MVP review M0–M6 · static + live lab review; 50 `fix(review)` commits (three fix/re-review rounds) (atomic approvals, fail-closed execution modes, sudo alert de-dup, SSH pool hygiene, redaction, sensitive paths, snapshot status, secrets in logs/URLs); build 0 warnings, 290/290 tests; larger findings filed as T7.R1–T7.R13
 
 - 2026-11-15 · Codex / GPT-6 · completed T6.6 · J1–J7 accepted on staging (J4 with configured OpenRouter); clean-clone Docker acceptance, 0-warning build, 119/119 tests, tracked-secret scan clean; systemd live verification deferred to real LXC/VM; release commit ready for v0.1.0 tag
 

@@ -223,12 +223,12 @@ Requirement IDs (LLM-1, DSC-2 …) refer to `docs/PRD.md`.
 Raised by the 2026-11-15 MVP review. Small issues were fixed directly (`fix(review): …` commits); these are the larger ones. Ordered by severity. They fix gaps against existing PRD/PLAN requirements; they are not new features.
 
 ### T7.R1 SSH connection lifecycle (INV-5, NFR-2) — high
-- **Do:** Lease/ref-count pooled clients so a client (or a jump tunnel) is never disposed while another caller is mid-command. Single-flight connect per server plus a short negative cache (30–60 s) for unreachable hosts and jump hosts. Detect silently dead sessions (blackholed peer, `IsConnected` still true) with a liveness rule — e.g. recycle after N consecutive command timeouts with no success — without recycling on one slow command. Skip a server's remaining collectors after a connection-level failure; per-call deadline that includes connect time.
+- **Do:** Lease/ref-count pooled clients so a client (or a jump tunnel) is never disposed while another caller is mid-command. Single-flight connect per server plus a short negative cache (30–60 s) for unreachable hosts and jump hosts. Detect silently dead sessions (blackholed peer, `IsConnected` still true) with a liveness rule — e.g. recycle after N consecutive command timeouts with no success — without recycling on one slow command. Skip a server's remaining collectors after a connection-level failure; per-call deadline that includes connect time. The review added a 3-consecutive-timeout recycle (`SshTimeoutTracker`); cover the pool wiring (generation counter, identity-checked invalidation, timeout recycle) with fake-transport tests.
 - **Done when:** Unit tests with a fake transport for leases, single-flight and negative cache. On the disposable lab with one TEST-NET (192.0.2.1) inventory entry behind `srv-edge`: discovery of the other servers is not delayed by more than one connect timeout, and the 60 s metric cycle does not overrun.
 - **Depends on:** —
 
 ### T7.R2 Stale nodes for unreachable servers (NFR-3) — high
-- **Do:** When a server's core collectors fail, carry its nodes/edges/listeners forward from the last usable snapshot, marked `stale` with last-seen time. Topology renders them dimmed with a text badge (not colour-only). Drift ignores stale carry-overs.
+- **Do:** When a server's core collectors fail, carry its nodes/edges/listeners forward from the last usable snapshot, marked `stale` with last-seen time. Topology renders them dimmed with a text badge (not colour-only). Drift ignores stale carry-overs. Until then, Partial snapshots still feed drift/alerts and can raise false new-listener alerts for servers that failed in the earlier run — compare only servers that succeeded in both snapshots.
 - **Done when:** Tests on fixture snapshots; on the lab, a server made unreachable keeps its last-known nodes visibly stale and no spurious drift/new-listener alerts.
 - **Depends on:** —
 
@@ -253,7 +253,7 @@ Raised by the 2026-11-15 MVP review. Small issues were fixed directly (`fix(revi
 - **Depends on:** —
 
 ### T7.R7 Monitoring throughput — medium
-- **Do:** Alert engine checks servers with bounded parallelism and skips the auth-log scan when the status probe fails. Notifications go through a background channel so a down Telegram/ntfy endpoint doesn't stall evaluation. Push metric time predicates into SQL (decide the `DateTimeOffset` storage/converter approach in DECISIONS; migration if needed). De-duplicate sudo events seen in both journald and auth.log.
+- **Do:** Alert engine checks servers with bounded parallelism and skips the auth-log scan when the status probe fails. Notifications go through a background channel so a down Telegram/ntfy endpoint doesn't stall evaluation. Push metric time predicates into SQL (decide the `DateTimeOffset` storage/converter approach in DECISIONS; migration if needed). De-duplicate sudo events seen in both journald and auth.log. The auth-log cursor uses the app clock while `--since` runs on the server clock and advances even when the journal query fails silently; fix both so events aren't skipped.
 - **Done when:** Tests; on the lab with one unreachable entry, alert evaluation for the others stays within its 30 s cycle.
 - **Depends on:** T7.R1
 
