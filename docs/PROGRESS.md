@@ -11,15 +11,15 @@
 
 ## Current
 
-- **Task:** T6.4 SSH attack detection and bans
-- **Status:** done
+- **Task:** T6.5 Updates — live J6 acceptance on disposable lab
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 - T5.5 is complete. Overview uses the lab's 3 servers, latest snapshot, graph/evidence, open alerts, metric samples, update-scan state, and default provider; Run discovery now rerenders the TopBar when shared discovery state changes. Live discovery refreshed successfully, the button returned to enabled, and both light/dark themes were visually checked. Build passed with 0 warnings/errors and tests passed (109/109). Files: `src/DevOpsAgent.Web/Components/Pages/Home.razor`, `src/DevOpsAgent.Web/Components/Layout/TopBar.razor`, `src/DevOpsAgent.Web/DiscoveryTriggerState.cs`, `src/DevOpsAgent.Web/Program.cs`, `src/DevOpsAgent.Web/wwwroot/css/app.css`.
 - T6.3 J4 had previously passed with Ollama and OpenRouter (see session log). Repeat acceptance in the current isolated app could not run: its provider table is empty and no Ollama endpoint responded on `127.0.0.1:11434`. Exact unblock step for repeating the live flow: configure/launch a local Ollama model or save an OpenRouter provider in the isolated app. Continue with T6.4; do not wait for this repeat. J2 follow-up remains: outbound app connection to srv-search does not yet appear as Unknown; keep srv-search out of inventory. Never use a server tagged `prod`.
 - T6.4 live J5 passed on the disposable lab after two fixes: parser counts OpenSSH `Invalid user` lines, and scanner splits output at the final sentinels because sudo audit lines contain the command's earlier marker strings. The 60-login one-off attack opened `SSH login attack detected` with 59–60 failures, attacker IP and usernames; fail2ban reported the attacker banned. The loop completed, runtime maxretry was restored to 5, and `unban --all` confirmed 0 active bans. The lab has only the three `staging` targets; `srv-search` remains absent. Build clean, 110/110 tests. Docker CLI is blocked by Snap confinement; the test used the local Docker API and existing lab image.
-- WIP notes cleared; T6.4 complete. The next task is T6.5 live acceptance.
+- T6.4 is complete and committed. Exact next step: inspect T6.5's Updates UI and apply flow, then scan updates on the three lab `staging` servers, verify security/standard classification, explicitly approve and apply any offered update on disposable targets only, and record the command/report plus reboot/restart status. If no updates are offered, capture the clean scan and note J6 apply could not be exercised. Never use a server tagged `prod`.
 
 ## Blockers
 
@@ -70,7 +70,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T6.2 | Action log | done | `feat(T6.2): approved action execution and log` |
 | T6.3 | Agent chat with tools | in-progress | `feat(T6.3): complete J4 tool and approval flow` |
 | T6.4 | SSH attack detection and bans | done | `feat(T6.4): verify SSH attack detection in disposable lab` |
-| T6.5 | Updates | todo | `feat(T6.5): updates inventory and approval flow` |
+| T6.5 | Updates | in-progress | `feat(T6.5): updates inventory and approval flow` |
 | T6.6 | MVP hardening pass | blocked | |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
@@ -201,3 +201,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex · T6.4 live diagnosis · invalid-user parser test passed but alert still absent; sudo audit lines contained marker sentinels and truncated parsed log; changed scanner to use final separators and added a burst regression test
 - 2026-11-14 · Codex · T6.4 scanner fix · build clean and 110/110 tests pass; next restart local app with `dva` allowlisted for its own sudo scan, then rerun the attack and verify alert + ban
 - 2026-11-14 · Codex · T6.4 · J5 passed live: 60 failed SSH logins from a disposable container opened the attack alert and fail2ban ban; restored lab maxretry=5 and unbanned all; parser/sentinel fixes, build clean and 110/110 tests
+- 2026-11-14 · Codex · started T6.5 live acceptance · inspect Updates UI and scan/classify/apply only on staging lab servers
