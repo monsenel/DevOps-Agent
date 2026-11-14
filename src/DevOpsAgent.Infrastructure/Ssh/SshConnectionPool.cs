@@ -99,18 +99,8 @@ public sealed class SshConnectionPool(
                     }
 
                     RemoveConnection(serverId);
-                    ConnectionEntry created;
-                    try
-                    {
-                        created = await CreateConnectionAsync(server, jumpConnection, cancellationToken);
-                    }
-                    catch (Exception exception) when (jumpConnection is not null && IsConnectTimeoutOrTransport(exception, cancellationToken))
-                    {
-                        // The tunnel through the jump host may be silently dead; repeated failures recycle the jump session too.
-                        if (jumpConnection.Timeouts.RecordTimeout()) Invalidate(jumpConnection.ServerId, jumpConnection);
-                        throw;
-                    }
-
+                    // Jump liveness relies on the jump's own command timeouts: a failing target behind a healthy jump must not recycle the jump.
+                    var created = await CreateConnectionAsync(server, jumpConnection, cancellationToken);
                     _connections[serverId] = created;
                     if (Generation(serverId) == generation) return created;
 
@@ -194,7 +184,7 @@ public sealed class SshConnectionPool(
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(_options.ConnectionTimeoutSeconds, 1, 300)));
             await client.ConnectAsync(timeout.Token);
-            return new ConnectionEntry(server.Id, client, privateKey, tunnel, jumpConnection);
+            return new ConnectionEntry(client, privateKey, tunnel, jumpConnection);
         }
         catch (Exception) when (rejectedFingerprint is not null)
         {
@@ -224,10 +214,6 @@ public sealed class SshConnectionPool(
 
     // A connection-level failure leaves a poisoned client in the pool; drop exactly that entry (not a newer replacement)
     // so the next request reconnects.
-    private static bool IsConnectTimeoutOrTransport(Exception exception, CancellationToken callerToken) =>
-        exception is SshOperationTimeoutException || SshTransportFailure.IsTransportFailure(exception)
-        || exception is OperationCanceledException && !callerToken.IsCancellationRequested;
-
     private void Invalidate(Guid serverId, ConnectionEntry entry)
     {
         // TryRemove(KeyValuePair) is identity-checked, so a newer replacement entry is never removed.
@@ -246,13 +232,11 @@ public sealed class SshConnectionPool(
     }
 
     private sealed class ConnectionEntry(
-        Guid serverId,
         SshClient client,
         PrivateKeyFile privateKey,
         ForwardedPortLocal? tunnel,
         ConnectionEntry? jumpConnection) : IDisposable
     {
-        public Guid ServerId { get; } = serverId;
         public SshClient Client { get; } = client;
         public ConnectionEntry? JumpConnection { get; } = jumpConnection;
         public SshTimeoutTracker Timeouts { get; } = new();
