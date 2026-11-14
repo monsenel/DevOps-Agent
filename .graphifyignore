@@ -1,0 +1,9 @@
+# Third-party browser bundles are vendored for offline runtime use, not project architecture.
+src/DevOpsAgent.Web/wwwroot/lib/
+
+# Build outputs are generated and contain duplicate compiler artifacts.
+**/bin/
+**/obj/
+
+# Minified bundles produce opaque symbol names with no useful source structure.
+*.min.js

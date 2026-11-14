@@ -91,3 +91,8 @@ Format: `D-<number> · <date> · <title>` then Decision / Why / Consequences.
 - **Decision:** Supersede the desktop sidebar layout rule in `DESIGN.md` with a fixed, 248px-wide sidebar spanning the viewport height; keep it in normal flow and stacked above content below 800px.
 - **Why:** The owner requested a fixed sidebar whose height matches the screen.
 - **Consequences:** Offset desktop main content by the sidebar width. Allow the sidebar itself to scroll when its contents exceed the viewport.
+
+### D-022 · 2026-11-14 · Keep a local Graphify architecture index
+- **Decision:** Use Graphify's local knowledge graph to navigate first-party code relationships and review architecture changes. Exclude vendored browser libraries, `bin/`, `obj/`, and `*.min.js` through `.graphifyignore`. Keep generated `graphify-out/` output locally and ignore it in Git.
+- **Why:** The graph helps trace first-party cross-file relationships, while third-party/minified bundles and generated build artifacts add opaque symbols and duplicate noise. Generated graph JSON/HTML are reproducible and should not grow repository history.
+- **Consequences:** Rebuild the local graph after code changes when needed; do not commit `graphify-out/` artifacts.
