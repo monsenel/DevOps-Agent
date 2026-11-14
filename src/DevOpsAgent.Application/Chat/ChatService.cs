@@ -120,7 +120,7 @@ public sealed class ChatService(
             if (assistant is null) break;
             var calls = provider.NativeToolCallingEnabled
                 ? assistant.Contents.OfType<FunctionCallContent>().Select(call => (Id: call.CallId, call.Name, Args: JsonSerializer.SerializeToElement(call.Arguments))).ToArray()
-                : JsonToolProtocol.ParseCalls(assistant.Text);
+                : JsonToolProtocol.ParseCalls(assistant.Text, streamedText.ToString());
             if (calls.Length == 0)
             {
                 finalText = assistant.Text.Length > 0 ? assistant.Text : streamedText.ToString();

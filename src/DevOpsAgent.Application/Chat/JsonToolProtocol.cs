@@ -5,7 +5,11 @@ namespace DevOpsAgent.Application.Chat;
 public static class JsonToolProtocol
 {
     public static (string Id, string Name, JsonElement Args)[] ParseCalls(string text)
+        => ParseCalls(text, null);
+
+    public static (string Id, string Name, JsonElement Args)[] ParseCalls(string assistantText, string? streamedText)
     {
+        var text = string.IsNullOrWhiteSpace(assistantText) ? streamedText ?? string.Empty : assistantText;
         var start = text.IndexOf('{');
         var end = text.LastIndexOf('}');
         if (start < 0 || end <= start) return [];

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using DevOpsAgent.Application.Chat;
 
 namespace DevOpsAgent.Tests;
@@ -12,6 +13,17 @@ public sealed class JsonToolProtocolTests
         var call = Assert.Single(parsed);
         Assert.Equal("service_status", call.Name);
         Assert.Equal("nginx", call.Args.GetProperty("unit").GetString());
+    }
+
+    [Fact]
+    public void ParsesToolCallsFromStreamedTextWhenAssistantTextIsEmpty()
+    {
+        var parsed = JsonToolProtocol.ParseCalls(string.Empty,
+            "{\"tool_calls\":[{\"name\":\"list_servers\",\"arguments\":{}}]}");
+
+        var call = Assert.Single(parsed);
+        Assert.Equal("list_servers", call.Name);
+        Assert.Equal(JsonValueKind.Object, call.Args.ValueKind);
     }
 
     [Theory]
