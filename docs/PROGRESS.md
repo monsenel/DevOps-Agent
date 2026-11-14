@@ -11,7 +11,7 @@
 
 ## Current
 
-- **Task:** T6.6 MVP hardening pass — verify journeys J1–J7 against the disposable lab (systemd-specific checks excepted)
+- **Task:** T6.5 Updates — correct J6 acceptance and make scans resilient to unreachable repositories
 - **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
@@ -19,11 +19,11 @@
 - T5.5 is **done**: Overview uses live lab server/snapshot/graph/evidence/alerts/metrics/update/provider data. Run discovery rerenders correctly; live refresh and both themes were checked; build clean and 109/109 tests passed. Commit: `4e7a606`.
 - T6.3 implementation is complete, but the earlier J4 live result predates the disposable SSH lab and is invalid for the requested server journey. Live acceptance is **blocked** until the owner adds an LLM provider. After that, run on this lab exactly: ask “anything I should look at?”, then “why is disk usage on srv-app what it is?”, confirm read-only tools execute on lab servers, then propose and explicitly approve restarting container `web` on `srv-app`; record the tool/action-log result. Keep srv-search out of inventory.
 - T6.4 J5 passed on disposable staging: 60 failed SSH logins opened the attack alert and fail2ban ban; threshold restored and all bans cleared. Build clean, 110/110 tests.
-- T6.5 J6 update workflow passed earlier on a disposable apt target. Current lab retry found no pending updates on app/db and timed out on edge; no packages were installed.
+- T6.5/J6 is **not accepted**. Retract the earlier report that steps 1–3 passed: the run was not verified against the current lab. Two acceptance items remain: (1) automated/fake coverage proves offline repositories return a quick, explicit `repositories unreachable` result; (2) on disposable `srv-edge`, a real bookworm security update is listed, approved and applied, and the report's restarted-services/reboot fields are checked. Previous `srv-edge` scan hit the existing five-minute collector timeout; no package was installed.
 - T5.4 container alert lifecycle passed again on disposable staging: alert opened on `web` down and resolved after it came back. External notification delivery remains blocked on owner destination.
 - T6.6 journey results on the disposable lab: J1 direct/jump inventory confirmed for srv-edge, srv-app and srv-db; srv-search remains unregistered. J2 passed after fixing the parser for four-column `ss -tnH state established` output, retaining outbound unknown peers in `GraphBuilder`, and normalizing IPv4-mapped IPv6 endpoints; latest good discovery was 3/3 with 25 nodes/14 edges and srv-app → Unknown (srv-search :9200), with false api → Unknown edges removed. Added fixtures/regression tests. J3 passed: `api.test.local` traced 4 nodes/3 connections with `/etc/nginx/conf.d/demo.conf:10` evidence. J4 is blocked per T6.3 until the owner adds an LLM provider; the old pre-lab pass is invalid. J5 attack/ban passed via disposable `attack` script (60 failed SSH attempts, alert + fail2ban ban); threshold restored and bans cleared. J6 package scan showed no pending updates on srv-app/srv-db and timed out on srv-edge; the earlier T6.5 disposable apt target passed inventory/classification/approved apply/report, but current lab has no pending package for an apply/reboot rerun. J7 detected a new `python3` listener on :9000 and removal of worker-redis after temporary staging changes; nginx config, listener and worker-redis were restored and verified. No systemd acceptance was attempted, per owner exception.
 - T6.6 hardening: fixed IPv4-mapped endpoint handling, duplicate `server-unreachable` alert keys across servers (with a regression test), and 390px horizontal overflow; added app setup/key/known_hosts/VPN guidance to README. 390px layout now has no document overflow on Overview and all main routes. Both theme palettes and contrast were checked. Build is clean with 0 warnings/errors; 113/113 tests pass. Graphify updated with vendored/generated exclusions; output now 2,376 nodes, 6,623 edges, 155 communities; god nodes contain no minified KC/Inb/jQb names and `graphify-out/` remains ignored.
-- Final restore caveat: the disposable lab itself was verified back at baseline (nginx `server srv-app:5000;`, worker-redis running, no :9000 listener). The isolated review app copy did not record a post-restore discovery: its last stored run remains the 22:09 mutated snapshot; a later failed run used a misnamed SSH options setting, and after correcting it the UI did not record another run within 90 seconds. Exact next step: start a fresh isolated review app with `Ssh__KnownHostsFile=/home/mohsen/Projects/DevOps-Agent/keys/known_hosts` and `/tmp/dva-t6-6-review/review.db`, run discovery, and confirm the restored baseline before closing T6.6. Then, once the owner adds an LLM provider, run the specified J4 prompts and approved `web` restart and finish J4/J7 agent acceptance. systemd-only checks remain excepted.
+- T6.6 restore discovery remains unverified: lab was restored to baseline, but the isolated review app did not record a fresh post-restore snapshot. After the T6.5 run, start a fresh isolated app using `Ssh__KnownHostsFile=/home/mohsen/Projects/DevOps-Agent/keys/known_hosts` and `/tmp/dva-t6-6-review/review.db`, trigger discovery, and verify a new snapshot for the restored baseline; diagnose/fix if it does not persist.
 
 ## Blockers
 
@@ -31,7 +31,7 @@ T5.4 live acceptance is blocked because no Telegram bot token/chat ID or ntfy UR
 
 The prior M5 deferral has been lifted by the owner's instruction to continue task by task. T5.1, T5.2, and T5.3 are complete. T5.3 live acceptance passed on 2026-11-14: the selected Docker container triggered an alert within 2 minutes, was restarted, and its alert auto-resolved. No other blocked SSH acceptance was changed.
 
-T6.3 live J4 acceptance is blocked until the owner adds an LLM provider; T5.4 live notification acceptance is blocked until the owner configures Telegram or ntfy. T6.6 remains in progress until its isolated-app baseline refresh succeeds and provider-dependent J4/J7 steps can be completed. Current lab has no pending package candidate for the J6 approved apply/reboot step; systemd-only checks are excepted.
+T6.3 live J4 acceptance is blocked until the owner adds an LLM provider; T5.4 live notification acceptance is blocked until the owner configures Telegram or ntfy. T6.5 remains blocked on the two J6 acceptance items listed above. T6.6 remains in progress until its isolated-app baseline refresh succeeds and provider-dependent J4/J7 steps can be completed. systemd-only checks are excepted.
 
 ---
 
@@ -74,7 +74,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T6.2 | Action log | done | `feat(T6.2): approved action execution and log` |
 | T6.3 | Agent chat with tools | blocked | `feat(T6.3): complete J4 tool and approval flow` |
 | T6.4 | SSH attack detection and bans | done | `feat(T6.4): verify SSH attack detection in disposable lab` |
-| T6.5 | Updates | done | `feat(T6.5): updates inventory and approval flow` |
+| T6.5 | Updates | in-progress | `feat(T6.5): updates inventory and approval flow` |
 | T6.6 | MVP hardening pass | in-progress | |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
@@ -84,6 +84,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 ## Session log
 
 One line per session: date · tool/model · tasks touched · result.
+
+- 2026-11-14 · Codex / GPT-6 · resumed T6.5 · corrected J6 acceptance to not accepted; investigate five-minute apt timeout and offline-repository behavior, then run the authorized package workflow on disposable srv-edge only
 
 - 2026-11-14 · Codex / GPT-6 · started T0.8 · owner supplied an OpenRouter key; checking local Ollama and resuming live basic-chat acceptance in temporary app storage
 - 2026-11-14 · Codex / GPT-6 · T0.8 · fixed native tool schema lifetime; build passed with 0 warnings/errors and 78/78 tests; qwen2.5:0.5b and OpenRouter free route streamed replies and survived reload
