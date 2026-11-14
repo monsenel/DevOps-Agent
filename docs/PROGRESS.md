@@ -146,3 +146,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · resumed T6.3 · started agent tool chat integration
 - 2026-11-14 · Codex / GPT-6 · T6.3 · context, native/JSON tool loops, read-only dispatch, approvals, redaction and inline review implemented; 72 tests pass; live J4 blocked by unavailable local Ollama/OpenRouter credentials and deferred M5 data
 - 2026-11-14 · Codex / GPT-6 · started T6.5 after deferring blocked T6.3 live acceptance and dependency-blocked T6.4
+- 2026-11-14 · Codex / GPT-6 · T6.5 · started update inventory and apply reporting implementation
