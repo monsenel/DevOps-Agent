@@ -6,8 +6,8 @@
 
 ## Current
 
-- **Task:** T3.2 Edge resolution
-- **Status:** done
+- **Task:** T3.3 Evidence panel and Trace
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
@@ -60,7 +60,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T2.7 | Topology page | blocked | `wip(T2.7): topology page and graph interop` |
 | T3.1 | nginx parser | done | `feat(T3.1): nginx parser` |
 | T3.2 | Edge resolution | done | `feat(T3.2): nginx edge resolution` |
-| T3.3 | Evidence panel and Trace | todo | |
+| T3.3 | Evidence panel and Trace | in-progress | |
 | T4.1 | Live connections | todo | |
 | T4.2 | Unknown nodes | todo | |
 | T4.3 | Drift and scheduled discovery | todo | |
@@ -128,3 +128,5 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T3.1 · deterministic nginx tokenizer/block parser and fixture coverage complete; build/test pass (33/33)
 - 2026-11-14 · Codex / GPT-6 · T3.2 · started
 - 2026-11-14 · Codex / GPT-6 · resumed T3.2 · edge resolver, graph evidence, and path tests; build clean, 39/39 tests pass
+- 2026-11-14 · Codex / GPT-6 · T3.2 · completed
+- 2026-11-14 · Codex / GPT-6 · T3.3 · started
