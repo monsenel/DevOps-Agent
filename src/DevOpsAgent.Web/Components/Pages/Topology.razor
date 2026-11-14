@@ -6,6 +6,7 @@
 @inject DiscoveryService Discovery
 @inject ServerService ServersService
 @inject NavigationManager Navigation
+@inject AlertService AlertManager
 @using System.Text.Json
 @using DevOpsAgent.Domain.Discovery
 @using DevOpsAgent.Application.Servers
@@ -231,6 +232,7 @@
     private IReadOnlyList<string> _projects = [];
     private IReadOnlyList<GraphListenerDto> _selectedListeners = [];
     private IReadOnlyList<GraphEvidenceDto> _selectedEvidence = [];
+    private IReadOnlyDictionary<string, string> _serverAlertStatuses = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     private IReadOnlyList<UnknownConnection> SelectedConnections => _graph is null || _selected is not JsonElement selected
         || !IsUnknown(selected) || ReadString(selected, "id") is not string unknownId
         ? []
@@ -267,6 +269,10 @@
     protected override async Task OnInitializedAsync()
     {
         _servers = await ServersService.ListAsync(CancellationToken.None);
+        var activeAlerts = await AlertManager.ListAsync(null, CancellationToken.None);
+        _serverAlertStatuses = activeAlerts.Where(alert => alert.ServerId is not null && alert.State != AlertState.Resolved)
+            .GroupBy(alert => alert.ServerId!.Value.ToString("N"), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.OrderByDescending(alert => alert.Severity).First().Severity.ToString(), StringComparer.OrdinalIgnoreCase);
         _snapshot = await SnapshotRepository.GetLatestAsync(CancellationToken.None);
         if (_snapshot is not null)
         {
@@ -460,7 +466,7 @@
                 && ids.Contains(source) && ids.Contains(target)));
         }
 
-        await _graphModule.InvokeVoidAsync("setData", elements, CurrentView.ToString().ToLowerInvariant());
+        await _graphModule.InvokeVoidAsync("setData", elements, CurrentView.ToString().ToLowerInvariant(), _serverAlertStatuses);
         await _graphModule.InvokeVoidAsync("search", _search);
         await _graphModule.InvokeVoidAsync("setTheme");
     }

@@ -37,6 +37,8 @@ public static class PersistenceServiceCollectionExtensions
         services.AddScoped<IUpdateScanRepository, UpdateScanRepository>();
         services.AddScoped<IMetricRepository, MetricRepository>();
         services.AddScoped<IHealthCheckRepository, HealthCheckRepository>();
+        services.AddScoped<IAlertRepository, AlertRepository>();
+        services.AddScoped<IAlertSignalSource, AlertSignalSource>();
         services.AddTransient<IHealthProbe, HealthProbe>();
         services.AddScoped<IUpdatesCollector, DevOpsAgent.Infrastructure.Collectors.UpdatesCollectorService>();
         services.AddScoped<IChatConversationRepository, ChatConversationRepository>();

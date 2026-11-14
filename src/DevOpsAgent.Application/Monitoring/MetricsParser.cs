@@ -9,6 +9,7 @@ public static class MetricsParser
     private const string CpuMarker = "__DVA_CPUSTAT__";
     private const string DiskMarker = "__DVA_DISK__";
     private const string NetworkMarker = "__DVA_NETDEV__";
+    private const string CpuCoresMarker = "__DVA_CPUCORES__";
 
     public static ParsedMetrics Parse(string output, ParsedMetrics? previous = null, TimeSpan? elapsed = null)
     {
@@ -21,6 +22,7 @@ public static class MetricsParser
         ParseLoad(sections.GetValueOrDefault(LoadMarker), values);
         ParseMemory(sections.GetValueOrDefault(MemMarker), values);
         ParseDisk(sections.GetValueOrDefault(DiskMarker), values);
+        ParseCpuCores(sections.GetValueOrDefault(CpuCoresMarker), values);
         AddRates("network_receive_bytes_per_second", network, previous?.NetworkCounters, values, elapsed);
         AddRates("network_transmit_bytes_per_second", network, previous?.NetworkCounters, values, elapsed, transmit: true);
         if (previous is not null && cpu.Count != 0)
@@ -45,7 +47,8 @@ public static class MetricsParser
         $"printf '{MemMarker}\\n'; cat /proc/meminfo; " +
         $"printf '{CpuMarker}\\n'; head -1 /proc/stat; " +
         $"printf '{DiskMarker}\\n'; df -P; " +
-        $"printf '{NetworkMarker}\\n'; cat /proc/net/dev";
+        $"printf '{NetworkMarker}\\n'; cat /proc/net/dev; " +
+        $"printf '{CpuCoresMarker}\\n'; getconf _NPROCESSORS_ONLN";
 
     private static Dictionary<string, string> SplitSections(string output)
     {
@@ -55,7 +58,7 @@ public static class MetricsParser
         foreach (var line in output.Split('\n'))
         {
             var trimmed = line.TrimEnd('\r');
-            if (trimmed is LoadMarker or MemMarker or CpuMarker or DiskMarker or NetworkMarker)
+            if (trimmed is LoadMarker or MemMarker or CpuMarker or DiskMarker or NetworkMarker or CpuCoresMarker)
             {
                 if (current is not null) sections[current] = string.Join('\n', lines);
                 current = trimmed;
@@ -68,6 +71,12 @@ public static class MetricsParser
         }
         if (current is not null) sections[current] = string.Join('\n', lines);
         return sections;
+    }
+
+    private static void ParseCpuCores(string? section, IDictionary<string, double> values)
+    {
+        if (int.TryParse(section?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var cores) && cores > 0)
+            values["cpu_cores"] = cores;
     }
 
     private static void ParseLoad(string? section, IDictionary<string, double> values)

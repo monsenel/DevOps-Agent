@@ -30,6 +30,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<MetricSample> MetricSamples => Set<MetricSample>();
     public DbSet<MetricRollup> MetricRollups => Set<MetricRollup>();
     public DbSet<HealthCheck> HealthChecks => Set<HealthCheck>();
+    public DbSet<Alert> Alerts => Set<Alert>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -212,6 +213,21 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(item => item.LastError).HasMaxLength(500);
             entity.HasIndex(item => new { item.ServerId, item.IsEnabled });
             entity.HasOne<Server>().WithMany().HasForeignKey(item => item.ServerId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Alert>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Key).HasMaxLength(500).IsRequired();
+            entity.Property(item => item.Rule).HasMaxLength(80).IsRequired();
+            entity.Property(item => item.Severity).HasConversion<string>().HasMaxLength(16).IsRequired();
+            entity.Property(item => item.State).HasConversion<string>().HasMaxLength(16).IsRequired();
+            entity.Property(item => item.Target).HasMaxLength(500).IsRequired();
+            entity.Property(item => item.Title).HasMaxLength(240).IsRequired();
+            entity.Property(item => item.Details).HasMaxLength(2000).IsRequired();
+            entity.HasIndex(item => new { item.State, item.LastSeenAtUtc });
+            entity.HasIndex(item => item.Key).IsUnique();
+            entity.HasOne<Server>().WithMany().HasForeignKey(item => item.ServerId).OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

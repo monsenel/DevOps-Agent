@@ -1,0 +1,6 @@
+__DVA_DOCKER__
+api	running
+worker	restarting
+old-job	exited
+__DVA_SYSTEMD_FAILED__
+● payments.service loaded failed failed Payments worker

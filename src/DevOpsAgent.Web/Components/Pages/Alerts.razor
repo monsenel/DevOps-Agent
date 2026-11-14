@@ -1,3 +1,88 @@
 @page "/alerts"
+@inject AlertService AlertManager
+
 <PageTitle>Alerts · DevOps Agent</PageTitle>
-<PagePlaceholder Title="Alerts" Description="Open, acknowledged, and resolved alerts will appear here." />
+<div class="page-stack">
+    <section class="ui-card alerts-page-card" aria-labelledby="alerts-title">
+        <div class="ui-card-header">
+            <div><p class="eyebrow">Monitoring</p><h2 id="alerts-title">Alerts</h2><p class="muted">Current and resolved conditions across your servers.</p></div>
+        </div>
+        <div class="segmented-control alert-filters" role="group" aria-label="Alert state filter">
+            <button type="button" class="@(_filter == AlertState.Open ? "active" : null)" aria-pressed="@(_filter == AlertState.Open)" @onclick="() => SetFilter(AlertState.Open)">Open</button>
+            <button type="button" class="@(_filter == AlertState.Acknowledged ? "active" : null)" aria-pressed="@(_filter == AlertState.Acknowledged)" @onclick="() => SetFilter(AlertState.Acknowledged)">Acknowledged</button>
+            <button type="button" class="@(_filter == AlertState.Resolved ? "active" : null)" aria-pressed="@(_filter == AlertState.Resolved)" @onclick="() => SetFilter(AlertState.Resolved)">Resolved</button>
+        </div>
+        @if (_alerts.Count == 0)
+        {
+            <EmptyState Title="No alerts in this view" Description="The alert engine checks metrics, discovery state, and health checks every 30 seconds." />
+        }
+        else
+        {
+            <div class="alert-list" aria-label="Alert list">
+                @foreach (var alert in _alerts)
+                {
+                    <article class="alert-row @(_selected?.Id == alert.Id ? "selected" : null)" @key="alert.Id">
+                        <button class="alert-row-select" type="button" @onclick="() => _selected = alert">
+                            <span class="ui-badge @SeverityClass(alert.Severity)">@alert.Severity</span>
+                            <span class="alert-row-main"><strong>@alert.Title</strong><span class="muted">@alert.Target · @alert.LastSeenAtUtc.ToLocalTime().ToString("g")</span></span>
+                            <span class="ui-badge neutral">@alert.State</span>
+                        </button>
+                    </article>
+                }
+            </div>
+        }
+    </section>
+
+    @if (_selected is not null)
+    {
+        <section class="ui-card alert-detail-card" aria-labelledby="alert-detail-title">
+            <p class="eyebrow">@_selected.Rule · seen @(_selected.Count) times</p>
+            <h2 id="alert-detail-title">@_selected.Title</h2>
+            <p class="mono muted">@_selected.Target</p>
+            <p>@_selected.Details</p>
+            <dl class="alert-detail-meta"><dt>First seen</dt><dd>@_selected.FirstSeenAtUtc.ToLocalTime().ToString("g")</dd><dt>Last seen</dt><dd>@_selected.LastSeenAtUtc.ToLocalTime().ToString("g")</dd></dl>
+            @if (_selected.State == AlertState.Open)
+            {
+                <button class="ui-button secondary" type="button" @onclick="() => ChangeStateAsync(true)">Acknowledge</button>
+            }
+            @if (_selected.State != AlertState.Resolved)
+            {
+                <button class="ui-button primary" type="button" @onclick="() => ChangeStateAsync(false)">Resolve</button>
+            }
+        </section>
+    }
+</div>
+
+@code {
+    private AlertState? _filter = AlertState.Open;
+    private IReadOnlyList<AlertDto> _alerts = [];
+    private AlertDto? _selected;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task SetFilter(AlertState? state)
+    {
+        _filter = state;
+        _selected = null;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() => _alerts = await AlertManager.ListAsync(_filter, CancellationToken.None);
+
+    private async Task ChangeStateAsync(bool acknowledge)
+    {
+        if (_selected is null) return;
+        var id = _selected.Id;
+        if (acknowledge) _ = await AlertManager.AcknowledgeAsync(id, CancellationToken.None);
+        else _ = await AlertManager.ResolveAsync(id, CancellationToken.None);
+        await LoadAsync();
+        _selected = _alerts.FirstOrDefault(item => item.Id == id);
+    }
+
+    private static string SeverityClass(AlertSeverity severity) => severity switch
+    {
+        AlertSeverity.High => "danger",
+        AlertSeverity.Medium => "warn",
+        _ => "neutral"
+    };
+}

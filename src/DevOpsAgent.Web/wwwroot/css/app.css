@@ -2326,6 +2326,76 @@ p {
     white-space: nowrap;
 }
 
+.alerts-page-card,
+.alert-detail-card {
+    min-width: 0;
+}
+
+.alert-filters {
+    width: fit-content;
+    margin-bottom: 18px;
+}
+
+.alert-list {
+    display: grid;
+    gap: 10px;
+}
+
+.alert-row {
+    border: 1px solid var(--dva-line);
+    border-radius: var(--dva-radius-row);
+    background: var(--dva-surface);
+}
+
+.alert-row.selected {
+    border-color: var(--dva-accent);
+}
+
+.alert-row-select {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 0;
+    background: transparent;
+    color: var(--dva-text);
+    text-align: left;
+    cursor: pointer;
+}
+
+.alert-row-main {
+    display: grid;
+    flex: 1;
+    gap: 3px;
+    min-width: 0;
+}
+
+.alert-row-main strong,
+.alert-row-main span {
+    overflow-wrap: anywhere;
+}
+
+.alert-detail-card h2 {
+    margin: 4px 0 8px;
+}
+
+.alert-detail-meta {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px 14px;
+    margin: 18px 0;
+}
+
+.alert-detail-meta dt {
+    color: var(--dva-text-muted);
+}
+
+.alert-detail-meta dd {
+    margin: 0;
+    font-family: var(--dva-font-mono);
+}
+
 .health-suggestions {
     display: grid;
     gap: 10px;

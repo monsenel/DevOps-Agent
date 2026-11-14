@@ -12,7 +12,7 @@
 T5.2 is complete: health check CRUD and EF persistence; graph-based HTTPS and TCP suggestions; scheduled HTTP, HTTPS/TLS-expiry, and TCP probes; server detail status UI. Build clean with 0 warnings/errors and 87/87 tests pass. Migration applied in isolated SQLite; page verified with seeded status in both themes and at a 390px viewport.
 ## WIP notes
 
-T5.3 exact next step: inspect metric rollup, latest discovery graph, health-check, and alert page/sidebar contracts; implement rule evaluation with de-duplication, acknowledge/resolve transitions and automatic recovery; add isolated tests and UI; run build/tests. Live container-stop acceptance requires an authorized test server.
+T5.3 implementation is complete: persistent de-duplicated alert lifecycle; scheduled read-only SSH status polling for Docker and failed systemd units; disk, sustained memory/load, SSH reachability, health-check, TLS expiry, and new-listener rules; Alerts page, sidebar count, and graph severity overlay. Build is clean with 0 warnings/errors, 90/90 tests pass, AddAlerts migration applied in isolated SQLite, and the seeded Alerts page was verified in light/dark. Exact next step: run the PLAN.md container-stop/restart acceptance against an authorized Docker-capable SSH server with a pinned host key; confirm alert opens within 2 minutes and resolves after restart. No such target/key is configured.
 
 ## Blockers
 
@@ -24,7 +24,7 @@ T2.7 live acceptance is blocked by the same missing authorized SSH targets and p
 
 T3.3's implementation and synthetic trace tests are complete, but PLAN requires J3 to work on real servers. Verification is blocked by the missing authorized SSH targets and pinned host keys recorded under T1.2/T2.7. Resume real trace/evidence verification when those are available; do not treat the synthetic UI check as satisfying J3.
 
-The prior M5 deferral has been lifted by the owner's instruction to continue task by task. T5.1 and T5.2 are complete; T5.3 is in progress. T5.3 live acceptance needs an authorized test server where a container can be stopped and restarted.
+The prior M5 deferral has been lifted by the owner's instruction to continue task by task. T5.1 and T5.2 are complete. T5.3 implementation is complete, but live acceptance is blocked: no authorized Docker-capable SSH target and pinned host key are configured. Continue when those are available; do not run container-stop tests against owner servers without authorization.
 
 T6.4 is deferred because it depends on incomplete T6.3 and T5.3; T5.3 depends on the deferred M5 phase. Resume after those dependencies are completed.
 
@@ -64,7 +64,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T4.3 | Drift and scheduled discovery | done | `feat(T4.3): drift and scheduled discovery` |
 | T5.1 | Metric poller | done | `feat(T5.1): metric polling and server detail` |
 | T5.2 | Health checks | done | `feat(T5.2): scheduled health checks` |
-| T5.3 | Alert engine and Alerts page | in-progress | |
+| T5.3 | Alert engine and Alerts page | blocked | `wip(T5.3): alert engine and monitoring UI` |
 | T5.4 | Notifications | todo | |
 | T5.5 | Overview with real data | todo | |
 | T6.1 | Tool registry and execution modes | done | `feat(T6.1): tool policies and approvals` |
@@ -169,3 +169,5 @@ One line per session: date · tool/model · tasks touched · result.
 
 - 2026-11-14 · Codex / GPT-6 · resumed T5.2 · health checks implemented; build clean, 87/87 tests pass, migration applied in isolated SQLite, detail UI verified in light/dark and 390px; started T5.3
 - 2026-11-14 · Codex / GPT-6 · started T5.3 · inspect metric/discovery/health contracts, then implement deduplicated alert lifecycle and UI; live container test needs an authorized host
+
+- 2026-11-14 · Codex / GPT-6 · T5.3 · alert engine, rule signals, lifecycle, Alerts UI/sidebar badge/graph overlay implemented; 90/90 tests pass, 0-warning build, migration/runtime UI checked; container stop/restart acceptance blocked by missing authorized SSH target and pinned key

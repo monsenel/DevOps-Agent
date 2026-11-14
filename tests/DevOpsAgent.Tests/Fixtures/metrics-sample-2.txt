@@ -16,3 +16,5 @@ Inter-| Receive                                                | Transmit
  face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
     lo:   1000      20    0    0    0     0          0         0     1000      20    0    0    0     0       0          0
   eth0: 160000    1200    0    0    0     0          0         0    80000     700    0    0    0     0       0          0
+__DVA_CPUCORES__
+4

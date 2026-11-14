@@ -1,6 +1,7 @@
 @implements IDisposable
 @inject ProviderService Providers
 @inject ProviderStatusState ProviderStatus
+@inject AlertStatusState AlertStatus
 
 <aside class="sidebar-card" aria-label="Application sidebar">
     <a class="brand-row" href="/" aria-label="DevOps Agent home">
@@ -15,7 +16,7 @@
         <NavLink class="nav-link" href="/topology">Topology</NavLink>
         <NavLink class="nav-link" href="/drift">Drift</NavLink>
         <NavLink class="nav-link" href="/servers">Servers</NavLink>
-        <NavLink class="nav-link" href="/alerts"><span>Alerts</span><span class="nav-badge">0</span></NavLink>
+        <NavLink class="nav-link" href="/alerts"><span>Alerts</span><span class="nav-badge">@AlertStatus.OpenCount</span></NavLink>
         <NavLink class="nav-link" href="/updates">Updates</NavLink>
         <NavLink class="nav-link" href="/agent-chat">Agent chat</NavLink>
         <NavLink class="nav-link" href="/action-log">Action log</NavLink>
@@ -58,11 +59,13 @@
     protected override async Task OnInitializedAsync()
     {
         ProviderStatus.Changed += OnProviderStatusChanged;
+        AlertStatus.Changed += OnAlertStatusChanged;
         var providers = await Providers.ListAsync(CancellationToken.None);
         ProviderStatus.Set(providers.FirstOrDefault(provider => provider.IsDefault));
     }
 
     private void OnProviderStatusChanged() => _ = InvokeAsync(StateHasChanged);
+    private void OnAlertStatusChanged() => _ = InvokeAsync(StateHasChanged);
 
     private static string ModelStatus(LlmProviderSummary provider) => provider.LastTestSucceeded switch
     {
@@ -71,5 +74,9 @@
         _ => "Not tested yet"
     };
 
-    public void Dispose() => ProviderStatus.Changed -= OnProviderStatusChanged;
+    public void Dispose()
+    {
+        ProviderStatus.Changed -= OnProviderStatusChanged;
+        AlertStatus.Changed -= OnAlertStatusChanged;
+    }
 }

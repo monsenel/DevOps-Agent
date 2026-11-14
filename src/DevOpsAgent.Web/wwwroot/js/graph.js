@@ -46,6 +46,8 @@ function applyStyles() {
             "shape": "round-rectangle", "border-width": 1, "border-color": c.line,
             "padding": 12, "text-halign": "center", "text-valign": "center"
         } },
+        { selector: 'node[alertSeverity = "High"]', style: { "border-width": 2, "border-color": c.danger } },
+        { selector: 'node[alertSeverity = "Medium"]', style: { "border-width": 2, "border-color": c.warn } },
         { selector: "edge", style: {
             "width": 1.5, "line-color": c.edge, "target-arrow-color": c.edge,
             "target-arrow-shape": "triangle", "curve-style": "bezier", "label": "data(edgeLabel)",
@@ -101,7 +103,7 @@ export function init(container, dotNetReference) {
     applyStyles();
 }
 
-export function setData(elements, view) {
+export function setData(elements, view, alertStatuses = {}) {
     if (!graph) return;
     graph.elements().remove();
     graph.add(elements.map(data => {
@@ -116,7 +118,7 @@ export function setData(elements, view) {
         } else if (data.kind === "Unknown") {
             displayLabel = `Unknown\n${attributes.Address || "unknown endpoint"}`;
         }
-        return { data: { ...data, displayLabel, edgeLabel: data.port ? `:${data.port}` : "" } };
+        return { data: { ...data, displayLabel, edgeLabel: data.port ? `:${data.port}` : "", alertSeverity: alertStatuses[data.serverId] || "" } };
     }));
     applyStyles();
     runLayout(view, true);
