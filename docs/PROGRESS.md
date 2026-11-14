@@ -12,11 +12,11 @@
 ## Current
 
 - **Task:** T3.3 Evidence panel and Trace
-- **Status:** in-progress
+- **Status:** done
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
-- Done in code: parser now matches expanded nginx file markers to parent `http`/`stream` include globs; fixture-backed test verifies domain, upstream, proxy and source path. Build clean; tests 109/109. Exact next step: restart the local app with the new build, rerun discovery, then trace `api.test.local` and verify path/evidence. J2 follow-up: outbound app connection to srv-search does not yet appear as Unknown; do not add srv-search. Never use a server tagged `prod`.
+- Clear for completed T3.3. J2 follow-up remains: outbound app connection to srv-search is not yet represented as an Unknown node. Do not add srv-search. Never use a server tagged `prod`.
 
 ## Blockers
 
@@ -54,7 +54,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T2.7 | Topology page | done | `feat(T2.7): verify live topology in disposable lab` |
 | T3.1 | nginx parser | done | `feat(T3.1): nginx parser` |
 | T3.2 | Edge resolution | done | `feat(T3.2): nginx edge resolution` |
-| T3.3 | Evidence panel and Trace | in-progress | `wip(T3.3): trace evidence UI` |
+| T3.3 | Evidence panel and Trace | done | `feat(T3.3): verify live nginx trace and evidence` |
 | T4.1 | Live connections | done | `feat(T4.1): observed connections` |
 | T4.2 | Unknown nodes | done | `feat(T4.2): unknown node expansion` |
 | T4.3 | Drift and scheduled discovery | done | `feat(T4.3): drift and scheduled discovery` |
@@ -189,3 +189,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T1.2 · live direct and jump SSH capability probes passed for the three staging targets; build clean and 106/106 tests pass; srv-search not added
 - 2026-11-14 · Codex / GPT-6 · T2.7 · discovery 3/3 succeeded on the disposable lab, 17 nested nodes rendered; theme switching and api details/evidence passed; systemd skipped because the containers do not run it; collector compatibility fixes, build clean, 108/108 tests
 - 2026-11-14 · Codex / GPT-6 · started T3.3 · live trace acceptance found nginx include-context parsing gap; next add support for expanded nginx files and verify api.test.local trace/evidence
+- 2026-11-14 · Codex / GPT-6 · T3.3 · live trace `api.test.local` highlighted 4 nodes/3 connections; edge evidence identified `/etc/nginx/conf.d/demo.conf:10`; build clean and 109/109 tests pass
