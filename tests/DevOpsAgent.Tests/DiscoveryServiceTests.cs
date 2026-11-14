@@ -73,6 +73,8 @@ public sealed class DiscoveryServiceTests
     private static DiscoveryService CreateService(AppDbContext dbContext, params ICollector[] collectors) => new(
         new ServerRepository(dbContext),
         new SnapshotRepository(dbContext),
+        new GraphRepository(dbContext),
+        new GraphBuilder(),
         new UnusedSshRunner(),
         collectors,
         TimeProvider.System);

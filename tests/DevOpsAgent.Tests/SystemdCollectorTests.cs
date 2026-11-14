@@ -44,6 +44,8 @@ public sealed class SystemdCollectorTests
         var service = new DiscoveryService(
             new ServerRepository(database.Context),
             new SnapshotRepository(database.Context),
+            new GraphRepository(database.Context),
+            new GraphBuilder(),
             runner,
             [listenerCollector, new SystemdCollector()],
             TimeProvider.System);

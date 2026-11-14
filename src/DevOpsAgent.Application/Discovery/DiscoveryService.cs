@@ -9,6 +9,8 @@ namespace DevOpsAgent.Application.Discovery;
 public sealed class DiscoveryService(
     IServerRepository serverRepository,
     ISnapshotRepository snapshotRepository,
+    IGraphRepository graphRepository,
+    GraphBuilder graphBuilder,
     ISshRunner sshRunner,
     IEnumerable<ICollector> collectors,
     TimeProvider timeProvider)
@@ -28,6 +30,7 @@ public sealed class DiscoveryService(
             Message: $"Discovery started for {servers.Count} server(s)."));
 
         var runs = new ConcurrentBag<CollectorRun>();
+        var serverContexts = new ConcurrentBag<ServerContext>();
         var succeededServers = 0;
         var failedServers = 0;
         var orderedCollectors = collectors.ToArray();
@@ -45,6 +48,7 @@ public sealed class DiscoveryService(
                 {
                     var serverSucceeded = true;
                     var context = new ServerContext(server, sshRunner);
+                    serverContexts.Add(context);
                     progress?.Report(new DiscoveryProgress(snapshot.Id, DiscoveryProgressStage.ServerStarted,
                         server.Id, server.Name));
 
@@ -78,6 +82,13 @@ public sealed class DiscoveryService(
                         server.Id, server.Name, Message: serverSucceeded ? "Completed" : "Completed with errors"));
                 });
 
+            var graph = graphBuilder.Build(snapshot.Id, serverContexts.Select(context => new ServerDiscoveryData(
+                context.Server,
+                GetPreviousResult<HostDiscoveryResult>(context, "host"),
+                GetPreviousResult<ListenerDiscoveryResult>(context, "listeners"),
+                GetPreviousResult<DockerDiscoveryResult>(context, "docker"),
+                GetPreviousResult<SystemdDiscoveryResult>(context, "systemd"))).ToArray());
+            await graphRepository.SaveAsync(snapshot.Id, graph, cancellationToken);
             await snapshotRepository.CompleteAsync(snapshot, runs.ToArray(), timeProvider.GetUtcNow(),
                 succeededServers, failedServers, cancelled: false, cancellationToken);
         }
@@ -92,6 +103,9 @@ public sealed class DiscoveryService(
             Message: $"Discovery completed: {succeededServers} succeeded, {failedServers} failed."));
         return snapshot;
     }
+
+    private static T? GetPreviousResult<T>(ServerContext context, string collectorName) where T : class =>
+        context.TryGetPreviousResult<T>(collectorName, out var result) ? result : null;
 
     private async Task<CollectorRun> RunCollectorAsync(
         Guid snapshotId,

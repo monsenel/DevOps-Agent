@@ -124,6 +124,21 @@ public static class DockerCollectorParser
 
     private static DockerNetworkInfo ParseNetwork(JsonElement item)
     {
+        var subnets = new List<string>();
+        var ipam = GetObject(item, "IPAM");
+        if (ipam.ValueKind == JsonValueKind.Object && ipam.TryGetProperty("Config", out var ipamConfig) &&
+            ipamConfig.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var config in ipamConfig.EnumerateArray())
+            {
+                var subnet = GetString(config, "Subnet");
+                if (!string.IsNullOrWhiteSpace(subnet))
+                {
+                    subnets.Add(subnet);
+                }
+            }
+        }
+
         var containers = new List<DockerNetworkContainer>();
         var containerMap = GetObject(item, "Containers");
         if (containerMap.ValueKind == JsonValueKind.Object)
@@ -146,6 +161,7 @@ public static class DockerCollectorParser
             GetString(item, "Name") ?? string.Empty,
             GetString(item, "Driver"),
             GetString(item, "Scope"),
+            subnets,
             containers);
     }
 

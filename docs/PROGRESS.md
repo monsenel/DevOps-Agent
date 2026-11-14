@@ -7,20 +7,12 @@
 ## Current
 
 - **Task:** T2.6 Graph builder
-- **Status:** in-progress
+- **Status:** done
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
-What is done so far:
-- T2.5 is complete and committed as `ee6d5c9`; systemd units are matched to listener PIDs using earlier per-server collector results.
-- Build passes with zero warnings/errors; all 28 tests pass.
-What is next (exact next step):
-- Read PRD graph requirements; define graph entities and migration, build an IP index and stable-key graph builder over discovery results, then expose graph JSON by snapshot and view.
-Files touched:
-- `docs/PROGRESS.md`
-Gotchas found:
-- T1.2 live direct/jump SSH verification remains deferred by owner direction; its status stays blocked.
+_None; T2.6 is complete._
 
 ## Blockers
 
@@ -54,7 +46,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T2.3 | Listener collector | done | `feat(T2.3): listener collector` |
 | T2.4 | Docker collector | done | `feat(T2.4): docker collector` |
 | T2.5 | systemd collector | done | `feat(T2.5): systemd collector` |
-| T2.6 | Graph builder | in-progress | |
+| T2.6 | Graph builder | done | `feat(T2.6): graph builder` |
 | T2.7 | Topology page | todo | |
 | T3.1 | nginx parser | todo | |
 | T3.2 | Edge resolution | todo | |
@@ -118,3 +110,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T2.5 · started
 - 2026-11-14 · Codex / GPT-6 · T2.5 · chained listener results into systemd ownership matching and fixture-backed unit parsing; build/test pass (28/28)
 - 2026-11-14 · Codex / GPT-6 · T2.6 · started
+- 2026-11-14 · Codex / GPT-6 · T2.6 · graph entities/migration, stable-key builder and IP index, discovery integration, Cytoscape-compatible service/network API; migration applied to temp SQLite; build/test pass (31/31)

@@ -34,6 +34,7 @@ public sealed record DockerNetworkInfo(
     string Name,
     string? Driver,
     string? Scope,
+    IReadOnlyList<string> Subnets,
     IReadOnlyList<DockerNetworkContainer> Containers);
 
 public sealed record DockerNetworkContainer(

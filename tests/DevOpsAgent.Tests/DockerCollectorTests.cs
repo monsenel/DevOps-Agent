@@ -28,6 +28,7 @@ public sealed class DockerCollectorTests
 
         var appNetwork = Assert.Single(result.Networks);
         Assert.Equal("bridge", appNetwork.Driver);
+        Assert.Equal(new[] { "172.20.0.0/16", "2001:db8:20::/64" }, appNetwork.Subnets);
         Assert.Contains(appNetwork.Containers, container => container.Name == "api-svc" &&
             container.IPv4Address == "172.20.0.10" && container.Aliases.Contains("api"));
 

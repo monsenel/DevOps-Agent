@@ -1,4 +1,5 @@
 using DevOpsAgent.Infrastructure.Persistence;
+using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Llm;
 using DevOpsAgent.Application.Chat;
 using DevOpsAgent.Application.Servers;
@@ -18,6 +19,7 @@ builder.Services.AddScoped<ChatService>();
 builder.Services.AddScoped<ServerService>();
 builder.Services.AddScoped<ServerCapabilityService>();
 builder.Services.AddScoped<DiscoveryService>();
+builder.Services.AddScoped<GraphBuilder>();
 builder.Services.AddScoped<ProviderStatusState>();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddRazorComponents()
@@ -68,6 +70,22 @@ app.MapGet("/healthz", () => Results.Ok(new
     status = "ok",
     version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown"
 })).AllowAnonymous();
+
+app.MapGet("/api/graph/{snapshotId:guid}", async Task<IResult> (
+    Guid snapshotId,
+    string? view,
+    IGraphRepository graphRepository,
+    CancellationToken cancellationToken) =>
+{
+    var graphView = GraphView.Service;
+    if (view is not null && (!Enum.TryParse(view, ignoreCase: true, out graphView) || !Enum.IsDefined(graphView)))
+    {
+        return Results.BadRequest(new { error = "View must be 'service' or 'network'." });
+    }
+
+    var graph = await graphRepository.GetAsync(snapshotId, graphView, cancellationToken);
+    return graph is null ? Results.NotFound() : Results.Ok(graph);
+});
 
 app.MapStaticAssets().Add(endpointBuilder =>
     endpointBuilder.Metadata.Add(new AllowAnonymousAttribute()));

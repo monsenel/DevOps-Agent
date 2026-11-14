@@ -32,6 +32,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddScoped<IChatConversationRepository, ChatConversationRepository>();
         services.AddScoped<IServerRepository, ServerRepository>();
         services.AddScoped<ISnapshotRepository, SnapshotRepository>();
+        services.AddScoped<IGraphRepository, GraphRepository>();
         services.AddSingleton<ICollector, HostCollector>();
         services.AddSingleton<ICollector, ListenerCollector>();
         services.AddSingleton<ICollector, DockerCollector>();

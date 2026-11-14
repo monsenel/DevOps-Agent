@@ -154,6 +154,163 @@ namespace DevOpsAgent.Infrastructure.Migrations
                     b.ToTable("Snapshots");
                 });
 
+            modelBuilder.Entity("DevOpsAgent.Domain.Graph.GraphEdge", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("Port")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Protocol")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("SnapshotId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("SourceNodeId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("TargetNodeId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SourceNodeId");
+
+                    b.HasIndex("TargetNodeId");
+
+                    b.HasIndex("SnapshotId", "SourceNodeId", "TargetNodeId", "Kind");
+
+                    b.ToTable("GraphEdges");
+                });
+
+            modelBuilder.Entity("DevOpsAgent.Domain.Graph.GraphEvidence", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Collector")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("EdgeId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("NodeId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("SnapshotId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EdgeId");
+
+                    b.HasIndex("NodeId");
+
+                    b.HasIndex("SnapshotId");
+
+                    b.ToTable("GraphEvidence");
+                });
+
+            modelBuilder.Entity("DevOpsAgent.Domain.Graph.GraphListener", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Address")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("NodeId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Port")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ProcessId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ProcessName")
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Protocol")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("SnapshotId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NodeId");
+
+                    b.HasIndex("SnapshotId", "Port", "Protocol");
+
+                    b.ToTable("GraphListeners");
+                });
+
+            modelBuilder.Entity("DevOpsAgent.Domain.Graph.GraphNode", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AttributesJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("ParentNodeId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("ServerId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("SnapshotId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SnapshotId", "Key")
+                        .IsUnique();
+
+                    b.ToTable("GraphNodes");
+                });
+
             modelBuilder.Entity("DevOpsAgent.Domain.Llm.LlmProvider", b =>
                 {
                     b.Property<Guid>("Id")
@@ -331,6 +488,70 @@ namespace DevOpsAgent.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("DevOpsAgent.Domain.Discovery.CollectorRun", b =>
+                {
+                    b.HasOne("DevOpsAgent.Domain.Discovery.Snapshot", null)
+                        .WithMany()
+                        .HasForeignKey("SnapshotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DevOpsAgent.Domain.Graph.GraphEdge", b =>
+                {
+                    b.HasOne("DevOpsAgent.Domain.Discovery.Snapshot", null)
+                        .WithMany()
+                        .HasForeignKey("SnapshotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DevOpsAgent.Domain.Graph.GraphNode", null)
+                        .WithMany()
+                        .HasForeignKey("SourceNodeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DevOpsAgent.Domain.Graph.GraphNode", null)
+                        .WithMany()
+                        .HasForeignKey("TargetNodeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DevOpsAgent.Domain.Graph.GraphEvidence", b =>
+                {
+                    b.HasOne("DevOpsAgent.Domain.Graph.GraphEdge", null)
+                        .WithMany()
+                        .HasForeignKey("EdgeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("DevOpsAgent.Domain.Graph.GraphNode", null)
+                        .WithMany()
+                        .HasForeignKey("NodeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("DevOpsAgent.Domain.Discovery.Snapshot", null)
+                        .WithMany()
+                        .HasForeignKey("SnapshotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DevOpsAgent.Domain.Graph.GraphListener", b =>
+                {
+                    b.HasOne("DevOpsAgent.Domain.Graph.GraphNode", null)
+                        .WithMany()
+                        .HasForeignKey("NodeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DevOpsAgent.Domain.Discovery.Snapshot", null)
+                        .WithMany()
+                        .HasForeignKey("SnapshotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DevOpsAgent.Domain.Graph.GraphNode", b =>
                 {
                     b.HasOne("DevOpsAgent.Domain.Discovery.Snapshot", null)
                         .WithMany()

@@ -3,6 +3,7 @@ using DevOpsAgent.Domain.Llm;
 using DevOpsAgent.Domain.Chat;
 using DevOpsAgent.Domain.Servers;
 using DevOpsAgent.Domain.Discovery;
+using DevOpsAgent.Domain.Graph;
 using Microsoft.EntityFrameworkCore;
 
 namespace DevOpsAgent.Infrastructure.Persistence;
@@ -16,6 +17,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Server> Servers => Set<Server>();
     public DbSet<Snapshot> Snapshots => Set<Snapshot>();
     public DbSet<CollectorRun> CollectorRuns => Set<CollectorRun>();
+    public DbSet<GraphNode> GraphNodes => Set<GraphNode>();
+    public DbSet<GraphEdge> GraphEdges => Set<GraphEdge>();
+    public DbSet<GraphListener> GraphListeners => Set<GraphListener>();
+    public DbSet<GraphEvidence> GraphEvidence => Set<GraphEvidence>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -93,6 +98,50 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(run => run.ResultJson);
             entity.HasIndex(run => new { run.SnapshotId, run.ServerId });
             entity.HasOne<Snapshot>().WithMany().HasForeignKey(run => run.SnapshotId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<GraphNode>(entity =>
+        {
+            entity.HasKey(node => node.Id);
+            entity.Property(node => node.Key).HasMaxLength(500).IsRequired();
+            entity.Property(node => node.Kind).HasConversion<string>().HasMaxLength(24).IsRequired();
+            entity.Property(node => node.Name).HasMaxLength(300).IsRequired();
+            entity.Property(node => node.AttributesJson).IsRequired();
+            entity.HasIndex(node => new { node.SnapshotId, node.Key }).IsUnique();
+            entity.HasOne<Snapshot>().WithMany().HasForeignKey(node => node.SnapshotId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<GraphEdge>(entity =>
+        {
+            entity.HasKey(edge => edge.Id);
+            entity.Property(edge => edge.Kind).HasConversion<string>().HasMaxLength(24).IsRequired();
+            entity.Property(edge => edge.Protocol).HasMaxLength(20);
+            entity.HasIndex(edge => new { edge.SnapshotId, edge.SourceNodeId, edge.TargetNodeId, edge.Kind });
+            entity.HasOne<Snapshot>().WithMany().HasForeignKey(edge => edge.SnapshotId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<GraphNode>().WithMany().HasForeignKey(edge => edge.SourceNodeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<GraphNode>().WithMany().HasForeignKey(edge => edge.TargetNodeId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<GraphListener>(entity =>
+        {
+            entity.HasKey(listener => listener.Id);
+            entity.Property(listener => listener.Address).HasMaxLength(128).IsRequired();
+            entity.Property(listener => listener.Protocol).HasMaxLength(20).IsRequired();
+            entity.Property(listener => listener.ProcessName).HasMaxLength(300);
+            entity.HasIndex(listener => new { listener.SnapshotId, listener.Port, listener.Protocol });
+            entity.HasOne<Snapshot>().WithMany().HasForeignKey(listener => listener.SnapshotId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<GraphNode>().WithMany().HasForeignKey(listener => listener.NodeId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<GraphEvidence>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Collector).HasMaxLength(120).IsRequired();
+            entity.Property(item => item.Description).HasMaxLength(1000).IsRequired();
+            entity.HasIndex(item => item.SnapshotId);
+            entity.HasOne<Snapshot>().WithMany().HasForeignKey(item => item.SnapshotId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<GraphNode>().WithMany().HasForeignKey(item => item.NodeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<GraphEdge>().WithMany().HasForeignKey(item => item.EdgeId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }
