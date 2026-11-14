@@ -12,15 +12,11 @@
 ## Current
 
 - **Task:** T2.7 Topology page
-- **Status:** in-progress
+- **Status:** done
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
-- T1.2 live acceptance passed: `srv-edge` connected directly; `srv-app` and `srv-db` connected through `srv-edge`. Capability probes reported Debian 12, uptime, passwordless sudo, and `docker`, `ip`, `ss` on all three. The app inventory contains only the requested three staging servers; `srv-search` was not added. Build passed with 0 warnings/errors; tests passed (106/106).
-- Discovery reached the lab and produced nested host/container/service nodes, but reported 0/3 successful servers. Root causes: OpenSSH non-login `PATH` omits `/usr/sbin` (hiding nginx), the app container's `hostname` binary fails under its memory-protection restrictions although `/proc/sys/kernel/hostname` works, and srv-db has the Docker CLI without a daemon. Curl with `api.test.local` returned HTTP 200 through nginx. systemd is unavailable in the containers as expected.
-- Files touched so far in this resumed session: `docs/PROGRESS.md`; ignored local `keys/dva_test_ed25519` and `keys/known_hosts`.
-- Done: hardened HostCollector hostname fallback, NginxCollector `/usr/sbin` detection, and DockerCollector daemon applicability, with fake-runner tests. Discovery completed with 3/3 servers succeeded; the graph rendered 17 nested host/container/service nodes. Theme switching and the `api` details/evidence panel passed. systemd was skipped because these containers do not run it, as expected.
-- T3.3 exact next step: fix the nginx parser's live `nginx -T` include-context handling, rerun discovery, then trace `api.test.local` and verify path highlighting plus evidence. J2 follow-up remains: outbound app connection to srv-search is not yet represented as an Unknown node; do not add srv-search. Never use a server tagged `prod`.
+- Clear for completed T2.7. Follow-up findings: nginx include-context parsing affects T3.3; J2 outbound app connection to srv-search does not yet appear as Unknown. Do not add srv-search. Never use a server tagged `prod`.
 
 ## Blockers
 
@@ -55,7 +51,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T2.4 | Docker collector | done | `feat(T2.4): docker collector` |
 | T2.5 | systemd collector | done | `feat(T2.5): systemd collector` |
 | T2.6 | Graph builder | done | `feat(T2.6): graph builder` |
-| T2.7 | Topology page | in-progress | `wip(T2.7): topology page and graph interop` |
+| T2.7 | Topology page | done | `feat(T2.7): verify live topology in disposable lab` |
 | T3.1 | nginx parser | done | `feat(T3.1): nginx parser` |
 | T3.2 | Edge resolution | done | `feat(T3.2): nginx edge resolution` |
 | T3.3 | Evidence panel and Trace | todo | `wip(T3.3): trace evidence UI` |
@@ -191,3 +187,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · Graphify · incremental refresh after T6.4 (2,317 nodes, 6,351 edges, 157 communities); minified god-node labels remain absent; output ignored/untracked
 - 2026-11-14 · Codex / GPT-6 · resumed T1.2 · owner supplied a disposable SSH lab; start live acceptance with only srv-edge, srv-app, and srv-db; preserve srv-search as Unknown
 - 2026-11-14 · Codex / GPT-6 · T1.2 · live direct and jump SSH capability probes passed for the three staging targets; build clean and 106/106 tests pass; srv-search not added
+- 2026-11-14 · Codex / GPT-6 · T2.7 · discovery 3/3 succeeded on the disposable lab, 17 nested nodes rendered; theme switching and api details/evidence passed; systemd skipped because the containers do not run it; collector compatibility fixes, build clean, 108/108 tests
