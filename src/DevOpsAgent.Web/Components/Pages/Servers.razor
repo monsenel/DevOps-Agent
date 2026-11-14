@@ -147,6 +147,7 @@
                                 <option value="@keyFile">@keyFile</option>
                             }
                         </InputSelect>
+                        <ValidationMessage For="() => _form.KeyFile" />
                         <span class="field-helper">Keys are read from the mounted /keys directory.</span>
                     </div>
                     <div class="field">
@@ -674,7 +675,7 @@
         public int Port { get; set; } = 22;
         [System.ComponentModel.DataAnnotations.Required]
         public string User { get; set; } = string.Empty;
-        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Select a private key file.")]
         public string KeyFile { get; set; } = string.Empty;
         public string? KeyPassphrase { get; set; }
         public Guid? JumpServerId { get; set; }
