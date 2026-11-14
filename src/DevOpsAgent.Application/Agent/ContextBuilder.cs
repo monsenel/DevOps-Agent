@@ -15,7 +15,8 @@ public sealed class AgentContextBuilder(
     public async Task<string> BuildAsync(string prompt, CancellationToken cancellationToken)
     {
         var inventory = await servers.ListAsync(cancellationToken);
-        var matches = inventory.Where(server => string.IsNullOrWhiteSpace(prompt)
+        var broadReview = IsBroadReviewPrompt(prompt);
+        var matches = inventory.Where(server => broadReview || string.IsNullOrWhiteSpace(prompt)
             || prompt.Contains(server.Name, StringComparison.OrdinalIgnoreCase)
             || prompt.Contains(server.Host, StringComparison.OrdinalIgnoreCase)).ToArray();
         var latest = await snapshots.GetLatestAsync(cancellationToken);
@@ -25,7 +26,7 @@ public sealed class AgentContextBuilder(
             var graph = await graphs.GetAsync(latest.Id, GraphView.All, cancellationToken);
             if (graph is not null)
             {
-                var terms = prompt.Split([' ', '\t', '\r', '\n', '/', ':', '.'], StringSplitOptions.RemoveEmptyEntries)
+                string[] terms = broadReview ? [] : prompt.Split([' ', '\t', '\r', '\n', '/', ':', '.'], StringSplitOptions.RemoveEmptyEntries)
                     .Where(term => term.Length >= 3).ToArray();
                 var nodes = graph.Nodes.Where(node => terms.Length == 0 || terms.Any(term => node.Data.ToString()
                     .Contains(term, StringComparison.OrdinalIgnoreCase))).Take(40).Select(node => node.Data).ToArray();
@@ -78,5 +79,12 @@ public sealed class AgentContextBuilder(
             alerts = alertContext,
             metrics = metricContext
         });
+    }
+
+    private static bool IsBroadReviewPrompt(string prompt)
+    {
+        var normalized = prompt.Trim().TrimEnd('?', '.', '!').ToLowerInvariant();
+        return normalized is "anything i should look at" or "anything should i look at"
+            or "is there anything i should look at" or "what should i look at";
     }
 }
