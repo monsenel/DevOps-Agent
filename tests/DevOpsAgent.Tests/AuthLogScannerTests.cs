@@ -118,6 +118,52 @@ public sealed class AuthLogScannerTests
     }
 
     [Fact]
+    public async Task Scan_ReadsSudoEntriesFromTheJournalAndKeepsTheAuthLogFallback()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var runner = new FixtureSshRunner("\n__DVA_BAN_TOOLS__\n__DVA_BAN_STATE__\n");
+        var scanner = new AuthLogScanner(runner, new MemorySettings(), Options.Create(new SecurityMonitoringOptions()),
+            new MutableTimeProvider(now));
+
+        await scanner.ScanAsync(new Server("edge", "edge.example", 22, "deploy", "id_ed25519", "staging"), CancellationToken.None);
+
+        // Matches on different journal fields are ANDed, so sudo (SYSLOG_IDENTIFIER) needs its own query.
+        Assert.Contains("journalctl -u ssh -u sshd --since", runner.LastCommand, StringComparison.Ordinal);
+        Assert.Contains("journalctl SYSLOG_IDENTIFIER=sudo --since", runner.LastCommand, StringComparison.Ordinal);
+        Assert.Contains("tail -n 1000 /var/log/auth.log", runner.LastCommand, StringComparison.Ordinal);
+        Assert.Contains("command -v journalctl", runner.LastCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain("--vacuum", runner.LastCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain("--rotate", runner.LastCommand, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Scan_IgnoresTheActualScanCommandWhenSudoLogsItBackAsACommandEntry()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var time = new MutableTimeProvider(now);
+        var runner = new FixtureSshRunner("\n__DVA_BAN_TOOLS__\n__DVA_BAN_STATE__\n");
+        var server = new Server("edge", "edge.example", 22, "dva", "id_ed25519", "staging");
+        var scanner = new AuthLogScanner(runner, new MemorySettings(), Options.Create(new SecurityMonitoringOptions()), time);
+        await scanner.ScanAsync(server, CancellationToken.None);
+        var scanCommand = runner.LastCommand;
+
+        // Exactly what sudo records when the scanner itself runs under `sudo -n -- sh -c <command>`.
+        var timestamp = now.AddSeconds(-5).ToString("yyyy-MM-dd'T'HH:mm:sszzz");
+        runner.Output = $"{timestamp} host sudo[9]: dva : TTY=unknown ; PWD=/home/dva ; USER=root ; COMMAND=/usr/bin/sh -c {scanCommand}"
+            + "\n__DVA_BAN_TOOLS__\n__DVA_BAN_STATE__\n";
+        var conditions = await scanner.ScanAsync(server, CancellationToken.None);
+
+        Assert.DoesNotContain(conditions, item => item.Rule == "ssh-unusual-sudo");
+
+        // A different sudo command by the same user is still reported.
+        time.Advance(TimeSpan.FromSeconds(30));
+        timestamp = now.AddSeconds(20).ToString("yyyy-MM-dd'T'HH:mm:sszzz");
+        runner.Output = $"{timestamp} host sudo[10]: dva : TTY=unknown ; PWD=/ ; USER=root ; COMMAND=/usr/bin/cat /etc/hosts"
+            + "\n__DVA_BAN_TOOLS__\n__DVA_BAN_STATE__\n";
+        Assert.Contains(await scanner.ScanAsync(server, CancellationToken.None), item => item.Rule == "ssh-unusual-sudo");
+    }
+
+    [Fact]
     public async Task Scan_DoesNotAlertOnItsOwnSudoWrappedLogAndBanStateProbe()
     {
         var now = DateTimeOffset.UtcNow;
@@ -154,8 +200,9 @@ public sealed class AuthLogScannerTests
         Assert.Contains("Scan unavailable", retry.Details, StringComparison.Ordinal);
     }
 
-    private sealed class FixtureSshRunner(string output) : ISshRunner
+    private sealed class FixtureSshRunner(string initialOutput) : ISshRunner
     {
+        public string Output { get; set; } = initialOutput;
         public string LastCommand { get; private set; } = string.Empty;
         public bool Fail { get; set; }
 
@@ -164,7 +211,7 @@ public sealed class AuthLogScannerTests
         {
             LastCommand = command;
             if (Fail) throw new InvalidOperationException("fixture SSH failure");
-            return Task.FromResult(new RemoteCommandResult(0, output, string.Empty, TimeSpan.FromMilliseconds(1)));
+            return Task.FromResult(new RemoteCommandResult(0, Output, string.Empty, TimeSpan.FromMilliseconds(1)));
         }
     }
 
