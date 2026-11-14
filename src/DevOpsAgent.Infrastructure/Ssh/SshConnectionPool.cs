@@ -25,7 +25,7 @@ public sealed class SshConnectionPool(
     public async Task<ISshCommandSession> GetSessionAsync(Guid serverId, CancellationToken cancellationToken)
     {
         var connection = await GetOrConnectAsync(serverId, [], cancellationToken);
-        return new SshCommandSession(connection.Client, () =>
+        return new SshCommandSession(connection.Client, connection.Timeouts, () =>
         {
             Invalidate(serverId, connection);
             return Task.CompletedTask;
@@ -99,7 +99,18 @@ public sealed class SshConnectionPool(
                     }
 
                     RemoveConnection(serverId);
-                    var created = await CreateConnectionAsync(server, jumpConnection, cancellationToken);
+                    ConnectionEntry created;
+                    try
+                    {
+                        created = await CreateConnectionAsync(server, jumpConnection, cancellationToken);
+                    }
+                    catch (Exception exception) when (jumpConnection is not null && IsConnectTimeoutOrTransport(exception, cancellationToken))
+                    {
+                        // The tunnel through the jump host may be silently dead; repeated failures recycle the jump session too.
+                        if (jumpConnection.Timeouts.RecordTimeout()) Invalidate(jumpConnection.ServerId, jumpConnection);
+                        throw;
+                    }
+
                     _connections[serverId] = created;
                     if (Generation(serverId) == generation) return created;
 
@@ -183,7 +194,7 @@ public sealed class SshConnectionPool(
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(_options.ConnectionTimeoutSeconds, 1, 300)));
             await client.ConnectAsync(timeout.Token);
-            return new ConnectionEntry(client, privateKey, tunnel, jumpConnection);
+            return new ConnectionEntry(server.Id, client, privateKey, tunnel, jumpConnection);
         }
         catch (Exception) when (rejectedFingerprint is not null)
         {
@@ -213,6 +224,10 @@ public sealed class SshConnectionPool(
 
     // A connection-level failure leaves a poisoned client in the pool; drop exactly that entry (not a newer replacement)
     // so the next request reconnects.
+    private static bool IsConnectTimeoutOrTransport(Exception exception, CancellationToken callerToken) =>
+        exception is SshOperationTimeoutException || SshTransportFailure.IsTransportFailure(exception)
+        || exception is OperationCanceledException && !callerToken.IsCancellationRequested;
+
     private void Invalidate(Guid serverId, ConnectionEntry entry)
     {
         // TryRemove(KeyValuePair) is identity-checked, so a newer replacement entry is never removed.
@@ -231,13 +246,16 @@ public sealed class SshConnectionPool(
     }
 
     private sealed class ConnectionEntry(
+        Guid serverId,
         SshClient client,
         PrivateKeyFile privateKey,
         ForwardedPortLocal? tunnel,
         ConnectionEntry? jumpConnection) : IDisposable
     {
+        public Guid ServerId { get; } = serverId;
         public SshClient Client { get; } = client;
         public ConnectionEntry? JumpConnection { get; } = jumpConnection;
+        public SshTimeoutTracker Timeouts { get; } = new();
 
         public void Dispose()
         {
@@ -247,7 +265,7 @@ public sealed class SshConnectionPool(
         }
     }
 
-    private sealed class SshCommandSession(SshClient client, Func<Task> onConnectionFailure) : ISshCommandSession
+    private sealed class SshCommandSession(SshClient client, SshTimeoutTracker timeouts, Func<Task> onConnectionFailure) : ISshCommandSession
     {
         private static bool IsClientConnected(SshClient value)
         {
@@ -279,11 +297,19 @@ public sealed class SshConnectionPool(
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
                 await sshCommand.ExecuteAsync(cancellationToken);
                 stopwatch.Stop();
+                timeouts.RecordSuccess();
                 return new RemoteCommandResult(
                     sshCommand.ExitStatus,
                     sshCommand.Result,
                     sshCommand.Error,
                     stopwatch.Elapsed);
+            }
+            catch (SshOperationTimeoutException) when (timeouts.RecordTimeout())
+            {
+                // A silently dead peer (blackholed route) keeps IsConnected true and every command waits its full timeout.
+                // One slow command is tolerated; repeated consecutive timeouts mean the session is dead, so recycle it.
+                await onConnectionFailure();
+                throw;
             }
             catch (Exception exception) when (SshTransportFailure.IsTransportFailure(exception) && !IsClientConnected(client))
             {
@@ -302,4 +328,20 @@ public static class SshTransportFailure
     // SshOperationTimeoutException is deliberately absent: a slow command is not a dead connection.
     public static bool IsTransportFailure(Exception exception) =>
         exception is SshConnectionException or SocketException or ObjectDisposedException;
+}
+
+/// <summary>
+/// Counts consecutive command timeouts on one pooled session. A single slow command must not recycle a healthy session,
+/// but <see cref="DefaultThreshold"/> in a row indicates a silently dead connection.
+/// </summary>
+public sealed class SshTimeoutTracker(int threshold = SshTimeoutTracker.DefaultThreshold)
+{
+    public const int DefaultThreshold = 3;
+
+    private int _consecutive;
+
+    /// <summary>Records a timeout; returns true exactly when the threshold is reached (the session should be recycled).</summary>
+    public bool RecordTimeout() => Interlocked.Increment(ref _consecutive) >= threshold;
+
+    public void RecordSuccess() => Interlocked.Exchange(ref _consecutive, 0);
 }
