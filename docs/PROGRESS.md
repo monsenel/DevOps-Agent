@@ -88,6 +88,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 
 One line per session: date · tool/model · tasks touched · result.
 
+- 2026-11-14 · Codex / GPT-6 · resumed T6.5 · clean tree; build passed with 0 warnings/errors and tests passed (77/77); J6 SSH target remains the next dependency
+
 - 2026-11-13 · planning · docs created · ready for T0.1
 - 2026-11-13 · Codex · T0.1 · solution skeleton complete; build/test pass and default page returns HTTP 200
 - 2026-11-13 · Codex · T0.3 · started
