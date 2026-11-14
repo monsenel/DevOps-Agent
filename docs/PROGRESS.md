@@ -7,12 +7,12 @@
 ## Current
 
 - **Task:** T5.1 Metric poller
-- **Status:** in-progress
+- **Status:** done
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
-T6.3/J4 and the owner-requested sidebar layout are complete. Resume verification passed: clean working tree, build with 0 warnings/errors, and 79/79 tests. The owner lifted the previous M5 deferral. Implemented T5.1 parser/fixture tests, one-command SSH polling, CPU/network deltas, raw/rollup persistence, 24-hour retention, hosted poll/rollup services, and a server detail metrics page. Build passes with 0 warnings/errors and 84/84 tests. Exact next step: verify fresh SQLite migration/startup using a temporary database, visually inspect server detail in both themes and at 390px, fix any issues, then re-run build/tests and Graphify incremental update. Temporary app/SSH/Ollama services and test credentials from prior checks were removed. Graphify was last incrementally refreshed at 5,415 nodes, 18,841 edges, and 299 communities.
+
 
 ## Blockers
 
@@ -62,7 +62,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T4.1 | Live connections | done | `feat(T4.1): observed connections` |
 | T4.2 | Unknown nodes | done | `feat(T4.2): unknown node expansion` |
 | T4.3 | Drift and scheduled discovery | done | `feat(T4.3): drift and scheduled discovery` |
-| T5.1 | Metric poller | in-progress | |
+| T5.1 | Metric poller | done | `feat(T5.1): metric polling and server detail` |
 | T5.2 | Health checks | todo | |
 | T5.3 | Alert engine and Alerts page | todo | |
 | T5.4 | Notifications | todo | |
@@ -90,6 +90,7 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T6.3 cleanup · stopped temporary app, SSH daemon, and Ollama container; removed temporary DB, encrypted key ring, SSH keys, and test files; next run Graphify incremental update
 - 2026-11-14 · Codex / GPT-6 · resumed T6.3 · fixed full-height sidebar verified and committed; Graphify incremental refresh completed (5,415 nodes, 18,841 edges, 299 communities); next resume T5.1 when M5 is requested
 - 2026-11-14 · Codex / GPT-6 · resumed T5.1 · clean tree; build passed with 0 warnings/errors and tests passed (79/79); owner lifted M5 deferral
+- 2026-11-14 · Codex / GPT-6 · T5.1 · combined read-only polling, CPU/network deltas, raw samples, five-minute rollups, 24-hour raw retention, and server detail complete; SQLite migration/startup verified; values shown in both themes, mobile layout checked; build clean and 84/84 tests pass
 
 - 2026-11-14 · Codex / GPT-6 · T6.5 · J6 steps 1–3 passed on disposable Debian apt target; security and standard updates classified, explicit approval executed both, report exit 0/no restarts/reboot false, follow-up scan showed 0 pending; temporary test environment removed
 

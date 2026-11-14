@@ -33,9 +33,13 @@ public sealed class MetricRepositoryTests
         Assert.Equal(2, recent.Count);
         var rollup = new MetricRollup(server.Id, "load_1m", new DateTimeOffset(2026, 11, 14, 12, 5, 0, TimeSpan.Zero), 1, 2, 3, 2);
         await repository.SaveRollupsAsync([rollup], now.AddDays(-1), CancellationToken.None);
+        var refreshedRollup = new MetricRollup(server.Id, "load_1m", new DateTimeOffset(2026, 11, 14, 12, 5, 0, TimeSpan.Zero), 1, 2.5, 4, 3);
+        await repository.SaveRollupsAsync([refreshedRollup], now.AddDays(-1), CancellationToken.None);
 
         Assert.Equal(1, await database.Context.MetricRollups.CountAsync());
-        Assert.Equal(2, (await database.Context.MetricRollups.SingleAsync()).SampleCount);
+        var savedRollup = await database.Context.MetricRollups.SingleAsync();
+        Assert.Equal(3, savedRollup.SampleCount);
+        Assert.Equal(2.5, savedRollup.Average);
         Assert.Equal(2, await database.Context.MetricSamples.CountAsync());
     }
 
