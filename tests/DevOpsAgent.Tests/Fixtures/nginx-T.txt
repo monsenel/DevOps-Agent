@@ -1,0 +1,49 @@
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+# configuration file /etc/nginx/nginx.conf:
+worker_processes auto;
+events { worker_connections 1024; }
+http {
+    upstream app_backend {
+        server 10.20.0.11:8080 weight=3 max_fails=2;
+        server unix:/run/app/backend.sock;
+    }
+    server {
+        listen 80 default_server;
+        server_name example.test www.example.test;
+        location /api/ {
+            proxy_set_header Host $host;
+            proxy_pass http://app_backend;
+        }
+        location ~* ^/legacy {
+            fastcgi_pass unix:/run/php/php-fpm.sock;
+        }
+        location /dynamic/ {
+            proxy_pass http://$backend$request_uri;
+        }
+    }
+}
+# configuration file /etc/nginx/conf.d/secure.conf:
+http {
+    server {
+        listen 443 ssl http2;
+        server_name secure.example.test;
+        location / {
+            grpc_pass grpcs://grpc_pool;
+        }
+        location /legacy/ {
+            uwsgi_pass 127.0.0.1:3031;
+        }
+    }
+}
+# configuration file /etc/nginx/stream.conf:
+stream {
+    upstream postgres_cluster {
+        server 10.30.0.21:5432 weight=2;
+        server 10.30.0.22:5432;
+    }
+    server {
+        listen 5432;
+        proxy_pass postgres_cluster;
+    }
+}
