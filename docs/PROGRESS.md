@@ -4,19 +4,26 @@
 
 ## Waiting on owner
 
-None. The owner confirmed an LLM provider is configured and its connection test passed with tool calling.
+- T7.R13 decisions (prod execution-mode default, update scans on prod, `/dev/components` outside Development, login throttling).
+- The local dev database `src/DevOpsAgent.Web/data/devops-agent.db` contains a `prod` server whose group has no stored execution mode, so it is in **Confirm** mode, not read-only. Set it in Settings › Execution modes if read-only is intended.
 
 ---
 
 ## Current
 
-- **Task:** T6.6 MVP hardening pass
-- **Status:** done
-- **Last updated:** 2026-11-15 by Codex
+- **Task:** none — MVP review complete; next is T7.R1
+- **Status:** —
+- **Last updated:** 2026-11-15 by ZCode (MVP review)
 
 ## WIP notes
 
-None. T6.3 and T6.6 are complete; release checks are green.
+None. The 2026-11-15 review fixed small issues in 41 `fix(review): …` commits (build 0 warnings, 246/246 tests) and filed T7.R1–T7.R13 in PLAN.md › M7.
+
+### MVP review (2026-11-15)
+
+- Static: M0, M1 and M4 pass; M2 (T2.5 scope), M3 (T3.1 relative includes), M5 (T5.3 restart-loop rule), M6 (T6.6 loading skeletons, J6 step 3) partial → T7.R tasks.
+- Live, isolated `/tmp` DB, lab servers only (srv-edge direct, srv-app/srv-db via jump; srv-search unregistered; no new containers): T0.3, T0.4, T1.2, T1.3 preview, T2.7/J2, T4.1–T4.3, T5.1, T5.3 (alert-down/up), T5.5 passed. T1.1, T3.3 and T5.2 not verified (automation could not drive Blazor inputs) → T7.R11. J4 blocked in the review run (no provider in the isolated DB); a concurrent Codex session recorded J4 separately (above). J5/J6 not re-run (no attacker container; no lab mutation).
+- Resilience: TEST-NET 192.0.2.1 entry → discovery 3 ok/1 failed, unreachable alert opened, app stayed healthy (threads 58–60, sockets fell 14 → 7); its six collectors took ~4 min serially → T7.R1.
 
 ### T6.3 acceptance result (2026-11-15)
 
@@ -75,6 +82,19 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T6.4 | SSH attack detection and bans | done | `feat(T6.4): verify SSH attack detection in disposable lab` |
 | T6.5 | Updates | done | `feat(T6.5): verify security update workflow and resilient scans` |
 | T6.6 | MVP hardening pass | done | `feat(T6.6): MVP hardening and release closeout` |
+| T7.R1 | SSH connection lifecycle | todo | |
+| T7.R2 | Stale nodes for unreachable servers | todo | |
+| T7.R3 | Container restart-loop alert rule | todo | |
+| T7.R4 | Agent action guardrails | todo | |
+| T7.R5 | Secret handling gaps | todo | |
+| T7.R6 | nginx relative includes | todo | |
+| T7.R7 | Monitoring throughput | todo | |
+| T7.R8 | Discovery run ownership | todo | |
+| T7.R9 | systemd collector scope | todo | |
+| T7.R10 | Remaining MVP gaps | todo | |
+| T7.R11 | Manual UI re-verification | todo | |
+| T7.R12 | Test gaps | todo | |
+| T7.R13 | Owner decisions | blocked | waiting on owner |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
 
@@ -83,6 +103,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 ## Session log
 
 One line per session: date · tool/model · tasks touched · result.
+
+- 2026-11-15 · ZCode / Claude · MVP review M0–M6 · static + live lab review; 41 `fix(review)` commits (atomic approvals, fail-closed execution modes, sudo alert de-dup, SSH pool hygiene, redaction, sensitive paths, snapshot status, secrets in logs/URLs); build 0 warnings, 246/246 tests; larger findings filed as T7.R1–T7.R13
 
 - 2026-11-15 · Codex / GPT-6 · completed T6.6 · J1–J7 accepted on staging (J4 with configured OpenRouter); clean-clone Docker acceptance, 0-warning build, 119/119 tests, tracked-secret scan clean; systemd live verification deferred to real LXC/VM; release commit ready for v0.1.0 tag
 

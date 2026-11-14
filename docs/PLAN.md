@@ -218,6 +218,77 @@ Requirement IDs (LLM-1, DSC-2 …) refer to `docs/PRD.md`.
 
 ---
 
+## M7 — Post-MVP review findings
+
+Raised by the 2026-11-15 MVP review. Small issues were fixed directly (`fix(review): …` commits); these are the larger ones. Ordered by severity. They fix gaps against existing PRD/PLAN requirements; they are not new features.
+
+### T7.R1 SSH connection lifecycle (INV-5, NFR-2) — high
+- **Do:** Lease/ref-count pooled clients so a client (or a jump tunnel) is never disposed while another caller is mid-command. Single-flight connect per server plus a short negative cache (30–60 s) for unreachable hosts and jump hosts. Detect silently dead sessions (blackholed peer, `IsConnected` still true) with a liveness rule — e.g. recycle after N consecutive command timeouts with no success — without recycling on one slow command. Skip a server's remaining collectors after a connection-level failure; per-call deadline that includes connect time.
+- **Done when:** Unit tests with a fake transport for leases, single-flight and negative cache. On the disposable lab with one TEST-NET (192.0.2.1) inventory entry behind `srv-edge`: discovery of the other servers is not delayed by more than one connect timeout, and the 60 s metric cycle does not overrun.
+- **Depends on:** —
+
+### T7.R2 Stale nodes for unreachable servers (NFR-3) — high
+- **Do:** When a server's core collectors fail, carry its nodes/edges/listeners forward from the last usable snapshot, marked `stale` with last-seen time. Topology renders them dimmed with a text badge (not colour-only). Drift ignores stale carry-overs.
+- **Done when:** Tests on fixture snapshots; on the lab, a server made unreachable keeps its last-known nodes visibly stale and no spurious drift/new-listener alerts.
+- **Depends on:** —
+
+### T7.R3 Container restart-loop alert rule (T5.3, MON-2) — high
+- **Do:** Read container restart counts (`RestartCount`, state) read-only, keep per-container history, open an alert when restarts within a window exceed a threshold; auto-resolve when stable.
+- **Done when:** Tests; on the lab, `worker-pg`/`worker-redis` on `srv-app` (observed restarting, RestartCount ≈ 70 during the review) raise a restart-loop alert.
+- **Depends on:** —
+
+### T7.R4 Agent action guardrails (AGT-3/4) — medium
+- **Do:** Force approval for any mutating call in a turn whose context includes untrusted tool output (prompt-injection guard for groups in auto mode). Remove `unblock_ip` from the auto allowlist. `block_ip` refuses the app host's, jump hosts' and the operator's own addresses; `restart_service` refuses `sshd`/`ssh`/`docker` unless explicitly confirmed. Record in DECISIONS whether `restart_container` (added in D-024, not in AGT-1) stays.
+- **Done when:** Policy matrix tests cover the new rules.
+- **Depends on:** —
+
+### T7.R5 Secret handling gaps (LLM-7, MON-6) — medium
+- **Do:** Treat the ntfy topic as a secret (protected at rest, masked in UI like the bot token). Require HTTPS (or a private/loopback host) for endpoints that receive tokens or API keys. Redact secret-looking arguments in Docker `Cmd`/`Entrypoint`/labels and credentials in raw `nginx -T` output before raw collector output is stored.
+- **Done when:** Tests; existing stored ntfy settings migrate without loss.
+- **Depends on:** —
+
+### T7.R6 nginx relative includes (T3.1, DSC-5) — medium
+- **Do:** Resolve relative `include` patterns against the nginx prefix (`/etc/nginx`) before matching `# configuration file` markers; included files' root-level `server`/`upstream` blocks belong to the including context.
+- **Done when:** Fixture with `include conf.d/*.conf;` parses all server blocks.
+- **Depends on:** —
+
+### T7.R7 Monitoring throughput — medium
+- **Do:** Alert engine checks servers with bounded parallelism and skips the auth-log scan when the status probe fails. Notifications go through a background channel so a down Telegram/ntfy endpoint doesn't stall evaluation. Push metric time predicates into SQL (decide the `DateTimeOffset` storage/converter approach in DECISIONS; migration if needed). De-duplicate sudo events seen in both journald and auth.log.
+- **Done when:** Tests; on the lab with one unreachable entry, alert evaluation for the others stays within its 30 s cycle.
+- **Depends on:** T7.R1
+
+### T7.R8 Discovery run ownership — medium
+- **Do:** One app-wide single-flight gate for discovery (all circuits + scheduler). UI-triggered runs execute in a host-owned scope, not the Blazor circuit, so closing the tab can't break the run.
+- **Done when:** Tests for the gate; closing the browser mid-run leaves a Completed/Partial snapshot.
+- **Depends on:** —
+
+### T7.R9 systemd collector scope (T2.5, DSC-4) — medium
+- **Do:** Map listener PIDs to units (e.g. `/proc/<pid>/cgroup`, read-only) and run `systemctl show` only for listener-owning units, with a fallback when `/proc` is restricted. Fix `SystemdCollectorTests` to assert the restriction.
+- **Done when:** Fixture tests; live check on a real LXC/VM with systemd (not a privileged container on the dev host).
+- **Depends on:** —
+
+### T7.R10 Remaining MVP gaps — medium
+- **Do:** Loading skeletons (T6.6). J6 step 3: re-run the server's health checks after `apply_updates`. dnf scans with sudo, verified on a dnf host. Subnet filter on Topology (GRF-10). SSH-config import group select offers groups in use (like the edit form).
+- **Done when:** Each item verified in both themes / on a test server as applicable.
+- **Depends on:** —
+
+### T7.R11 Manual UI re-verification — medium
+- **Do:** In a real browser (keyboard input), verify flows that the review's browser automation could not drive: T1.1 add/edit + validation (duplicate name, port 70000, missing key), T5.2 add a health check, T3.3 trace `api.test.local` with evidence. Check the review-changed UI: required server group, Settings corrupt-execution-modes notice, provider "re-enter API key" message, approver name, graph alert text marker, Unknown node labels. 390 px and both themes, contrast (NFR-10).
+- **Done when:** Each flow passes or has a bug filed as a new T7.R task.
+- **Depends on:** —
+
+### T7.R12 Test gaps — low
+- **Do:** Tests for `ChatService.SendAsync` (streaming + tool loop), discovery max degree 8, unix-socket edge resolution, dnf update parsing/reboot report, the no-sudo capability path (fake returning non-zero for `sudo -n true`).
+- **Done when:** Tests green.
+- **Depends on:** —
+
+### T7.R13 Owner decisions — blocked on owner
+- **Do:** Record in DECISIONS: (a) whether the `prod` group defaults to read-only execution mode (today an unconfigured group is Confirm); (b) whether update scans (`sudo apt-get update`) may run on `prod` servers; (c) whether `/dev/components` stays reachable outside Development; (d) login throttling.
+- **Done when:** Decisions recorded and implemented.
+- **Depends on:** owner
+
+---
+
 ## v2 backlog (do not start without being told)
 
 App-config/connection-string collector · Nexus collector · PostgreSQL/Redis client collectors · firewall collector · HAProxy/Traefik/Caddy · TLS collector · task routing + fallback · rolling patches by graph order · CVE scan (Trivy/Grype) · file integrity · runbooks · incident mode · anomaly baselines · daily digest · Prometheus/VictoriaLogs read · LLM-inferred edges · consider decomposing HealthCheck for maintainability.
