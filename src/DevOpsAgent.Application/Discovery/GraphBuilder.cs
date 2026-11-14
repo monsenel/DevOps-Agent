@@ -15,6 +15,7 @@ public sealed class GraphBuilder
         var nodeByKey = new Dictionary<string, GraphNode>(StringComparer.Ordinal);
         var subnetByKey = new Dictionary<string, GraphNode>(StringComparer.Ordinal);
         var ipIndex = new IpIndex();
+        var serverStates = new List<ServerGraphState>();
 
         foreach (var data in serverData.OrderBy(item => item.Server.Id))
         {
@@ -212,6 +213,65 @@ public sealed class GraphBuilder
                         $"{listener.Protocol} {listener.Address}:{listener.Port} ({listener.ProcessName ?? "unknown process"})."));
                 }
             }
+
+            serverStates.Add(new ServerGraphState(data, host, containerByMainPid, containerById, composeServiceByContainerId,
+                systemdServiceByPid));
+        }
+
+        var edgeResolver = new EdgeResolver();
+        foreach (var state in serverStates.Where(state => state.Data.Nginx is not null))
+        {
+            var nginx = state.Data.Nginx!;
+            var nginxNode = GetNginxNode(state);
+            foreach (var serverBlock in nginx.Servers)
+            {
+                var listenPort = serverBlock.Listens.Select(value => TryParseListenPort(value.Value))
+                    .FirstOrDefault(port => port.HasValue) ?? (serverBlock.Listens.Any(value => value.Value == "ssl") ? 443 : 80);
+                var listenProtocol = listenPort == 443 || serverBlock.Listens.Any(value => value.Value == "ssl") ? "https" : "http";
+                foreach (var serverName in serverBlock.ServerNames.Where(value => IsDomainName(value.Value)))
+                {
+                    var normalizedName = serverName.Value.Trim().ToLowerInvariant();
+                    var domain = AddNode($"domain:{normalizedName}", GraphNodeKind.Domain, serverName.Value,
+                        null, null, new { Domain = serverName.Value });
+                    var edge = AddDeclaredEdge(domain, nginxNode, listenPort, listenProtocol);
+                    evidence.Add(new GraphEvidence(snapshotId, null, edge.Id, "nginx",
+                        FormatEvidence(serverName.FilePath, serverName.Line, $"server_name {serverName.Value};")));
+                }
+
+                foreach (var proxy in serverBlock.Proxies)
+                {
+                    var target = NginxEndpointParser.Parse(proxy.Target);
+                    var upstream = nginx.Upstreams.FirstOrDefault(item =>
+                        string.Equals(item.Name, target.Address, StringComparison.OrdinalIgnoreCase));
+                    var targets = upstream is null
+                        ? new[] { (Endpoint: target, Server: (NginxUpstreamServerInfo?)null) }
+                        : upstream.Servers.Select(server =>
+                            (Endpoint: NginxEndpointParser.Parse(server.Address), Server: (NginxUpstreamServerInfo?)server)).ToArray();
+                    if (targets.Length == 0) targets = [(target, null)];
+
+                    foreach (var (endpoint, upstreamServer) in targets)
+                    {
+                        var resolution = edgeResolver.Resolve(endpoint, state.Data, serverData, ipIndex);
+                        if (!nodeByKey.TryGetValue(resolution.NodeKey, out var targetNode))
+                        {
+                            targetNode = resolution.IsUnknown
+                                ? AddNode(resolution.NodeKey, GraphNodeKind.Unknown, "Unknown", null, state.Data.Server.Id,
+                                    new { Address = resolution.TargetName, endpoint.Port, endpoint.Protocol, resolution.Reason, endpoint.IsUnresolved })
+                                : AddNode($"unknown:{state.Data.Server.Id:N}:{endpoint.Address}:{endpoint.Port?.ToString() ?? "none"}",
+                                    GraphNodeKind.Unknown, "Unknown", null, state.Data.Server.Id,
+                                    new { Address = endpoint.Address, endpoint.Port, endpoint.Protocol, resolution.Reason, endpoint.IsUnresolved });
+                        }
+
+                        var edge = AddDeclaredEdge(nginxNode, targetNode, endpoint.Port, endpoint.Protocol);
+                        var upstreamEvidence = upstreamServer is null
+                            ? string.Empty
+                            : $" {upstreamServer.FilePath ?? "nginx configuration"}:{upstreamServer.Line}: server {upstreamServer.Address};";
+                        evidence.Add(new GraphEvidence(snapshotId, null, edge.Id, "nginx",
+                            FormatEvidence(proxy.FilePath, proxy.Line,
+                                $"{proxy.Directive} {proxy.Target};{upstreamEvidence} {resolution.Reason}")));
+                    }
+                }
+            }
         }
 
         return new GraphBuildResult(nodes, edges, graphListeners, evidence);
@@ -243,7 +303,55 @@ public sealed class GraphBuilder
                 edges.Add(new GraphEdge(snapshotId, source.Id, target.Id, GraphEdgeKind.NetworkAttachment));
             }
         }
+
+        GraphEdge AddDeclaredEdge(GraphNode source, GraphNode target, int? port, string? protocol)
+        {
+            var existing = edges.FirstOrDefault(edge => edge.SourceNodeId == source.Id && edge.TargetNodeId == target.Id
+                && edge.Port == port && edge.Protocol == protocol && edge.Kind == GraphEdgeKind.Declared);
+            if (existing is not null) return existing;
+            var edge = new GraphEdge(snapshotId, source.Id, target.Id, GraphEdgeKind.Declared, port, protocol);
+            edges.Add(edge);
+            return edge;
+        }
+
+        GraphNode GetNginxNode(ServerGraphState state) =>
+            state.SystemdServiceByPid.Values.FirstOrDefault(node => node.Name.Contains("nginx", StringComparison.OrdinalIgnoreCase))
+            ?? state.ComposeServiceByContainerId.Values.FirstOrDefault(node => node.Name.Contains("nginx", StringComparison.OrdinalIgnoreCase)
+                || node.Name.Contains("proxy", StringComparison.OrdinalIgnoreCase))
+            ?? nodeByKey.Values.FirstOrDefault(node => node.ServerId == state.Data.Server.Id
+                && node.Kind == GraphNodeKind.Service && node.Name.Contains("nginx", StringComparison.OrdinalIgnoreCase))
+            ?? state.Host;
+
+        static bool IsDomainName(string value) => !string.IsNullOrWhiteSpace(value)
+            && value != "_" && !value.StartsWith('~') && !value.Contains('$');
+
+        static int? TryParseListenPort(string value)
+        {
+            var candidate = value.Trim();
+            if (candidate.StartsWith('[') && candidate.IndexOf(']') is var closing && closing >= 0
+                && closing + 2 < candidate.Length && candidate[closing + 1] == ':')
+            {
+                candidate = candidate[(closing + 2)..];
+            }
+            else if (candidate.LastIndexOf(':') is var separator && separator >= 0)
+            {
+                candidate = candidate[(separator + 1)..];
+            }
+
+            return int.TryParse(candidate, out var port) && port is > 0 and <= 65535 ? port : null;
+        }
+
+        static string FormatEvidence(string? filePath, int line, string snippet) =>
+            $"{filePath ?? "nginx configuration"}:{line}: {snippet}";
     }
+
+    private sealed record ServerGraphState(
+        ServerDiscoveryData Data,
+        GraphNode Host,
+        IReadOnlyDictionary<int, GraphNode> ContainerByMainPid,
+        IReadOnlyDictionary<string, GraphNode> ContainerById,
+        IReadOnlyDictionary<string, GraphNode> ComposeServiceByContainerId,
+        IReadOnlyDictionary<int, GraphNode> SystemdServiceByPid);
 
     private static IReadOnlyList<string> ParseTags(string tagsJson)
     {

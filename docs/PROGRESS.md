@@ -17,15 +17,20 @@ What is done so far:
 - T3.1 is complete and committed as `f1dd838`; all 33 tests pass.
 - T3.2's plan, PRD resolution order, graph builder, discovery records, and nginx parse result are reviewed.
 - T3.2 checkpoint: added `NginxCollector`, read-only config collection, and source-server `getent hosts` enrichment; added nginx data to graph-build input and DI. Build passes with zero warnings/errors.
+- T3.2 implementation: added ordered endpoint resolution for shared Docker DNS names, `/etc/hosts`, source-server `getent`, global IP ownership, listeners, published host ports, and stable Unknown targets. `GraphBuilder` now expands nginx upstreams and creates domain/declared edges with config file, line, snippet, and resolution evidence.
+- T3.2 tests cover Docker DNS aliases on shared networks, hosts/getent resolution, direct container IP, listener ownership, unknown/variable targets, upstream expansion, and nginx on host A resolving to a Compose service on host B through its published port. Build is clean; 39/39 tests pass.
 What is next (exact next step):
-- Implement `EdgeResolver` for upstream expansion, shared Docker DNS, `/etc/hosts`, `getent`, IP ownership, listeners/published ports, and Unknown fallback; then integrate domain and declared-edge evidence in `GraphBuilder`.
+- Review T3.2 against every resolution-order criterion, then mark it done and commit `feat(T3.2): nginx edge resolution`; begin T3.3 using the topology graph detail APIs and `docs/DESIGN.md`.
 Files touched:
 - `docs/PROGRESS.md`
+- `src/DevOpsAgent.Application/Discovery/EdgeResolver.cs`
+- `src/DevOpsAgent.Application/Discovery/GraphBuilder.cs`
 - `src/DevOpsAgent.Application/Discovery/DiscoveryService.cs`
 - `src/DevOpsAgent.Application/Discovery/GraphBuildInput.cs`
 - `src/DevOpsAgent.Application/Discovery/NginxDiscoveryResult.cs`
 - `src/DevOpsAgent.Infrastructure/Collectors/NginxCollector.cs`
 - `src/DevOpsAgent.Infrastructure/Persistence/PersistenceServiceCollectionExtensions.cs`
+- `tests/DevOpsAgent.Tests/EdgeResolverTests.cs`
 Gotchas found:
 - T1.2 live direct/jump SSH verification remains deferred by owner direction; its status stays blocked.
 - T2.7's real two-server discovery criterion cannot be verified until authorized targets and pinned keys are configured; the browser check used a temporary synthetic persisted graph.
@@ -135,3 +140,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T3.1 · started
 - 2026-11-14 · Codex / GPT-6 · T3.1 · deterministic nginx tokenizer/block parser and fixture coverage complete; build/test pass (33/33)
 - 2026-11-14 · Codex / GPT-6 · T3.2 · started
+- 2026-11-14 · Codex / GPT-6 · resumed T3.2 · edge resolver, graph evidence, and path tests; build clean, 39/39 tests pass
