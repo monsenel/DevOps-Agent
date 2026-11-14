@@ -76,3 +76,8 @@ Format: `D-<number> · <date> · <title>` then Decision / Why / Consequences.
 - **Decision:** Use `SSH.NET` 2026.0.0 for managed SSH, async command execution, and local forwarding. Verify every host key against exact host/port entries in `/keys/known_hosts`; reject unknown or changed keys.
 - **Why:** This release targets .NET 8 and higher and documents cancellable async connect/command APIs. SSH.NET's host-key event defaults to trusting the received key, so the app must explicitly replace that behavior with pinned verification.
 - **Consequences:** Mount `/keys/known_hosts` alongside the identity keys before connecting to inventory servers. Do not log passphrases, private key data, or host key material.
+
+### D-019 · 2026-11-14 · Defer live SSH acceptance to keep discovery work moving
+- **Decision:** Proceed with T2.1 using the implemented SSH abstractions and automated tests while deferring T1.2's live direct-host and jump-host checks.
+- **Why:** No authorized test hosts, identity keys, or pinned `known_hosts` entries are available, and the owner directed that work continue.
+- **Consequences:** Keep T1.2 marked blocked until both live paths are tested; do not treat automated tests as proof of live connectivity.

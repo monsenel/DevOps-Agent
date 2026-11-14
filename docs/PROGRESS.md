@@ -6,14 +6,15 @@
 
 ## Current
 
-- **Task:** T1.2 SSH pool and runner
-- **Status:** blocked
+- **Task:** T2.1 Collector framework and snapshots
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
 <!-- Fill while a task is in progress. Clear when it is done.
 What is done so far:
+- Owner directed deferring T1.2 live direct/jump SSH checks and proceeding with T2.1; T1.2 remains marked blocked until those checks can be run.
 -
 What is next (exact next step):
 -
@@ -29,19 +30,21 @@ What is done so far:
 - Verified paste → preview → import with a temporary database and key directory. The exact host aliases imported, the wildcard was skipped, key basename mapped, and the target was linked to the imported gateway.
 - Final build passes with zero warnings/errors and tests pass (15/15). Checked the importer UI in light/dark themes and at 390px with no page-level horizontal overflow.
 What is next (exact next step):
-- Provide an authorized direct SSH test host and a target reachable through a jump server, with private keys in `/keys` and independently verified pins in `/keys/known_hosts`; then run both T1.2 connection tests. If they pass, mark T1.2 done and start T2.1.
+- Inspect current Application, Domain, Infrastructure persistence, and test patterns; implement T2.1 collector contracts, snapshot/run persistence and migration, and parallel per-server discovery with sequential collectors.
 Files touched:
-- No uncommitted files; T1.2 and T1.3 code is committed.
-- `docs/PROGRESS.md`
+- `docs/PROGRESS.md`, `docs/DECISIONS.md`
 Gotchas found:
 - T0.8 remains blocked on missing OpenRouter credentials.
 - T1.2 live verification needs a real direct target, jump-host target, identity keys, and pinned host-key entries; none are configured in the repository or `/keys`.
+- T1.2's live check is explicitly deferred by the owner, so T2.1 may proceed using the existing SSH abstractions and fake-runner tests.
 
 ## Blockers
 
 T0.8 OpenRouter live chat verification is blocked because `.env`, `OPENROUTER_API_KEY`, and `OPENAI_API_KEY` are absent. The generic OpenAI-compatible fixture and prior Ollama smoke test verified the local provider flow, but cannot confirm the real OpenRouter service response.
 
 T1.2 live SSH acceptance is blocked because there is no configured test host or jump host and `/keys` has no identity or `known_hosts` files. Fake-runner tests, exact host/port pin tests, route-cycle rejection, and isolated app startup are verified. No real SSH connection was attempted. To unblock, provide an authorized direct host and jump-host route with identity keys and independently verified `/keys/known_hosts` entries.
+
+Per owner direction, T1.2 live verification is deferred while T2.1 proceeds; return to those checks when authorized test hosts and keys are available.
 
 ---
 
@@ -62,7 +65,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T1.1 | Server inventory | done | `feat(T1.1): server inventory` |
 | T1.2 | SSH pool and runner | blocked | |
 | T1.3 | Import ssh config | done | `feat(T1.3): import ssh config` |
-| T2.1 | Collector framework and snapshots | todo | |
+| T2.1 | Collector framework and snapshots | in-progress | |
 | T2.2 | Host collector | todo | |
 | T2.3 | Listener collector | todo | |
 | T2.4 | Docker collector | todo | |
@@ -120,3 +123,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T1.3 · parser fixtures and import dialog complete; paste/preview/import and jump mapping verified, both themes and 390px checked, build/test pass (15/15)
 - 2026-11-14 · Codex / GPT-6 · resumed T1.2 · refreshed Graphify output (869 nodes, 1,687 links); build/test pass; SSH blocker unchanged
 - 2026-11-14 · Codex / GPT-6 · resumed T1.2 · build/test pass (15/15); real SSH and jump-host verification remains blocked by missing test targets and keys
+- 2026-11-14 · Codex / GPT-6 · resumed T2.1 · owner directed defer T1.2 live check and proceed with collector framework
