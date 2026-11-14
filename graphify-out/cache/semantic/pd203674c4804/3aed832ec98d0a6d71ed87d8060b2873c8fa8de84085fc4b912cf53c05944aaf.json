@@ -1,0 +1,1 @@
+{"nodes": [{"id": "tests_devopsagent_tests_fixtures_docker_ps", "label": "Docker container listing fixture", "file_type": "document", "source_file": "tests/DevOpsAgent.Tests/Fixtures/docker-ps.txt", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}

@@ -60,10 +60,10 @@
     "semantic_hash": "f9ac820303db398b8fe8939bffccee03"
   },
   "src/DevOpsAgent.Application/Chat/ChatService.cs": {
-    "mtime": 1794634905.742532,
-    "seen": 1794636818.920605,
-    "ast_hash": "e70b33866fb1f601a2977c390d3310ac",
-    "semantic_hash": "e70b33866fb1f601a2977c390d3310ac"
+    "mtime": 1794647668.8734465,
+    "seen": 1794648819.1436894,
+    "ast_hash": "1494c89741032aef324cd98f30f0c71c",
+    "semantic_hash": "1494c89741032aef324cd98f30f0c71c"
   },
   "src/DevOpsAgent.Application/DevOpsAgent.Application.csproj": {
     "mtime": 1794599577.5755348,
@@ -564,16 +564,16 @@
     "semantic_hash": "40a127cd9e55d010d86fcbbb3dc8fbba"
   },
   "docs/DECISIONS.md": {
-    "mtime": 1794626209.6450272,
-    "seen": 1794634828.1443694,
-    "ast_hash": "c84abd478b526bc07d1e7411eb7d7315",
-    "semantic_hash": ""
+    "mtime": 1794648170.2140138,
+    "seen": 1794648819.1441088,
+    "ast_hash": "dc90a46e439360efa48270fbfd2e0757",
+    "semantic_hash": "dc90a46e439360efa48270fbfd2e0757"
   },
   "docs/DESIGN.md": {
-    "mtime": 1794594986.0,
-    "seen": 1794603302.6623077,
-    "ast_hash": "9703a4a08f1c8ccdb190538bc4cde49e",
-    "semantic_hash": "9703a4a08f1c8ccdb190538bc4cde49e"
+    "mtime": 1794648170.2140138,
+    "seen": 1794648819.1441107,
+    "ast_hash": "15bdf260f34c5059a3623025c76c19b1",
+    "semantic_hash": "15bdf260f34c5059a3623025c76c19b1"
   },
   "docs/PLAN.md": {
     "mtime": 1794595052.0,
@@ -588,10 +588,10 @@
     "semantic_hash": "2b7711b241daa921d00f90f81800a464"
   },
   "docs/PROGRESS.md": {
-    "mtime": 1794634791.0461564,
-    "seen": 1794634828.1443784,
-    "ast_hash": "8f035d22e2beb05a41487cbca517647b",
-    "semantic_hash": ""
+    "mtime": 1794648338.0716102,
+    "seen": 1794648819.1441128,
+    "ast_hash": "e6d1e7d2da47c186e127e915520a43da",
+    "semantic_hash": "e6d1e7d2da47c186e127e915520a43da"
   },
   "docs/design/mockups/overview.dc.html": {
     "mtime": 1794595111.0,
@@ -840,10 +840,10 @@
     "semantic_hash": "56dcfedcd8161ad1985c0398cda4b1ff"
   },
   "src/DevOpsAgent.Application/Chat/JsonToolProtocol.cs": {
-    "mtime": 1794633918.7309036,
-    "seen": 1794636818.9206073,
-    "ast_hash": "ac2ef3e83816d6bcc13d07c5bebcce76",
-    "semantic_hash": "ac2ef3e83816d6bcc13d07c5bebcce76"
+    "mtime": 1794647668.8734465,
+    "seen": 1794648819.1436923,
+    "ast_hash": "4c8d62dcc84e0a9b6d73871650b04070",
+    "semantic_hash": "4c8d62dcc84e0a9b6d73871650b04070"
   },
   "src/DevOpsAgent.Application/Discovery/ConnectionDiscoveryResult.cs": {
     "mtime": 1794629106.695163,
@@ -1320,10 +1320,10 @@
     "semantic_hash": "4d6f0452ac39942539bde5623f69ad4b"
   },
   "tests/DevOpsAgent.Tests/JsonToolProtocolTests.cs": {
-    "mtime": 1794633944.797762,
-    "seen": 1794636818.9237473,
-    "ast_hash": "1183543c690a20dfb6dcf0a5096b2d2f",
-    "semantic_hash": "1183543c690a20dfb6dcf0a5096b2d2f"
+    "mtime": 1794647679.1603966,
+    "seen": 1794648819.1440833,
+    "ast_hash": "5b523cb3556336d2ddcb314455ec9818",
+    "semantic_hash": "5b523cb3556336d2ddcb314455ec9818"
   },
   "tests/DevOpsAgent.Tests/ListenerCollectorTests.cs": {
     "mtime": 1794624430.9087474,
@@ -1357,92 +1357,98 @@
   },
   "src/DevOpsAgent.Web/wwwroot/lib/elkjs/LICENSE.md": {
     "mtime": 1794626218.2299802,
-    "seen": 1794634828.1443923,
+    "seen": 1794648819.144115,
     "ast_hash": "0cd53125acf1841f6762ce5a428f0056",
-    "semantic_hash": ""
+    "semantic_hash": "0cd53125acf1841f6762ce5a428f0056"
   },
   "tests/DevOpsAgent.Tests/Fixtures/apt-upgradable.txt": {
     "mtime": 1794634497.7707524,
-    "seen": 1794634828.144394,
+    "seen": 1794648819.1441176,
     "ast_hash": "d266a985ce7be878bc6930b3bf55fa6d",
-    "semantic_hash": ""
+    "semantic_hash": "d266a985ce7be878bc6930b3bf55fa6d"
   },
   "tests/DevOpsAgent.Tests/Fixtures/dnf-check-update.txt": {
     "mtime": 1794634497.7707524,
-    "seen": 1794634828.1443958,
+    "seen": 1794648819.1441193,
     "ast_hash": "54b89f8c72255e010247b64033e54edc",
-    "semantic_hash": ""
+    "semantic_hash": "54b89f8c72255e010247b64033e54edc"
   },
   "tests/DevOpsAgent.Tests/Fixtures/dnf-security.txt": {
     "mtime": 1794634497.7707524,
-    "seen": 1794634828.1443977,
+    "seen": 1794648819.1441216,
     "ast_hash": "fe3b80177b41f578fb965c9f3130aca1",
-    "semantic_hash": ""
+    "semantic_hash": "fe3b80177b41f578fb965c9f3130aca1"
   },
   "tests/DevOpsAgent.Tests/Fixtures/docker-network-ls.txt": {
     "mtime": 1794624707.088242,
-    "seen": 1794634828.1444,
+    "seen": 1794648819.1441236,
     "ast_hash": "cb2365a0c3f9e1ebda7e6183d50409ad",
-    "semantic_hash": ""
+    "semantic_hash": "cb2365a0c3f9e1ebda7e6183d50409ad"
   },
   "tests/DevOpsAgent.Tests/Fixtures/docker-ps.txt": {
     "mtime": 1794624707.0872421,
-    "seen": 1794634828.144402,
+    "seen": 1794648819.1441257,
     "ast_hash": "98a83bf6fc96ebbd9a832c60882e773c",
-    "semantic_hash": ""
+    "semantic_hash": "98a83bf6fc96ebbd9a832c60882e773c"
   },
   "tests/DevOpsAgent.Tests/Fixtures/host-etc-hosts.txt": {
     "mtime": 1794624261.8506682,
-    "seen": 1794634828.1444037,
+    "seen": 1794648819.144128,
     "ast_hash": "2d8681b2823cbc8231de63b6ed50a85d",
-    "semantic_hash": ""
+    "semantic_hash": "2d8681b2823cbc8231de63b6ed50a85d"
   },
   "tests/DevOpsAgent.Tests/Fixtures/host-hostname.txt": {
     "mtime": 1794624261.8506682,
-    "seen": 1794634828.1444056,
+    "seen": 1794648819.14413,
     "ast_hash": "73c762edb9e56991667951ceb5ac8ee3",
-    "semantic_hash": ""
+    "semantic_hash": "73c762edb9e56991667951ceb5ac8ee3"
   },
   "tests/DevOpsAgent.Tests/Fixtures/nginx-T.txt": {
     "mtime": 1794627318.9909582,
-    "seen": 1794634828.1444073,
+    "seen": 1794648819.1441321,
     "ast_hash": "9d87a5f6252881004fbd8455a6c2138a",
-    "semantic_hash": ""
+    "semantic_hash": "9d87a5f6252881004fbd8455a6c2138a"
   },
   "tests/DevOpsAgent.Tests/Fixtures/ss-established.txt": {
     "mtime": 1794629064.3343945,
-    "seen": 1794634828.1444094,
+    "seen": 1794648819.144134,
     "ast_hash": "0ba863cdeefcd002dda7bf840f20dae0",
-    "semantic_hash": ""
+    "semantic_hash": "0ba863cdeefcd002dda7bf840f20dae0"
   },
   "tests/DevOpsAgent.Tests/Fixtures/ss-tulpn.txt": {
     "mtime": 1794624430.9087474,
-    "seen": 1794634828.1444113,
+    "seen": 1794648819.1441362,
     "ast_hash": "c4bb17eda99e3a70b83935c0fb8f5cc7",
-    "semantic_hash": ""
+    "semantic_hash": "c4bb17eda99e3a70b83935c0fb8f5cc7"
   },
   "tests/DevOpsAgent.Tests/Fixtures/systemd-list-units.txt": {
     "mtime": 1794624991.7906857,
-    "seen": 1794634828.1444135,
+    "seen": 1794648819.1441383,
     "ast_hash": "482b93e09282541ea94908aed42de9e1",
-    "semantic_hash": ""
+    "semantic_hash": "482b93e09282541ea94908aed42de9e1"
   },
   "tests/DevOpsAgent.Tests/Fixtures/systemd-show-nginx.txt": {
     "mtime": 1794624991.7906857,
-    "seen": 1794634828.144415,
+    "seen": 1794648819.1441402,
     "ast_hash": "ca23fa50fb6333dc54213a5a7a8e2b47",
-    "semantic_hash": ""
+    "semantic_hash": "ca23fa50fb6333dc54213a5a7a8e2b47"
   },
   "tests/DevOpsAgent.Tests/Fixtures/systemd-show-postgresql.txt": {
     "mtime": 1794624991.7916858,
-    "seen": 1794634828.1444168,
+    "seen": 1794648819.1441424,
     "ast_hash": "bc672d78ae2f0df78a90ddeafd794cf5",
-    "semantic_hash": ""
+    "semantic_hash": "bc672d78ae2f0df78a90ddeafd794cf5"
   },
   "tests/DevOpsAgent.Tests/Fixtures/systemd-show-sshd.txt": {
     "mtime": 1794624991.7916858,
-    "seen": 1794634828.1444185,
+    "seen": 1794648819.1441443,
     "ast_hash": "e7798c89a03a121f26f594c108908c2d",
-    "semantic_hash": ""
+    "semantic_hash": "e7798c89a03a121f26f594c108908c2d"
+  },
+  "tests/DevOpsAgent.Tests/ChatServiceTests.cs": {
+    "mtime": 1794646627.8591475,
+    "seen": 1794648819.1440537,
+    "ast_hash": "f26bfe22e7cb0ba42f4791b95c55e535",
+    "semantic_hash": "f26bfe22e7cb0ba42f4791b95c55e535"
   }
 }
