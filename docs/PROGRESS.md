@@ -12,10 +12,10 @@ None. The owner confirmed an LLM provider is configured and its connection test 
 
 - **Task:** T6.3 Agent chat with tools — live J4 acceptance
 - **Status:** in-progress
-- **Last updated:** 2026-11-14 by Codex
+- **Last updated:** 2026-11-15 by Codex
 
 ## WIP notes
-- Provider readiness is confirmed in persisted app data: one default provider, last test passed, and tool calling is supported. The web app is not running on `:5155`. Its persisted database also contains a `prod` server entry, so do not start or use that database for J4. Exact next step: prepare an isolated database retaining only the configured provider and its Data Protection key ring, add only `srv-edge`, `srv-app`, and `srv-db` from staging, then run J4's two read-only questions and approved `web` restart on `srv-app`. Never add or contact a `prod` target.
+- Provider readiness is confirmed in persisted app data: one default provider, last test passed, and tool calling is supported. The original web app was not running on `:5155`, and its database contained a `prod` server entry; neither was used for J4. Prepared a temporary isolated database that retains only the tested provider and its Data Protection key ring, with all prior server, alert, metric, graph, and chat rows removed. Started the review app on `:5155` against that isolated database. Added only `srv-edge`, `srv-app`, and `srv-db` in `staging`; direct/jump SSH and passwordless sudo passed for all three. Fresh discovery snapshot `262714ed-4bb1-4144-b53f-4b07ee4df647` completed 3/3. Exact next step: ask “anything I should look at?”, then “why is disk usage on srv-app what it is?”; verify only read-only tools run against staging; request and validate a proposal to restart only container `web` on `srv-app`, approve it, verify the result and Action log. Never add or contact a `prod` target.
 - T5.5 is **done**: Overview uses live lab server/snapshot/graph/evidence/alerts/metrics/update/provider data. Run discovery rerenders correctly; live refresh and both themes were checked; build clean and 109/109 tests passed. Commit: `4e7a606`.
 - T6.3 implementation is complete, but the earlier J4 live result predates the disposable SSH lab and is invalid for the requested server journey. Live acceptance is **blocked** until the owner adds an LLM provider. After that, run on this lab exactly: ask “anything I should look at?”, then “why is disk usage on srv-app what it is?”, confirm read-only tools execute on lab servers, then propose and explicitly approve restarting container `web` on `srv-app`; record the tool/action-log result. Keep srv-search out of inventory.
 - T6.3 provider check for the current test app at 127.0.0.1:5155 found an empty Providers list, no default model, and no saved last-test result. Per owner instruction, did not configure a provider; J4 remains blocked. Continue independent T6.6 acceptance.
@@ -33,7 +33,7 @@ None. The owner confirmed an LLM provider is configured and its connection test 
 
 The prior M5 deferral has been lifted by the owner's instruction to continue task by task. T5.1, T5.2, T5.3, and T5.4 are complete. T5.3 live acceptance passed on 2026-11-14: the selected container triggered an alert within 2 minutes, was restarted, and its alert auto-resolved. T5.4 live acceptance passed per the owner: ntfy test, open, and resolve messages were all received.
 
-T6.3 live J4 acceptance is in progress following owner confirmation of a tested tool-calling provider. T6.6 remains blocked until J4 passes. systemd live verification is deferred: systemd: verify on a real LXC/VM; it does not block this release.
+T6.3 live J4 acceptance is in progress following owner confirmation of a tested tool-calling provider; the isolated lab app, staging-only inventory, SSH capability checks, and discovery are ready. T6.6 remains blocked until J4 passes. systemd live verification is deferred: systemd: verify on a real LXC/VM; it does not block this release.
 
 ---
 
@@ -91,6 +91,7 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · resumed T6.6 after host hang report · acknowledged that the disposable privileged systemd container likely caused resource pressure; verified it was removed and added README test-lab/read-only guidance plus host-gateway routing (D-023); next fresh-clone acceptance without systemd
 - 2026-11-14 · Codex / GPT-6 · T6.6 release acceptance · fresh clone Docker build/login and srv-edge discovery passed (1/1); app and temporary Docker-bridge forward stopped; Graphify code-only refreshed (2,488 nodes/6,612 edges/181 communities); build 0 warnings and 115/115 tests; J4 remains blocked until provider is configured
 - 2026-11-14 · Codex / GPT-6 · started T6.3 J4 live acceptance · provider readiness found in persisted app data; app on :5155 is stopped and source DB includes a prod entry, so isolate provider and lab inventory before starting the app
+- 2026-11-15 · Codex / GPT-6 · T6.3 checkpoint · copied only tested provider plus Data Protection keys to isolated DB; added only three staging servers; SSH/sudo checks passed 3/3 and fresh discovery snapshot succeeded 3/3; next execute J4 prompts and approved lab action
 
 - 2026-11-14 · Codex / GPT-6 · resumed T6.6 release acceptance · test app has no default LLM provider or last test result, so J4 remains blocked; proceed with systemd lab verification and release hardening
 
