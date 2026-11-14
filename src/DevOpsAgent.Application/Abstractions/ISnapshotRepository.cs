@@ -4,6 +4,7 @@ namespace DevOpsAgent.Application.Abstractions;
 
 public interface ISnapshotRepository
 {
+    Task<Snapshot?> GetLatestAsync(CancellationToken cancellationToken);
     Task<Snapshot> CreateAsync(IReadOnlyCollection<Guid> serverIds, DateTimeOffset startedAtUtc, CancellationToken cancellationToken);
     Task CompleteAsync(
         Snapshot snapshot,

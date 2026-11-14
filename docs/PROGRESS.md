@@ -7,7 +7,7 @@
 ## Current
 
 - **Task:** T2.7 Topology page
-- **Status:** in-progress
+- **Status:** blocked
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
@@ -15,14 +15,24 @@
 What is done so far:
 - T2.6 is complete and committed as `95a461a`; discovery now persists stable graph nodes, network attachments, listeners, and evidence, with service/network JSON views.
 - Resume baseline: `dotnet build DevOpsAgent.slnx` passed with zero warnings/errors and `dotnet test DevOpsAgent.slnx` passed all 31 tests.
-- Topology design and theme requirements and current graph/discovery contracts are reviewed; vendored package versions and licenses are being recorded before implementation.
+- T2.7 implementation is committed as `wip(T2.7): topology page and graph interop`; a temporary two-host compound graph verified ELK rendering, theme restyling, filtering, listener/evidence details, and the accessible node list.
+- Final build has zero warnings/errors, all 31 tests pass, `node --check` passes for graph.js, and `git diff --check` is clean.
 What is next (exact next step):
-- Record T2.7's vendored Cytoscape/ELK package versions and licenses in `docs/DECISIONS.md`, then vendor their browser bundles and implement graph interop.
+- When two authorized SSH targets and pinned host keys are available, run discovery against both and verify the real collected graph; then resume T2.7 acceptance. T3.1 can proceed independently.
 Files touched:
 - `docs/PROGRESS.md`
 - `docs/DECISIONS.md`
+- `src/DevOpsAgent.Application/Abstractions/ISnapshotRepository.cs`
+- `src/DevOpsAgent.Infrastructure/Persistence/SnapshotRepository.cs`
+- `src/DevOpsAgent.Web/Components/App.razor`
+- `src/DevOpsAgent.Web/Components/Pages/Topology.razor`
+- `src/DevOpsAgent.Web/Components/_Imports.razor`
+- `src/DevOpsAgent.Web/wwwroot/css/app.css`
+- `src/DevOpsAgent.Web/wwwroot/js/graph.js`
+- `src/DevOpsAgent.Web/wwwroot/lib/{cytoscape,cytoscape-elk,elkjs}/`
 Gotchas found:
 - T1.2 live direct/jump SSH verification remains deferred by owner direction; its status stays blocked.
+- T2.7's real two-server discovery criterion cannot be verified until authorized targets and pinned keys are configured; the browser check used a temporary synthetic persisted graph.
 
 ## Blockers
 
@@ -31,6 +41,8 @@ T0.8 OpenRouter live chat verification is blocked because `.env`, `OPENROUTER_AP
 T1.2 live SSH acceptance is blocked because there is no configured test host or jump host and `/keys` has no identity or `known_hosts` files. Fake-runner tests, exact host/port pin tests, route-cycle rejection, and isolated app startup are verified. No real SSH connection was attempted. To unblock, provide an authorized direct host and jump-host route with identity keys and independently verified `/keys/known_hosts` entries.
 
 Per owner direction, T1.2 live verification is deferred while T2.1 proceeds; return to those checks when authorized test hosts and keys are available.
+
+T2.7 live acceptance is blocked by the same missing authorized SSH targets and pinned host keys. The topology UI was verified with a temporary two-host persisted graph, but that does not satisfy the plan's real two-server discovery criterion. Return to T2.7 once live SSH verification can run.
 
 ---
 
@@ -57,7 +69,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T2.4 | Docker collector | done | `feat(T2.4): docker collector` |
 | T2.5 | systemd collector | done | `feat(T2.5): systemd collector` |
 | T2.6 | Graph builder | done | `feat(T2.6): graph builder` |
-| T2.7 | Topology page | in-progress | |
+| T2.7 | Topology page | blocked | `wip(T2.7): topology page and graph interop` |
 | T3.1 | nginx parser | todo | |
 | T3.2 | Edge resolution | todo | |
 | T3.3 | Evidence panel and Trace | todo | |
@@ -123,3 +135,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T2.6 · graph entities/migration, stable-key builder and IP index, discovery integration, Cytoscape-compatible service/network API; migration applied to temp SQLite; build/test pass (31/31)
 - 2026-11-14 · Codex / GPT-6 · T2.7 · started
 - 2026-11-14 · Codex / GPT-6 · resumed T2.7 · clean working tree; build passed with zero warnings/errors and tests passed (31/31); reviewed topology UI requirements and implementation contracts
+- 2026-11-14 · Codex / GPT-6 · T2.7 · topology UI and graph interop implemented; synthetic two-host browser check passed, real SSH acceptance blocked by missing targets/keys; build/test pass (31/31)

@@ -1,10 +1,19 @@
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Domain.Discovery;
+using Microsoft.EntityFrameworkCore;
 
 namespace DevOpsAgent.Infrastructure.Persistence;
 
 public sealed class SnapshotRepository(AppDbContext dbContext) : ISnapshotRepository
 {
+    public async Task<Snapshot?> GetLatestAsync(CancellationToken cancellationToken)
+    {
+        var snapshots = await dbContext.Snapshots.AsNoTracking()
+            .Where(snapshot => snapshot.FinishedAtUtc != null)
+            .ToArrayAsync(cancellationToken);
+        return snapshots.MaxBy(snapshot => snapshot.StartedAtUtc);
+    }
+
     public async Task<Snapshot> CreateAsync(
         IReadOnlyCollection<Guid> serverIds,
         DateTimeOffset startedAtUtc,

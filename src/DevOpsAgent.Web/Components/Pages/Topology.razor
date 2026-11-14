@@ -1,3 +1,474 @@
 @page "/topology"
+@implements IAsyncDisposable
+@inject IJSRuntime JavaScript
+@inject IGraphRepository GraphRepository
+@inject ISnapshotRepository SnapshotRepository
+@inject DiscoveryService Discovery
+@inject ServerService ServersService
+@using System.Text.Json
+@using DevOpsAgent.Domain.Discovery
+@using DevOpsAgent.Application.Servers
+
 <PageTitle>Topology · DevOps Agent</PageTitle>
-<PagePlaceholder Title="Topology" Description="Your interactive service and network graph will appear after server discovery." />
+
+<section class="ui-card topology-toolbar" aria-label="Topology controls">
+    <div class="topology-toolbar-row">
+        <div class="segmented-control" role="group" aria-label="Graph view">
+            <button type="button" class="@(CurrentView == GraphView.Service ? "active" : null)" aria-pressed="@(CurrentView == GraphView.Service)" @onclick="() => ChangeViewAsync(GraphView.Service)">Service</button>
+            <button type="button" class="@(CurrentView == GraphView.Network ? "active" : null)" aria-pressed="@(CurrentView == GraphView.Network)" @onclick="() => ChangeViewAsync(GraphView.Network)">Network</button>
+        </div>
+        <label class="topology-search">
+            <span class="visually-hidden">Search topology</span>
+            <input type="search" placeholder="Search name, IP, port…" value="@_search" @oninput="SearchChanged" />
+        </label>
+        <label class="topology-filter">
+            <span class="visually-hidden">Filter by tag</span>
+            <select value="@_selectedTag" @onchange="TagChanged">
+                <option value="">All tags</option>
+                @foreach (var tag in _tags)
+                {
+                    <option value="@tag">Tag: @tag</option>
+                }
+            </select>
+        </label>
+        <label class="topology-filter">
+            <span class="visually-hidden">Filter by Compose project</span>
+            <select value="@_selectedProject" @onchange="ProjectChanged">
+                <option value="">All projects</option>
+                @foreach (var project in _projects)
+                {
+                    <option value="@project">Project: @project</option>
+                }
+            </select>
+        </label>
+        <button class="ui-button primary" type="button" disabled="@_discovering" @onclick="RunDiscoveryAsync">
+            @(_discovering ? "Discovering…" : "Run discovery")
+        </button>
+    </div>
+    <div class="topology-legend" aria-label="Graph legend">
+        <span><i class="legend-line observed"></i>Declared + observed</span>
+        <span><i class="legend-line only-observed"></i>Observed only</span>
+        <span><i class="legend-line traced"></i>Traced path</span>
+        @if (_snapshot is not null)
+        {
+            <span class="muted topology-last-run">Last discovery @_snapshot.StartedAtUtc.ToLocalTime().ToString("g") · @_snapshot.Status</span>
+        }
+    </div>
+    @if (!string.IsNullOrWhiteSpace(_progressMessage))
+    {
+        <div class="topology-progress" role="status" aria-live="polite">
+            <span class="progress-track"><span style="width:@ProgressPercent%"></span></span>
+            <span>@_progressMessage</span>
+        </div>
+    }
+    @if (!string.IsNullOrWhiteSpace(_pageError))
+    {
+        <div class="alert-message error" role="alert">@_pageError</div>
+    }
+</section>
+
+<div class="topology-layout">
+    <section class="ui-card topology-graph-card" aria-labelledby="topology-graph-title">
+        <div class="ui-card-header">
+            <div>
+                <h2 id="topology-graph-title">Infrastructure map</h2>
+                <p class="muted">@GraphSummary</p>
+            </div>
+            <button class="ui-button secondary" type="button" @onclick="FitGraphAsync" disabled="@(_graphModule is null)">Fit graph</button>
+        </div>
+        <div @ref="_graphHost" class="topology-graph" role="img" aria-label="Interactive infrastructure graph. Use the node list below to select an item and inspect its details."></div>
+        @if (_visibleNodes.Count > 0)
+        {
+            <nav class="topology-node-list" aria-label="Graph nodes">
+                @foreach (var node in _visibleNodes)
+                {
+                    var id = ReadString(node, "id");
+                    <button type="button" @key="id" aria-pressed="@(_selectedId == id)" @onclick="() => SelectNodeAsync(node)">
+                        <span class="topology-node-kind">@ReadString(node, "kind")</span>
+                        <span>@ReadString(node, "label")</span>
+                    </button>
+                }
+            </nav>
+        }
+    </section>
+
+    <aside class="ui-card topology-details" aria-labelledby="topology-details-title" aria-live="polite">
+        <div class="ui-card-header">
+            <div>
+                <p class="eyebrow">Selection</p>
+                <h2 id="topology-details-title">@(_selected is null ? "Node details" : ReadString(_selected.Value, "label") ?? ReadString(_selected.Value, "kind") ?? "Selected item")</h2>
+            </div>
+        </div>
+        @if (_selected is JsonElement selected)
+        {
+            <dl class="topology-detail-list">
+                <dt>Kind</dt><dd>@ReadString(selected, "kind")</dd>
+                @if (ReadString(selected, "port") is string port)
+                {
+                    <dt>Port</dt><dd class="mono">:@port @ReadString(selected, "protocol")</dd>
+                }
+                @if (ReadString(selected, "source") is string sourceId && ReadString(selected, "target") is string targetId)
+                {
+                    <dt>Source</dt><dd>@FindNodeName(sourceId)</dd>
+                    <dt>Target</dt><dd>@FindNodeName(targetId)</dd>
+                }
+                @if (selected.TryGetProperty("attributes", out var attributes) && attributes.ValueKind == JsonValueKind.Object)
+                {
+                    @foreach (var property in attributes.EnumerateObject().Where(property => property.Value.ValueKind is JsonValueKind.String or JsonValueKind.Number))
+                    {
+                        <dt>@Humanize(property.Name)</dt><dd class="@(property.Name.Contains("ip", StringComparison.OrdinalIgnoreCase) || property.Name.Contains("address", StringComparison.OrdinalIgnoreCase) ? "mono" : null)">@property.Value.ToString()</dd>
+                    }
+                }
+            </dl>
+            @if (_selectedListeners.Count > 0)
+            {
+                <h3>Listeners</h3>
+                <ul class="topology-detail-items">
+                    @foreach (var listener in _selectedListeners)
+                    {
+                        <li><span class="mono">@listener.Address:@listener.Port/@listener.Protocol</span><span class="muted">@listener.ProcessName</span></li>
+                    }
+                </ul>
+            }
+            @if (_selectedEvidence.Count > 0)
+            {
+                <h3>Evidence</h3>
+                <ul class="topology-detail-items">
+                    @foreach (var evidence in _selectedEvidence)
+                    {
+                        <li><span class="ui-badge neutral">@evidence.Collector</span><span>@evidence.Description</span></li>
+                    }
+                </ul>
+            }
+        }
+        else
+        {
+            <p class="muted">Select a graph node or use the accessible node list to inspect its interfaces, listeners, and collection evidence.</p>
+        }
+    </aside>
+</div>
+
+@code {
+    private ElementReference _graphHost;
+    private IJSObjectReference? _graphModule;
+    private DotNetObjectReference<Topology>? _dotNetReference;
+    private Snapshot? _snapshot;
+    private GraphSnapshotDto? _graph;
+    private IReadOnlyList<ServerSummary> _servers = [];
+    private IReadOnlyList<JsonElement> _visibleNodes = [];
+    private JsonElement? _selected;
+    private string? _selectedId;
+    private string _search = string.Empty;
+    private string _selectedTag = string.Empty;
+    private string _selectedProject = string.Empty;
+    private string? _pageError;
+    private string? _progressMessage;
+    private bool _discovering;
+    private int _completedServers;
+    private GraphView CurrentView { get; set; } = GraphView.Service;
+    private IReadOnlyList<string> _tags = [];
+    private IReadOnlyList<string> _projects = [];
+    private IReadOnlyList<GraphListenerDto> _selectedListeners = [];
+    private IReadOnlyList<GraphEvidenceDto> _selectedEvidence = [];
+    private int ProgressPercent => _servers.Count == 0 ? (_discovering ? 15 : 0) : _completedServers * 100 / _servers.Count;
+    private string GraphSummary => _graph is null
+        ? "Run discovery to build a map of your servers and services."
+        : $"{_visibleNodes.Count} nodes shown · {VisibleEdgeCount} connections shown";
+    private int VisibleEdgeCount
+    {
+        get
+        {
+            if (_graph is null) return 0;
+            var ids = _visibleNodes.Select(node => ReadString(node, "id")).Where(id => id is not null).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            return _graph.Edges.Count(edge => ReadString(edge.Data, "source") is string source
+                && ReadString(edge.Data, "target") is string target && ids.Contains(source) && ids.Contains(target));
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _servers = await ServersService.ListAsync(CancellationToken.None);
+        _snapshot = await SnapshotRepository.GetLatestAsync(CancellationToken.None);
+        if (_snapshot is not null)
+        {
+            await LoadGraphAsync(_snapshot.Id);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            _graphModule = await JavaScript.InvokeAsync<IJSObjectReference>("import", "./js/graph.js");
+            _dotNetReference = DotNetObjectReference.Create(this);
+            await _graphModule.InvokeVoidAsync("init", _graphHost, _dotNetReference);
+            await PushGraphAsync();
+            StateHasChanged();
+        }
+        catch (JSException exception)
+        {
+            _pageError = $"The graph could not be initialized: {exception.Message}";
+            StateHasChanged();
+        }
+    }
+
+    private async Task ChangeViewAsync(GraphView view)
+    {
+        CurrentView = view;
+        if (_snapshot is not null) await LoadGraphAsync(_snapshot.Id);
+        await PushGraphAsync();
+    }
+
+    private async Task LoadGraphAsync(Guid snapshotId)
+    {
+        _graph = await GraphRepository.GetAsync(snapshotId, CurrentView, CancellationToken.None);
+        _selected = null;
+        _selectedId = null;
+        UpdateOptions();
+        UpdateVisibleNodes();
+    }
+
+    private async Task RunDiscoveryAsync()
+    {
+        if (_discovering) return;
+        _discovering = true;
+        _pageError = null;
+        _completedServers = 0;
+        _progressMessage = "Preparing discovery…";
+        try
+        {
+            var progress = new Progress<DiscoveryProgress>(item =>
+            {
+                if (item.Stage == DiscoveryProgressStage.ServerCompleted) _completedServers++;
+                _progressMessage = item.Message ?? item.Stage switch
+                {
+                    DiscoveryProgressStage.Started => "Discovery started…",
+                    DiscoveryProgressStage.ServerStarted => $"Collecting from {item.ServerName}…",
+                    DiscoveryProgressStage.CollectorStarted => $"{item.ServerName}: running {item.CollectorName}…",
+                    DiscoveryProgressStage.CollectorCompleted => $"{item.ServerName}: {item.CollectorName} complete",
+                    DiscoveryProgressStage.ServerCompleted => $"{item.ServerName} complete",
+                    _ => "Finalizing topology…"
+                };
+                _ = InvokeAsync(StateHasChanged);
+            });
+            _snapshot = await Discovery.RunAsync(progress, CancellationToken.None);
+            await LoadGraphAsync(_snapshot.Id);
+            _progressMessage = $"Discovery finished: {_snapshot.SucceededServerCount} succeeded, {_snapshot.FailedServerCount} failed.";
+            await PushGraphAsync();
+        }
+        catch (Exception exception)
+        {
+            _pageError = $"Discovery failed: {exception.Message}";
+        }
+        finally
+        {
+            _discovering = false;
+        }
+    }
+
+    private async Task SearchChanged(ChangeEventArgs args)
+    {
+        _search = args.Value?.ToString() ?? string.Empty;
+        if (_graphModule is not null) await _graphModule.InvokeVoidAsync("search", _search);
+    }
+
+    private async Task TagChanged(ChangeEventArgs args)
+    {
+        _selectedTag = args.Value?.ToString() ?? string.Empty;
+        UpdateVisibleNodes();
+        await PushGraphAsync();
+    }
+
+    private async Task ProjectChanged(ChangeEventArgs args)
+    {
+        _selectedProject = args.Value?.ToString() ?? string.Empty;
+        UpdateVisibleNodes();
+        await PushGraphAsync();
+    }
+
+    private void UpdateOptions()
+    {
+        if (_graph is null)
+        {
+            _tags = [];
+            _projects = [];
+            return;
+        }
+
+        _tags = _graph.Nodes.Select(element => element.Data)
+            .Where(data => ReadString(data, "kind") == "Host" && TryGetProperty(data, "attributes", out _))
+            .SelectMany(data => TryGetProperty(data.GetProperty("attributes"), "tags", out var tags) && tags.ValueKind == JsonValueKind.Array
+                ? tags.EnumerateArray().Where(tag => tag.ValueKind == JsonValueKind.String).Select(tag => tag.GetString()!)
+                : [])
+            .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
+        _projects = _graph.Nodes.Select(element => element.Data)
+            .Select(data => TryGetProperty(data, "attributes", out var attributes) ? ReadString(attributes, "composeProject") : null)
+            .Where(project => !string.IsNullOrWhiteSpace(project))
+            .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).Select(project => project!).ToArray();
+    }
+
+    private void UpdateVisibleNodes()
+    {
+        if (_graph is null)
+        {
+            _visibleNodes = [];
+            return;
+        }
+
+        var nodes = _graph.Nodes.Select(element => element.Data).ToArray();
+        var taggedServerIds = string.IsNullOrEmpty(_selectedTag)
+            ? null
+            : nodes.Where(node => ReadString(node, "kind") == "Host" && HasTag(node, _selectedTag))
+                .Select(node => ReadString(node, "serverId")).Where(id => id is not null).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var projectServerIds = string.IsNullOrEmpty(_selectedProject)
+            ? null
+            : nodes.Where(node => HasProject(node, _selectedProject))
+                .Select(node => ReadString(node, "serverId")).Where(id => id is not null).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        bool ServerMatches(JsonElement node)
+        {
+            var serverId = ReadString(node, "serverId");
+            return serverId is not null && (taggedServerIds is null || taggedServerIds.Contains(serverId))
+                && (projectServerIds is null || projectServerIds.Contains(serverId));
+        }
+
+        var allowedIds = nodes.Where(node =>
+                (ReadString(node, "kind") == "Host" && ServerMatches(node))
+                || (ReadString(node, "kind") != "Host" && ReadString(node, "kind") != "Subnet" && ServerMatches(node)
+                    && (string.IsNullOrEmpty(_selectedProject) || HasProject(node, _selectedProject))))
+            .Select(node => ReadString(node, "id")).Where(id => id is not null).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (taggedServerIds is not null || projectServerIds is not null)
+        {
+            foreach (var edge in _graph.Edges.Select(element => element.Data))
+            {
+                var source = ReadString(edge, "source");
+                var target = ReadString(edge, "target");
+                if (source is not null && target is not null && (allowedIds.Contains(source) || allowedIds.Contains(target)))
+                {
+                    if (nodes.Any(node => ReadString(node, "id") == source && ReadString(node, "kind") == "Subnet")) allowedIds.Add(source);
+                    if (nodes.Any(node => ReadString(node, "id") == target && ReadString(node, "kind") == "Subnet")) allowedIds.Add(target);
+                }
+            }
+        }
+
+        _visibleNodes = nodes.Where(node => taggedServerIds is null && projectServerIds is null
+                || ReadString(node, "id") is string id && allowedIds.Contains(id))
+            .ToArray();
+        if (_selectedId is not null && !_visibleNodes.Any(node => string.Equals(ReadString(node, "id"), _selectedId, StringComparison.OrdinalIgnoreCase)))
+        {
+            _selected = null;
+            _selectedId = null;
+            _selectedListeners = [];
+            _selectedEvidence = [];
+        }
+    }
+
+    private async Task PushGraphAsync()
+    {
+        if (_graphModule is null) return;
+        var ids = _visibleNodes.Select(node => ReadString(node, "id")).Where(id => id is not null).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var elements = new List<JsonElement>();
+        elements.AddRange(_visibleNodes);
+        if (_graph is not null)
+        {
+            elements.AddRange(_graph.Edges.Select(edge => edge.Data).Where(edge =>
+                ReadString(edge, "source") is string source && ReadString(edge, "target") is string target
+                && ids.Contains(source) && ids.Contains(target)));
+        }
+
+        await _graphModule.InvokeVoidAsync("setData", elements, CurrentView.ToString().ToLowerInvariant());
+        await _graphModule.InvokeVoidAsync("search", _search);
+        await _graphModule.InvokeVoidAsync("setTheme");
+    }
+
+    private Task FitGraphAsync() => _graphModule is null ? Task.CompletedTask : _graphModule.InvokeVoidAsync("fit").AsTask();
+
+    private async Task SelectNodeAsync(JsonElement node)
+    {
+        var id = ReadString(node, "id");
+        if (id is null) return;
+        _selectedId = id;
+        _selected = node;
+        if (_graph is not null)
+        {
+            var entityId = Guid.TryParseExact(id, "N", out var parsed) ? parsed : Guid.Empty;
+            _selectedListeners = _graph.Listeners.Where(listener => listener.NodeId == entityId).ToArray();
+            _selectedEvidence = _graph.Evidence.Where(item => item.NodeId == entityId).ToArray();
+        }
+        if (_graphModule is not null) await _graphModule.InvokeVoidAsync("select", id);
+    }
+
+    [JSInvokable]
+    public async Task OnGraphSelection(string? dataJson)
+    {
+        if (string.IsNullOrWhiteSpace(dataJson))
+        {
+            _selected = null;
+            _selectedId = null;
+            _selectedListeners = [];
+            _selectedEvidence = [];
+        }
+        else
+        {
+            using var document = JsonDocument.Parse(dataJson);
+            var data = document.RootElement.Clone();
+            _selected = data;
+            _selectedId = ReadString(data, "id");
+            if (_graph is not null && Guid.TryParseExact(_selectedId, "N", out var id))
+            {
+                _selectedListeners = _graph.Listeners.Where(listener => listener.NodeId == id).ToArray();
+                _selectedEvidence = _graph.Evidence.Where(item => item.NodeId == id).ToArray();
+            }
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static bool HasTag(JsonElement node, string tag) => TryGetProperty(node, "attributes", out var attributes)
+        && TryGetProperty(attributes, "tags", out var tags) && tags.ValueKind == JsonValueKind.Array
+        && tags.EnumerateArray().Any(value => value.ValueKind == JsonValueKind.String
+            && string.Equals(value.GetString(), tag, StringComparison.OrdinalIgnoreCase));
+
+    private static bool HasProject(JsonElement node, string project) => TryGetProperty(node, "attributes", out var attributes)
+        && string.Equals(ReadString(attributes, "composeProject"), project, StringComparison.OrdinalIgnoreCase);
+
+    private static string? ReadString(JsonElement element, string property) =>
+        TryGetProperty(element, property, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
+    private static bool TryGetProperty(JsonElement element, string property, out JsonElement value)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var candidate in element.EnumerateObject())
+            {
+                if (string.Equals(candidate.Name, property, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = candidate.Value;
+                    return true;
+                }
+            }
+        }
+        value = default;
+        return false;
+    }
+
+    private static string Humanize(string text) => System.Text.RegularExpressions.Regex.Replace(text, "([a-z])([A-Z])", "$1 $2");
+
+    private string? FindNodeName(string id) => _graph?.Nodes
+        .Select(element => element.Data)
+        .FirstOrDefault(data => string.Equals(ReadString(data, "id"), id, StringComparison.OrdinalIgnoreCase)) is JsonElement node
+            ? ReadString(node, "label")
+            : null;
+
+    public async ValueTask DisposeAsync()
+    {
+        _dotNetReference?.Dispose();
+        if (_graphModule is not null)
+        {
+            try { await _graphModule.InvokeVoidAsync("dispose"); await _graphModule.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+    }
+}
