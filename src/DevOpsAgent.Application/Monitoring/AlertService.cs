@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 namespace DevOpsAgent.Application.Monitoring;
 
 public sealed class AlertService(IAlertRepository alerts, IAlertSignalSource signals, TimeProvider timeProvider,
-    IAlertNotificationService notifications, ILogger<AlertService>? logger = null)
+    IAlertNotificationService notifications, ILogger<AlertService> logger)
 {
     public async Task<IReadOnlyList<AlertDto>> ListAsync(AlertState? state, CancellationToken cancellationToken) =>
         (await alerts.ListAsync(state, cancellationToken)).Select(ToDto).ToArray();
@@ -85,7 +85,7 @@ public sealed class AlertService(IAlertRepository alerts, IAlertSignalSource sig
             }
             else
             {
-                logger?.LogWarning("Ignoring duplicate {Kind} key {AlertKey} during alert evaluation.", kind, key);
+                logger.LogWarning("Ignoring duplicate {Kind} key {AlertKey} during alert evaluation.", kind, key);
             }
         }
 

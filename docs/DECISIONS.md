@@ -111,4 +111,4 @@ Format: `D-<number> · <date> · <title>` then Decision / Why / Consequences.
 ### D-025 · 2026-11-15 · Logging abstractions in the Application layer
 - **Decision:** Reference `Microsoft.Extensions.Logging.Abstractions` (10.0.14, same train as EF Core) from `DevOpsAgent.Application`.
 - **Why:** Application services must log failures (corrupt settings, duplicate alert keys, partial tool failures) through `ILogger<T>` per the code conventions without depending on ASP.NET Core. The package is already part of the transitive graph of Infrastructure/Web, so nothing new ships.
-- **Consequences:** Application services take `ILogger<T>`; never log secrets or setting contents.
+- **Consequences:** Application services that log take `ILogger<T>` as a required constructor parameter (never optional, so logging cannot silently disappear); tests pass `NullLogger<T>.Instance`. Never log secrets or setting contents.

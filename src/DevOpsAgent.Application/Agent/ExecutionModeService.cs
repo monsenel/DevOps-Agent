@@ -11,7 +11,7 @@ public sealed class ExecutionModeService(
     IAppSettingRepository settings,
     IServerRepository servers,
     ToolRegistry tools,
-    ILogger<ExecutionModeService>? logger = null)
+    ILogger<ExecutionModeService> logger)
 {
     private const string SettingKey = "agent.execution-modes";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -107,7 +107,7 @@ public sealed class ExecutionModeService(
         (Dictionary<string, ExecutionModePolicy>, bool) Unreadable()
         {
             // The setting content is intentionally not logged.
-            logger?.LogError("Stored execution mode policies are unreadable; treating every group as read-only.");
+            logger.LogError("Stored execution mode policies are unreadable; treating every group as read-only.");
             return (new(StringComparer.OrdinalIgnoreCase), true);
         }
     }

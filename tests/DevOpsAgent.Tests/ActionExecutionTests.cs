@@ -7,6 +7,7 @@ using DevOpsAgent.Domain.Servers;
 using DevOpsAgent.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DevOpsAgent.Tests;
 
@@ -103,7 +104,7 @@ public sealed class ActionExecutionTests
         var action = AddProposedAction(database.Context, "restart_service", servers, "{\"unit\":\"nginx\"}");
         var runner = new TestSshRunner();
         var executionModes = new ExecutionModeService(new AppSettingRepository(database.Context),
-            new ServerRepository(database.Context), new ToolRegistry());
+            new ServerRepository(database.Context), new ToolRegistry(), NullLogger<ExecutionModeService>.Instance);
         await executionModes.SaveAsync(new ExecutionModePolicy("prod", ExecutionMode.ReadOnly, []), CancellationToken.None);
         var execution = CreateService(database.Context, runner, executionModes);
 
@@ -196,7 +197,7 @@ public sealed class ActionExecutionTests
     {
         var serverRepository = new ServerRepository(context);
         var registry = new ToolRegistry();
-        executionModes ??= new ExecutionModeService(new AppSettingRepository(context), serverRepository, registry);
+        executionModes ??= new ExecutionModeService(new AppSettingRepository(context), serverRepository, registry, NullLogger<ExecutionModeService>.Instance);
         return new ActionExecutionService(new ActionRecordRepository(context), serverRepository, registry, executionModes,
             new ToolCommandBuilder(registry), runner, TimeProvider.System);
     }

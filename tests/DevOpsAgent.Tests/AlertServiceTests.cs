@@ -2,6 +2,7 @@ using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Monitoring;
 using DevOpsAgent.Application.Notifications;
 using DevOpsAgent.Domain.Monitoring;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DevOpsAgent.Tests;
 
@@ -71,7 +72,7 @@ public sealed class AlertServiceTests
         public FakeNotifications Notifications { get; } = new();
         public AlertService Service { get; }
 
-        public Fixture() => Service = new AlertService(Repository, Signals, TimeProvider.System, Notifications);
+        public Fixture() => Service = new AlertService(Repository, Signals, TimeProvider.System, Notifications, NullLogger<AlertService>.Instance);
     }
 
     private sealed class FakeNotifications : IAlertNotificationService

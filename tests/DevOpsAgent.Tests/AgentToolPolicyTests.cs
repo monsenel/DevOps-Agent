@@ -5,6 +5,7 @@ using DevOpsAgent.Domain.Servers;
 using DevOpsAgent.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DevOpsAgent.Tests;
 
@@ -210,7 +211,7 @@ public sealed class AgentToolPolicyTests
         var server = await AddServerAsync(database.Context, "prod");
         var registry = new ToolRegistry();
         var settings = new AppSettingRepository(database.Context);
-        var executionModes = new ExecutionModeService(settings, new ServerRepository(database.Context), registry);
+        var executionModes = new ExecutionModeService(settings, new ServerRepository(database.Context), registry, NullLogger<ExecutionModeService>.Instance);
         string[] allowlist = mode == ExecutionMode.Auto && access == ToolAccess.Mutating ? ["restart_service"] : [];
         await executionModes.SaveAsync(new ExecutionModePolicy("prod", mode, allowlist), CancellationToken.None);
         var service = new ApprovalService(registry, executionModes, new ServerRepository(database.Context),
@@ -252,7 +253,7 @@ public sealed class AgentToolPolicyTests
         var server = await AddServerAsync(database.Context, "prod");
         var registry = new ToolRegistry();
         var executionModes = new ExecutionModeService(new AppSettingRepository(database.Context),
-            new ServerRepository(database.Context), registry);
+            new ServerRepository(database.Context), registry, NullLogger<ExecutionModeService>.Instance);
         string[] allowlist = mode == ExecutionMode.Auto ? ["restart_service"] : [];
         await executionModes.SaveAsync(new ExecutionModePolicy("prod", mode, allowlist), CancellationToken.None);
         var service = new ApprovalService(registry, executionModes, new ServerRepository(database.Context),
@@ -271,7 +272,7 @@ public sealed class AgentToolPolicyTests
         await using var database = await CreateDatabaseAsync();
         var server = await AddServerAsync(database.Context, "staging");
         var registry = new ToolRegistry();
-        var executionModes = new ExecutionModeService(new AppSettingRepository(database.Context), new ServerRepository(database.Context), registry);
+        var executionModes = new ExecutionModeService(new AppSettingRepository(database.Context), new ServerRepository(database.Context), registry, NullLogger<ExecutionModeService>.Instance);
         await executionModes.SaveAsync(new ExecutionModePolicy("staging", ExecutionMode.Auto, ["restart_service"]), CancellationToken.None);
         var service = new ApprovalService(registry, executionModes, new ServerRepository(database.Context),
             new ActionRecordRepository(database.Context), TimeProvider.System);
@@ -290,7 +291,7 @@ public sealed class AgentToolPolicyTests
         var server = await AddServerAsync(database.Context, "prod");
         var registry = new ToolRegistry();
         var settings = new AppSettingRepository(database.Context);
-        var executionModes = new ExecutionModeService(settings, new ServerRepository(database.Context), registry);
+        var executionModes = new ExecutionModeService(settings, new ServerRepository(database.Context), registry, NullLogger<ExecutionModeService>.Instance);
         var service = new ApprovalService(registry, executionModes, new ServerRepository(database.Context),
             new ActionRecordRepository(database.Context), TimeProvider.System);
 
@@ -311,7 +312,7 @@ public sealed class AgentToolPolicyTests
         await using var database = await CreateDatabaseAsync();
         var registry = new ToolRegistry();
         var executionModes = new ExecutionModeService(new AppSettingRepository(database.Context),
-            new ServerRepository(database.Context), registry);
+            new ServerRepository(database.Context), registry, NullLogger<ExecutionModeService>.Instance);
         var service = new ApprovalService(registry, executionModes, new ServerRepository(database.Context),
             new ActionRecordRepository(database.Context), TimeProvider.System);
 
@@ -329,7 +330,7 @@ public sealed class AgentToolPolicyTests
         var server = await AddServerAsync(database.Context, "staging");
         var registry = new ToolRegistry();
         var service = new ExecutionModeService(new AppSettingRepository(database.Context),
-            new ServerRepository(database.Context), registry);
+            new ServerRepository(database.Context), registry, NullLogger<ExecutionModeService>.Instance);
 
         var defaultPolicy = Assert.Single(await service.ListAsync(CancellationToken.None));
         Assert.Equal("staging", defaultPolicy.Group);
@@ -352,7 +353,7 @@ public sealed class AgentToolPolicyTests
         await AddServerAsync(database.Context, "prod");
         var settings = new AppSettingRepository(database.Context);
         await settings.SetAsync("agent.execution-modes", "{ not valid json", CancellationToken.None);
-        var service = new ExecutionModeService(settings, new ServerRepository(database.Context), new ToolRegistry());
+        var service = new ExecutionModeService(settings, new ServerRepository(database.Context), new ToolRegistry(), NullLogger<ExecutionModeService>.Instance);
 
         Assert.Equal(ExecutionMode.ReadOnly, (await service.GetForGroupAsync("prod", CancellationToken.None)).Mode);
         Assert.Equal(ExecutionMode.ReadOnly, (await service.GetAsync("never-seen", CancellationToken.None)).Mode);
@@ -371,7 +372,7 @@ public sealed class AgentToolPolicyTests
         await AddServerAsync(database.Context, "staging");
         var settings = new AppSettingRepository(database.Context);
         await settings.SetAsync("agent.execution-modes", "{ not valid json", CancellationToken.None);
-        var service = new ExecutionModeService(settings, new ServerRepository(database.Context), new ToolRegistry());
+        var service = new ExecutionModeService(settings, new ServerRepository(database.Context), new ToolRegistry(), NullLogger<ExecutionModeService>.Instance);
         Assert.True(await service.IsStoredSettingUnreadableAsync(CancellationToken.None));
 
         await service.SaveAsync(new ExecutionModePolicy("staging", ExecutionMode.Auto, ["restart_service"]), CancellationToken.None);
@@ -394,7 +395,7 @@ public sealed class AgentToolPolicyTests
         await AddServerAsync(database.Context, "prod");
         var settings = new AppSettingRepository(database.Context);
         await settings.SetAsync("agent.execution-modes", stored, CancellationToken.None);
-        var service = new ExecutionModeService(settings, new ServerRepository(database.Context), new ToolRegistry());
+        var service = new ExecutionModeService(settings, new ServerRepository(database.Context), new ToolRegistry(), NullLogger<ExecutionModeService>.Instance);
 
         Assert.True(await service.IsStoredSettingUnreadableAsync(CancellationToken.None));
         Assert.Equal(ExecutionMode.ReadOnly, (await service.GetForGroupAsync("prod", CancellationToken.None)).Mode);
