@@ -29,6 +29,30 @@ public sealed class AlertSignalSourceTests
         Assert.All(unreachable, condition => Assert.Equal(condition.ServerId!.Value.ToString("N"), condition.Key["server-unreachable:".Length..]));
     }
 
+    [Fact]
+    public async Task HostKeyMismatchIsReportedDistinctlyFromUnreachable()
+    {
+        var server = new Server("edge", "edge.test", 22, "dva", "test_key", "staging");
+        var ssh = new MismatchSshRunner();
+        var scanner = new AuthLogScanner(ssh, new FakeSettings(), Options.Create(new SecurityMonitoringOptions()), TimeProvider.System);
+        var source = new AlertSignalSource(new FakeServers(server), new FakeMetrics(), new FakeHealthChecks(), new FakeSnapshots(), ssh,
+            scanner, new DriftService(new FakeSnapshots(), null!), TimeProvider.System);
+
+        var conditions = await source.GetActiveConditionsAsync(CancellationToken.None);
+
+        var mismatch = Assert.Single(conditions, condition => condition.Rule == "ssh-host-key-mismatch");
+        Assert.Equal(AlertSeverity.High, mismatch.Severity);
+        Assert.Equal(server.Id, mismatch.ServerId);
+        Assert.Contains("SHA256:abc123", mismatch.Details, StringComparison.Ordinal);
+        Assert.DoesNotContain(conditions, condition => condition.Rule == "server-unreachable");
+    }
+
+    private sealed class MismatchSshRunner : ISshRunner
+    {
+        public Task<RemoteCommandResult> RunAsync(Guid serverId, string command, SshRunOptions options, CancellationToken cancellationToken) =>
+            throw new SshHostKeyMismatchException("edge.test", 22, "SHA256:abc123");
+    }
+
     private sealed class FakeServers(params Server[] items) : IServerRepository
     {
         public Task<IReadOnlyList<Server>> ListAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Server>>(items);

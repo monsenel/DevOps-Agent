@@ -24,8 +24,16 @@ public sealed class AlertSignalSource(
         foreach (var server in inventory)
         {
             result.AddRange(await authLogScanner.ScanAsync(server, cancellationToken));
-            var remoteStatus = await TryGetRemoteStatusAsync(server.Id, cancellationToken);
-            if (remoteStatus is null)
+            var (remoteStatus, hostKeyMismatch) = await TryGetRemoteStatusAsync(server.Id, cancellationToken);
+            if (hostKeyMismatch is not null)
+            {
+                // A changed host key is a possible impersonation, not an outage: report it distinctly from "unreachable".
+                result.Add(Condition("ssh-host-key-mismatch", server.Id.ToString("N"), AlertSeverity.High, server.Id, server.Host,
+                    $"{server.Name} presented an unexpected SSH host key",
+                    $"The host key of {hostKeyMismatch.Host}:{hostKeyMismatch.Port} does not match the pinned key; the connection was refused. "
+                    + $"Presented fingerprint: {hostKeyMismatch.Fingerprint ?? "unknown"}. Verify the server before trusting the new key."));
+            }
+            else if (remoteStatus is null)
             {
                 result.Add(Condition("server-unreachable", server.Id.ToString("N"), AlertSeverity.High, server.Id, server.Host,
                     $"{server.Name} is unreachable", "The scheduled read-only SSH status check could not reach the server."));
@@ -82,17 +90,19 @@ public sealed class AlertSignalSource(
         return result;
     }
 
-    private async Task<RemoteServiceStatus?> TryGetRemoteStatusAsync(Guid serverId, CancellationToken cancellationToken)
+    private async Task<(RemoteServiceStatus? Status, SshHostKeyMismatchException? HostKeyMismatch)> TryGetRemoteStatusAsync(
+        Guid serverId, CancellationToken cancellationToken)
     {
         const string command = "printf '__DVA_DOCKER__\\n'; if command -v docker >/dev/null 2>&1; then docker ps -a --format '{{.Names}}\\t{{.State}}'; fi; " +
             "printf '__DVA_SYSTEMD_FAILED__\\n'; systemctl --failed --type=service --no-legend --plain 2>/dev/null || true";
         try
         {
             var response = await sshRunner.RunAsync(serverId, command, new SshRunOptions(TimeSpan.FromSeconds(20)), cancellationToken);
-            return response.ExitCode == 0 ? RemoteServiceStatusParser.Parse(response.StandardOutput) : null;
+            return (response.ExitCode == 0 ? RemoteServiceStatusParser.Parse(response.StandardOutput) : null, null);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (Exception) { return null; }
+        catch (SshHostKeyMismatchException exception) { return (null, exception); }
+        catch (Exception) { return (null, null); }
     }
 
     private static void AddThreshold(IReadOnlyList<MetricSample> samples, string metric, string key, double threshold,
