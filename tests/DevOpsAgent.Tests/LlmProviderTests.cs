@@ -79,6 +79,36 @@ public sealed class LlmProviderTests
         Assert.Null(saved.LastTestError);
     }
 
+    [Fact]
+    public async Task RefreshModels_ReusesStoredKeyOnlyForTheStoredBaseUrl()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var repository = new LlmProviderRepository(database.Context);
+        var lister = new RecordingModelLister();
+        var service = new ProviderService(repository, new TestSecretProtector(), new UnusedChatClientFactory(), lister, TimeProvider.System);
+        var saved = await service.CreateAsync(Input("Local", "secret-a", isDefault: true), CancellationToken.None);
+
+        await service.RefreshModelsAsync(saved.Id, "https://llm.example/v1/", "", 30, CancellationToken.None);
+        await service.RefreshModelsAsync(saved.Id, "https://attacker.example/v1", null, 30, CancellationToken.None);
+        await service.RefreshModelsAsync(saved.Id, "https://attacker.example/v1", "typed-key", 30, CancellationToken.None);
+
+        Assert.Equal("secret-a", lister.Calls[0].ApiKey);
+        Assert.Equal("https://llm.example/v1", lister.Calls[0].BaseUrl);
+        Assert.Null(lister.Calls[1].ApiKey);
+        Assert.Equal("typed-key", lister.Calls[2].ApiKey);
+    }
+
+    private sealed class RecordingModelLister : IModelLister
+    {
+        public List<(string BaseUrl, string? ApiKey)> Calls { get; } = [];
+
+        public Task<IReadOnlyList<string>> ListAsync(string baseUrl, string? apiKey, int timeoutSeconds, CancellationToken cancellationToken)
+        {
+            Calls.Add((baseUrl, apiKey));
+            return Task.FromResult<IReadOnlyList<string>>([]);
+        }
+    }
+
     private static LlmProviderInput Input(string name, string? apiKey, bool isDefault) => new(
         name, ProviderType.OpenAiCompatible, "https://llm.example/v1/", "tiny-model", 4096, 0.2,
         30, isDefault, true, true, false, apiKey);

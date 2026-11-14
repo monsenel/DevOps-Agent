@@ -77,17 +77,20 @@ public sealed class ProviderService(
             throw new ArgumentOutOfRangeException(nameof(timeoutSeconds));
         }
 
+        var normalizedBaseUrl = NormalizeBaseUrl(baseUrl);
         var effectiveApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey;
         if (effectiveApiKey is null && providerId.HasValue)
         {
             var provider = await repository.GetAsync(providerId.Value, cancellationToken);
-            if (provider is not null && !string.IsNullOrEmpty(provider.ProtectedApiKey))
+            // The stored key may only be sent to the URL it was saved for; an edited URL must not receive it.
+            if (provider is not null && !string.IsNullOrEmpty(provider.ProtectedApiKey)
+                && string.Equals(NormalizeBaseUrl(provider.BaseUrl), normalizedBaseUrl, StringComparison.OrdinalIgnoreCase))
             {
                 effectiveApiKey = secretProtector.Unprotect(provider.ProtectedApiKey);
             }
         }
 
-        return await modelLister.ListAsync(NormalizeBaseUrl(baseUrl), effectiveApiKey, timeoutSeconds, cancellationToken);
+        return await modelLister.ListAsync(normalizedBaseUrl, effectiveApiKey, timeoutSeconds, cancellationToken);
     }
 
     public async Task<ProviderTestResult?> TestAsync(Guid id, CancellationToken cancellationToken)
