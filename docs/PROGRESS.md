@@ -6,13 +6,13 @@
 
 ## Current
 
-- **Task:** T6.5 Updates (UPD-1, UPD-2)
+- **Task:** T6.6 MVP hardening pass
 - **Status:** blocked
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
-T5.1 (and dependent M5 tasks T5.2–T5.5) remain deferred at the owner's direction. T6.3 implementation includes inventory/relevant graph context, native Microsoft.Extensions.AI tool calling, JSON fallback, validation, read-only SSH tools, policy-governed audited writes, inline proposals, action-result continuation, and remote-provider secret redaction. Protocol/redaction tests pass; J4 live verification remains blocked because local Ollama is unavailable and OpenRouter credentials are absent, and M5 context is deferred. T6.4 is dependency-blocked by T6.3 and T5.3 (deferred M5). T6.5 implementation includes persisted apt/dnf update scans, security classification, server-group review UI, and one-server `apply_updates` proposals that always require explicit approval and record restarted services/reboot requirement. Parser and service persistence tests pass; the update page/migration were checked in both themes against an isolated SQLite database. Resume verification: clean starting tree; `dotnet build DevOpsAgent.slnx` passed with 0 warnings/errors and `dotnet test DevOpsAgent.slnx` passed (77/77). No `/keys` directory or `.env` is present, so J6 live SSH acceptance remains blocked. Graphify code-only incremental update completed at 5,388 nodes, 18,826 edges, 325 communities; semantic extraction of 17 documentation files was skipped because no LLM key is configured. Installed Graphify (0.9.89) is older than the skill (0.9.108); its generated cache churn was discarded, while refreshed graph/report artifacts were retained. T6.6 depends on the blocked preceding tasks. Exact next step: configure an authorized apt/dnf test Linux server, mount its SSH identity and pinned host key under `/keys`, then run J6 scan/propose/approve and verify the action report. After the blocked M6 tasks are completed, resume T6.6.
+T5.1 (and dependent M5 tasks T5.2–T5.5) remain deferred at the owner's direction. T6.3 implementation includes inventory/relevant graph context, native Microsoft.Extensions.AI tool calling, JSON fallback, validation, read-only SSH tools, policy-governed audited writes, inline proposals, action-result continuation, and remote-provider secret redaction. Protocol/redaction tests pass; J4 live verification remains blocked because local Ollama is unavailable and OpenRouter credentials are absent, and M5 context is deferred. T6.4 is dependency-blocked by T6.3 and T5.3 (deferred M5). T6.5 is complete: live J6 steps 1–3 passed in an isolated Debian apt container using deterministic standard/security package fixtures. The UI classified both packages, showed the exact command, required approval, recorded a successful action (exit 0, no restarted services, reboot not required), and a follow-up scan showed zero pending updates. Temporary app state, SSH key, container, and image were removed. Last build passed with 0 warnings/errors and 77/77 tests passed. Graphify code-only incremental update completed at 5,388 nodes, 18,826 edges, 325 communities; semantic extraction of 17 documentation files was skipped because no LLM key is configured. Installed Graphify (0.9.89) is older than the skill (0.9.108); generated cache churn was discarded, while refreshed graph/report artifacts were committed. T6.6 remains blocked by T6.3 and T6.4 (with T6.4 also depending on deferred T5.3). Exact next step: resolve T6.3's J4 provider acceptance and T6.4's J5 test-server acceptance, restoring M5/T5.3 when the owner authorizes that deferred phase; then resume T6.6 hardening.
 
 ## Blockers
 
@@ -32,9 +32,7 @@ T6.3 code and isolated tests are implemented, but its J4 live-provider acceptanc
 
 T6.4 is deferred because it depends on incomplete T6.3 and T5.3; T5.3 depends on the deferred M5 phase. Resume after those dependencies are completed.
 
-T6.5 code and parser/service tests are implemented, but J6 live scan and apply verification requires an authorized Linux test server with apt or dnf and a pinned SSH key. No remote host was configured, so no SSH operation was attempted. Provide a disposable/authorized test target and key before marking T6.5 done.
-
-T6.6 is blocked until T6.3, T6.4, and T6.5 acceptance is resolved because it depends on all preceding tasks and requires end-to-end journey checks.
+T6.6 remains blocked because T6.3 and T6.4 acceptance is unresolved; it depends on all preceding tasks and requires end-to-end journey checks.
 
 ---
 
@@ -77,7 +75,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T6.2 | Action log | done | `feat(T6.2): approved action execution and log` |
 | T6.3 | Agent chat with tools | blocked | `wip(T6.3): add context and tool dispatch` |
 | T6.4 | SSH attack detection and bans | blocked | |
-| T6.5 | Updates | blocked | `wip(T6.5): updates inventory and approval flow` |
+| T6.5 | Updates | done | `feat(T6.5): updates inventory and approval flow` |
 | T6.6 | MVP hardening pass | blocked | |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
@@ -87,6 +85,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 ## Session log
 
 One line per session: date · tool/model · tasks touched · result.
+
+- 2026-11-14 · Codex / GPT-6 · T6.5 · J6 steps 1–3 passed on disposable Debian apt target; security and standard updates classified, explicit approval executed both, report exit 0/no restarts/reboot false, follow-up scan showed 0 pending; temporary test environment removed
 
 - 2026-11-14 · Codex / GPT-6 · resumed T6.5 · clean tree; build passed with 0 warnings/errors and tests passed (77/77); J6 still needs an authorized apt/dnf SSH target; Graphify code-only update completed (5,388 nodes, 18,826 edges, 325 communities)
 
