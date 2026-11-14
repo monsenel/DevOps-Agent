@@ -303,7 +303,7 @@
 
             <section class="ui-card cloud-options-card" aria-labelledby="cloud-options-heading">
                 <header class="ui-card-header"><h2 id="cloud-options-heading">Cloud providers</h2></header>
-                <SwitchRow Title="Redact secrets and IPs before sending" Helper="Applies to cloud providers" @bind-Value="_form.RedactSecretsBeforeSending" />
+                <SwitchRow Title="Redact secrets before sending" Helper="Not applied to local or private-network endpoints" @bind-Value="_form.RedactSecretsBeforeSending" />
                 <SwitchRow Title="Keep raw logs local" Helper="Available in v2" Value="false" Disabled="true" />
                 <SwitchRow Title="Fallback on failure" Helper="Available in v2" Value="false" Disabled="true" />
             </section>
