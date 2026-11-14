@@ -2,6 +2,7 @@
 @page "/settings/llm"
 @inject ProviderService Providers
 @inject ProviderStatusState ProviderStatus
+@inject DiscoveryScheduleService DiscoverySchedule
 @inject IJSRuntime JavaScript
 
 <PageTitle>Settings · DevOps Agent</PageTitle>
@@ -17,7 +18,34 @@
         }
     </nav>
 
-    @if (_section != "LLM connection")
+    @if (_section == "Discovery")
+    {
+        <section class="ui-card discovery-settings-card" aria-labelledby="discovery-settings-title">
+            <header class="ui-card-header"><h2 id="discovery-settings-title">Scheduled discovery</h2></header>
+            <p class="muted">Discover all inventoried servers automatically and compare each snapshot for drift.</p>
+            @if (!string.IsNullOrWhiteSpace(_discoveryMessage))
+            {
+                <div class="settings-message success" role="status">@_discoveryMessage</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(_discoveryError))
+            {
+                <div class="settings-message error" role="alert">@_discoveryError</div>
+            }
+            <div class="field discovery-interval-field">
+                <label for="discovery-interval">Run discovery every</label>
+                <div class="discovery-interval-input">
+                    <input id="discovery-interval" class="mono" type="number" min="@DiscoveryScheduleService.MinimumIntervalHours"
+                           max="@DiscoveryScheduleService.MaximumIntervalHours" @bind="_discoveryIntervalHours" />
+                    <span>hours</span>
+                </div>
+                <span class="field-helper">Choose between 1 and 24 hours. The default is 6 hours.</span>
+            </div>
+            <button class="ui-button primary" type="button" disabled="@_savingDiscovery" @onclick="SaveDiscoveryIntervalAsync">
+                @(_savingDiscovery ? "Saving…" : "Save interval")
+            </button>
+        </section>
+    }
+    else if (_section != "LLM connection")
     {
         <PagePlaceholder Title="@_section" Description="This settings section will be available in a later task." />
     }
@@ -185,6 +213,11 @@
     private bool _isRefreshing;
     private bool _isSaving;
     private bool _isTesting;
+    private int _discoveryIntervalHours = DiscoveryScheduleService.DefaultIntervalHours;
+    private bool _discoveryLoaded;
+    private bool _savingDiscovery;
+    private string? _discoveryMessage;
+    private string? _discoveryError;
     private LlmProviderSummary? _selectedProvider => _providers.SingleOrDefault(provider => provider.Id == _selectedProviderId);
 
     private string ApiKeyPlaceholder => _form.Type switch
@@ -257,7 +290,37 @@
 
     private void ResetForm() => _form = new ProviderForm { IsDefault = _providers.All(provider => !provider.IsDefault) };
 
-    private void SelectSection(string section) => _section = section;
+    private async Task SelectSection(string section)
+    {
+        _section = section;
+        _discoveryMessage = null;
+        _discoveryError = null;
+        if (section == "Discovery" && !_discoveryLoaded)
+        {
+            _discoveryIntervalHours = await DiscoverySchedule.GetIntervalHoursAsync(CancellationToken.None);
+            _discoveryLoaded = true;
+        }
+    }
+
+    private async Task SaveDiscoveryIntervalAsync()
+    {
+        _savingDiscovery = true;
+        _discoveryMessage = null;
+        _discoveryError = null;
+        try
+        {
+            await DiscoverySchedule.SaveIntervalHoursAsync(_discoveryIntervalHours, CancellationToken.None);
+            _discoveryMessage = "Discovery interval saved.";
+        }
+        catch (ArgumentOutOfRangeException exception)
+        {
+            _discoveryError = exception.Message;
+        }
+        finally
+        {
+            _savingDiscovery = false;
+        }
+    }
 
     private void OnTypeChanged()
     {

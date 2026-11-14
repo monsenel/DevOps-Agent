@@ -14,13 +14,32 @@
 
 What is done so far:
 - T4.2 is complete and committed as `85e3b68 feat(T4.2): unknown node expansion`; build is clean and 47/47 tests pass, with the prefilled flow checked in both themes.
+- T4.3 has `DriftService` graph comparison, full-graph view, snapshot listing, persistent 1–24 hour discovery interval (default 6), hosted scheduler, and first drift page/settings UI slice; snapshot fixture and schedule tests pass (49/49).
 What is next (exact next step):
-- Inspect snapshot/graph persistence, existing Settings › Discovery page, hosted-service registration, and related drift requirements; implement `DriftService` fixture comparison first.
+- Seed a disposable local database with two synthetic completed snapshots, visually verify Drift changes/graph highlights and Settings › Discovery in light and dark, then inspect results and finish any acceptance gaps.
 Files touched:
 - `docs/PROGRESS.md`
+- `src/DevOpsAgent.Application/Abstractions/IAppSettingRepository.cs`
+- `src/DevOpsAgent.Application/Abstractions/ISnapshotRepository.cs`
+- `src/DevOpsAgent.Application/Discovery/DiscoveryScheduleService.cs`
+- `src/DevOpsAgent.Application/Discovery/DriftContracts.cs`
+- `src/DevOpsAgent.Application/Discovery/DriftService.cs`
+- `src/DevOpsAgent.Application/Discovery/GraphViewContracts.cs`
+- `src/DevOpsAgent.Infrastructure/Persistence/AppSettingRepository.cs`
+- `src/DevOpsAgent.Infrastructure/Persistence/GraphRepository.cs`
+- `src/DevOpsAgent.Infrastructure/Persistence/PersistenceServiceCollectionExtensions.cs`
+- `src/DevOpsAgent.Infrastructure/Persistence/SnapshotRepository.cs`
+- `src/DevOpsAgent.Web/Components/Layout/Sidebar.razor`
+- `src/DevOpsAgent.Web/Components/Pages/Drift.razor`
+- `src/DevOpsAgent.Web/Components/Pages/Settings.razor`
+- `src/DevOpsAgent.Web/Hosted/DiscoveryScheduler.cs`
+- `src/DevOpsAgent.Web/Program.cs`
+- `src/DevOpsAgent.Web/wwwroot/css/app.css`
+- `tests/DevOpsAgent.Tests/DriftServiceTests.cs`
 Gotchas found:
 - T1.2 live direct/jump SSH verification remains deferred by owner direction; its status stays blocked.
 - T2.7's real two-server discovery criterion cannot be verified until authorized targets and pinned keys are configured; the browser check used a temporary synthetic persisted graph.
+- SQLite cannot translate `DateTimeOffset` ordering; `SnapshotRepository.ListAsync` sorts materialized snapshots in memory, matching `GetLatestAsync`.
 
 ## Blockers
 
@@ -139,3 +158,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · resumed T4.2 · Unknown detail, prefilled inventory flow, targeted discovery/merge; build clean, 47/47 tests pass and both themes checked
 - 2026-11-14 · Codex / GPT-6 · T4.2 · complete; synthetic J2 flow verified, live SSH unavailable
 - 2026-11-14 · Codex / GPT-6 · resumed T4.3 · started drift comparison and scheduled discovery
+- 2026-11-14 · Codex / GPT-6 · T4.3 · drift service, persistent schedule and initial UI implemented; SQLite ordering adjusted, build clean and 49/49 tests pass

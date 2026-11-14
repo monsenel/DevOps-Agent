@@ -1528,6 +1528,223 @@ p {
     margin-top: -10px;
 }
 
+.discovery-settings-card {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 720px;
+}
+
+.discovery-settings-card > p {
+    margin: 0;
+}
+
+.discovery-interval-field {
+    max-width: 320px;
+}
+
+.discovery-interval-input {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.discovery-interval-input input {
+    width: 150px;
+}
+
+.discovery-interval-input span {
+    color: var(--dva-muted);
+}
+
+.drift-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.drift-snapshot-pickers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.drift-snapshot-pickers .field {
+    flex: 1 1 300px;
+    min-width: 0;
+}
+
+.drift-summary {
+    align-self: flex-start;
+    margin: 0;
+    padding: 8px 12px;
+    border-radius: var(--dva-radius-pill);
+    background: var(--dva-inset);
+    color: var(--dva-muted);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.drift-content-row {
+    display: flex;
+    align-items: stretch;
+    gap: var(--dva-gap);
+}
+
+.drift-list-card {
+    flex: 1 1 420px;
+    min-width: 0;
+}
+
+.drift-graph-card {
+    flex: 1 1 420px;
+    min-width: 0;
+}
+
+.drift-change-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.drift-change-row {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    min-height: 52px;
+    padding: 9px 12px;
+    border-radius: var(--dva-radius-row);
+    background: var(--dva-inset);
+}
+
+.drift-change-kind {
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.drift-change-description {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.drift-change-row.added .drift-change-kind,
+.drift-graph-legend .added {
+    color: var(--dva-on-soft);
+}
+
+.drift-change-row.changed .drift-change-kind,
+.drift-graph-legend .changed {
+    color: var(--dva-on-warn);
+}
+
+.drift-change-row.removed .drift-change-kind,
+.drift-graph-legend .removed {
+    color: var(--dva-danger);
+}
+
+.drift-graph-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.drift-mini-graph-scroll {
+    width: 100%;
+    overflow-x: auto;
+    border-radius: var(--dva-radius-control);
+    background: var(--dva-inset);
+}
+
+.drift-mini-graph {
+    display: block;
+    width: 100%;
+    min-width: 600px;
+    height: auto;
+}
+
+.drift-graph-edge {
+    stroke: var(--dva-edge);
+    stroke-width: 2;
+    opacity: .7;
+}
+
+.drift-graph-edge.added {
+    stroke: var(--dva-accent);
+}
+
+.drift-graph-edge.changed {
+    stroke: var(--dva-warn);
+    stroke-dasharray: 6 4;
+}
+
+.drift-graph-edge.removed {
+    stroke: var(--dva-danger);
+    stroke-dasharray: 6 4;
+}
+
+.drift-graph-node rect {
+    fill: var(--dva-card);
+    stroke: var(--dva-line);
+    stroke-width: 1.5;
+}
+
+.drift-graph-node.added rect {
+    fill: var(--dva-soft);
+    stroke: var(--dva-accent);
+}
+
+.drift-graph-node.changed rect {
+    fill: var(--dva-warn-soft);
+    stroke: var(--dva-warn);
+    stroke-width: 2;
+}
+
+.drift-graph-node.removed rect {
+    fill: var(--dva-danger-soft);
+    stroke: var(--dva-danger);
+    stroke-dasharray: 5 3;
+}
+
+.drift-graph-node text {
+    fill: var(--dva-ink);
+    font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.drift-graph-node .drift-graph-node-kind {
+    fill: var(--dva-muted);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 9px;
+    font-weight: 400;
+}
+
+.drift-empty {
+    padding: 32px 0 8px;
+}
+
+@media (max-width: 900px) {
+    .drift-content-row {
+        flex-wrap: wrap;
+    }
+
+    .drift-change-row {
+        grid-template-columns: 68px minmax(0, 1fr);
+    }
+
+    .drift-change-row .ui-badge {
+        grid-column: 2;
+        justify-self: start;
+    }
+}
+
 .agent-chat-layout {
     display: flex;
     align-items: stretch;

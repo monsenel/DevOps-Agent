@@ -14,6 +14,14 @@ public sealed class SnapshotRepository(AppDbContext dbContext) : ISnapshotReposi
         return snapshots.MaxBy(snapshot => snapshot.StartedAtUtc);
     }
 
+    public async Task<IReadOnlyList<Snapshot>> ListAsync(CancellationToken cancellationToken)
+    {
+        var items = await dbContext.Snapshots.AsNoTracking()
+            .Where(snapshot => snapshot.FinishedAtUtc != null)
+            .ToArrayAsync(cancellationToken);
+        return items.OrderByDescending(snapshot => snapshot.StartedAtUtc).ToArray();
+    }
+
     public async Task<Snapshot> CreateAsync(
         IReadOnlyCollection<Guid> serverIds,
         DateTimeOffset startedAtUtc,

@@ -5,7 +5,8 @@ namespace DevOpsAgent.Application.Discovery;
 public enum GraphView
 {
     Service,
-    Network
+    Network,
+    All
 }
 
 public sealed record GraphSnapshotDto(

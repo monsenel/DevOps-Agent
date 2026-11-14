@@ -1,0 +1,267 @@
+@page "/drift"
+@using System.Text.Json
+@inject DriftService DriftService
+@inject IGraphRepository GraphRepository
+<PageTitle>Drift · DevOps Agent</PageTitle>
+
+<div class="page-stack drift-page">
+    <section class="ui-card drift-controls" aria-labelledby="drift-title">
+        <div class="servers-heading">
+            <div>
+                <p class="eyebrow">Snapshots</p>
+                <h2 id="drift-title">Infrastructure drift</h2>
+                <p class="muted">Compare two discovery runs to see what changed across hosts and services.</p>
+            </div>
+            @if (_snapshots.Count >= 2)
+            {
+                <button class="ui-button primary" type="button" disabled="@_loading" @onclick="CompareAsync">
+                    @(_loading ? "Comparing…" : "Compare snapshots")
+                </button>
+            }
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="alert-message error" role="alert">@_error</div>
+        }
+
+        @if (_snapshots.Count < 2)
+        {
+            <div class="empty-state drift-empty">
+                <h3>Two completed snapshots are needed</h3>
+                <p class="muted">Run discovery again after your first snapshot to see added, removed, and changed infrastructure.</p>
+                <a class="ui-button primary" href="/topology">Open topology</a>
+            </div>
+        }
+        else
+        {
+            <div class="drift-snapshot-pickers">
+                <div class="field">
+                    <label for="drift-from">From snapshot</label>
+                    <select id="drift-from" @bind="_fromSnapshotValue">
+                        @foreach (var snapshot in _snapshots)
+                        {
+                            <option value="@snapshot.Id">@SnapshotLabel(snapshot)</option>
+                        }
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="drift-to">To snapshot</label>
+                    <select id="drift-to" @bind="_toSnapshotValue">
+                        @foreach (var snapshot in _snapshots)
+                        {
+                            <option value="@snapshot.Id">@SnapshotLabel(snapshot)</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            @if (_report is not null)
+            {
+                <p class="drift-summary" role="status">
+                    @_report.Changes.Count change@(_report.Changes.Count == 1 ? "" : "s")
+                    · @_report.NewListeners.Count new listener@(_report.NewListeners.Count == 1 ? "" : "s")
+                </p>
+            }
+        }
+    </section>
+
+    @if (_report is not null)
+    {
+        <div class="drift-content-row">
+            <section class="ui-card drift-list-card" aria-labelledby="drift-list-title">
+                <header class="ui-card-header"><h2 id="drift-list-title">Changes</h2></header>
+                @if (_report.Changes.Count == 0)
+                {
+                    <p class="muted">These snapshots match. No node, listener, or connection changes were found.</p>
+                }
+                else
+                {
+                    <ul class="drift-change-list">
+                        @foreach (var change in _report.Changes)
+                        {
+                            <li class="drift-change-row @ChangeClass(change.ChangeType)">
+                                <span class="drift-change-kind">@change.ChangeType</span>
+                                <span class="drift-change-description">@change.Description</span>
+                                <span class="ui-badge neutral">@change.EntityType</span>
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+
+            <section class="ui-card drift-graph-card" aria-labelledby="drift-graph-title">
+                <header class="ui-card-header"><h2 id="drift-graph-title">Graph highlights</h2></header>
+                <div class="drift-graph-legend" aria-label="Change legend">
+                    <span class="added">Added</span><span class="changed">Changed</span><span class="removed">Removed</span>
+                </div>
+                @if (_miniNodes.Count == 0)
+                {
+                    <p class="muted">No graph elements are available for these snapshots.</p>
+                }
+                else
+                {
+                    <div class="drift-mini-graph-scroll">
+                        <svg class="drift-mini-graph" viewBox="0 0 720 @_miniGraphHeight" role="img"
+                             aria-label="Snapshot graph with added, removed, and changed elements highlighted">
+                            @foreach (var edge in _miniEdges)
+                            {
+                                <line class="drift-graph-edge @edge.Class" x1="@edge.X1" y1="@edge.Y1" x2="@edge.X2" y2="@edge.Y2" />
+                            }
+                            @foreach (var node in _miniNodes)
+                            {
+                                <g class="drift-graph-node @node.Class">
+                                    <rect x="@node.X" y="@node.Y" width="154" height="52" rx="12" />
+                                    <text x="@(node.X + 10)" y="@(node.Y + 21)">@node.Label</text>
+                                    <text class="drift-graph-node-kind" x="@(node.X + 10)" y="@(node.Y + 39)">@node.Kind · @node.Status</text>
+                                </g>
+                            }
+                        </svg>
+                    </div>
+                }
+            </section>
+        </div>
+    }
+</div>
+
+@code {
+    private IReadOnlyList<SnapshotSummary> _snapshots = [];
+    private DriftReport? _report;
+    private GraphSnapshotDto? _fromGraph;
+    private GraphSnapshotDto? _toGraph;
+    private IReadOnlyList<MiniGraphNode> _miniNodes = [];
+    private IReadOnlyList<MiniGraphEdge> _miniEdges = [];
+    private string? _fromSnapshotValue;
+    private string? _toSnapshotValue;
+    private string? _error;
+    private bool _loading;
+    private int _miniGraphHeight => Math.Max(120, ((_miniNodes.Count + 3) / 4) * 82 + 12);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _snapshots = await DriftService.ListSnapshotsAsync(CancellationToken.None);
+        if (_snapshots.Count < 2) return;
+        _fromSnapshotValue = _snapshots[1].Id.ToString();
+        _toSnapshotValue = _snapshots[0].Id.ToString();
+        await CompareAsync();
+    }
+
+    private async Task CompareAsync()
+    {
+        if (!Guid.TryParse(_fromSnapshotValue, out var fromId) || !Guid.TryParse(_toSnapshotValue, out var toId)) return;
+        _loading = true;
+        _error = null;
+        try
+        {
+            _report = await DriftService.CompareAsync(fromId, toId, CancellationToken.None);
+            _fromGraph = await GraphRepository.GetAsync(fromId, GraphView.All, CancellationToken.None);
+            _toGraph = await GraphRepository.GetAsync(toId, GraphView.All, CancellationToken.None);
+            BuildMiniGraph();
+        }
+        catch (Exception exception)
+        {
+            _error = exception.Message;
+            _report = null;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void BuildMiniGraph()
+    {
+        if (_report is null || _fromGraph is null || _toGraph is null)
+        {
+            _miniNodes = [];
+            _miniEdges = [];
+            return;
+        }
+
+        var changes = _report.Changes;
+        var changeByNode = changes.Where(change => change.EntityType == DriftEntityType.Node && change.NodeKey is not null)
+            .GroupBy(change => change.NodeKey!, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.OrderBy(change => change.ChangeType == DriftChangeType.Changed ? 0 : 1).First(), StringComparer.Ordinal);
+        var fromNodes = NodesByKey(_fromGraph);
+        var toNodes = NodesByKey(_toGraph);
+        var affectedKeys = changes.SelectMany(change => new[] { change.NodeKey, change.SourceNodeKey, change.TargetNodeKey })
+            .Where(key => key is not null).Select(key => key!).Distinct(StringComparer.Ordinal).ToArray();
+        var orderedKeys = affectedKeys.Concat(toNodes.Keys).Concat(fromNodes.Keys)
+            .Distinct(StringComparer.Ordinal).Take(16).ToArray();
+        var nodePositions = new Dictionary<string, (int X, int Y)>(StringComparer.Ordinal);
+        var nodes = new List<MiniGraphNode>();
+        for (var index = 0; index < orderedKeys.Length; index++)
+        {
+            var key = orderedKeys[index];
+            if (!toNodes.TryGetValue(key, out var data) && !fromNodes.TryGetValue(key, out data)) continue;
+            var x = 12 + index % 4 * 176;
+            var y = 12 + index / 4 * 82;
+            nodePositions[key] = (x, y);
+            var status = changeByNode.TryGetValue(key, out var change) ? change.ChangeType.ToString() : "Unchanged";
+            nodes.Add(new MiniGraphNode(key, Limit(ReadString(data, "label") ?? key, 21),
+                ReadString(data, "kind") ?? "Node", status, ChangeClass(change?.ChangeType), x, y));
+        }
+
+        var edgeChanges = changes.Where(change => change.EntityType == DriftEntityType.Edge)
+            .ToDictionary(change => change.Key, change => change, StringComparer.Ordinal);
+        var edgeByIdentity = new Dictionary<string, EdgeView>(StringComparer.Ordinal);
+        AddEdges(_toGraph, toNodes, edgeByIdentity);
+        AddEdges(_fromGraph, fromNodes, edgeByIdentity);
+        _miniEdges = edgeByIdentity.Values
+            .Where(edge => nodePositions.ContainsKey(edge.SourceKey) && nodePositions.ContainsKey(edge.TargetKey))
+            .Select(edge =>
+            {
+                var source = nodePositions[edge.SourceKey];
+                var target = nodePositions[edge.TargetKey];
+                var status = edgeChanges.TryGetValue(edge.Identity, out var change) ? change.ChangeType : (DriftChangeType?)null;
+                return new MiniGraphEdge(source.X + 154, source.Y + 26, target.X, target.Y + 26, ChangeClass(status));
+            }).ToArray();
+        _miniNodes = nodes;
+    }
+
+    private static Dictionary<string, JsonElement> NodesByKey(GraphSnapshotDto graph) => graph.Nodes
+        .Select(element => element.Data).ToDictionary(node => ReadString(node, "key") ?? string.Empty,
+            node => node, StringComparer.Ordinal);
+
+    private static void AddEdges(GraphSnapshotDto graph, IReadOnlyDictionary<string, JsonElement> nodes,
+        IDictionary<string, EdgeView> output)
+    {
+        var keyById = nodes.Values.ToDictionary(node => ReadString(node, "id") ?? string.Empty,
+            node => ReadString(node, "key") ?? string.Empty, StringComparer.Ordinal);
+        foreach (var element in graph.Edges)
+        {
+            var edge = element.Data;
+            if (!keyById.TryGetValue(ReadString(edge, "source") ?? string.Empty, out var source)
+                || !keyById.TryGetValue(ReadString(edge, "target") ?? string.Empty, out var target)) continue;
+            var port = TryGetValue(edge, "port");
+            var kind = ReadString(edge, "kind") ?? string.Empty;
+            var protocol = ReadString(edge, "protocol") ?? string.Empty;
+            var identity = $"{source}\u001f{target}\u001f{kind}\u001f{port}\u001f{protocol}";
+            output.TryAdd(identity, new EdgeView(identity, source, target));
+        }
+    }
+
+    private static string? ReadString(JsonElement element, string property) =>
+        element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    private static string? TryGetValue(JsonElement element, string property) =>
+        element.TryGetProperty(property, out var value) && value.ValueKind != JsonValueKind.Null ? value.ToString() : null;
+
+    private static string Limit(string value, int length) => value.Length <= length ? value : value[..(length - 1)] + "…";
+
+    private static string ChangeClass(DriftChangeType? type) => type switch
+    {
+        DriftChangeType.Added => "added",
+        DriftChangeType.Removed => "removed",
+        DriftChangeType.Changed => "changed",
+        _ => "neutral"
+    };
+
+    private static string SnapshotLabel(SnapshotSummary snapshot) =>
+        $"{snapshot.StartedAtUtc.ToLocalTime():g} · {snapshot.Status} · {snapshot.SucceededServerCount} ok / {snapshot.FailedServerCount} failed";
+
+    private static string ChangeClass(DriftChangeType type) => ChangeClass((DriftChangeType?)type);
+
+    private sealed record EdgeView(string Identity, string SourceKey, string TargetKey);
+    private sealed record MiniGraphNode(string Key, string Label, string Kind, string Status, string Class, int X, int Y);
+    private sealed record MiniGraphEdge(int X1, int Y1, int X2, int Y2, string Class);
+}

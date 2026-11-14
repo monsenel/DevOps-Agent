@@ -133,9 +133,12 @@ public sealed class GraphRepository(AppDbContext dbContext) : IGraphRepository
         }
 
         var nodeQuery = dbContext.GraphNodes.AsNoTracking().Where(node => node.SnapshotId == snapshotId);
-        nodeQuery = view == GraphView.Network
-            ? nodeQuery.Where(node => node.Kind != GraphNodeKind.Service)
-            : nodeQuery.Where(node => node.Kind != GraphNodeKind.Subnet);
+        nodeQuery = view switch
+        {
+            GraphView.Network => nodeQuery.Where(node => node.Kind != GraphNodeKind.Service),
+            GraphView.Service => nodeQuery.Where(node => node.Kind != GraphNodeKind.Subnet),
+            _ => nodeQuery
+        };
         var nodeRows = await nodeQuery.OrderBy(node => node.Key).ToArrayAsync(cancellationToken);
         var nodeIds = nodeRows.Select(node => node.Id).ToHashSet();
         var edgeRows = await dbContext.GraphEdges.AsNoTracking()

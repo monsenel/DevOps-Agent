@@ -7,6 +7,7 @@ using DevOpsAgent.Application.Discovery;
 using DevOpsAgent.Web.Authentication;
 using DevOpsAgent.Web;
 using DevOpsAgent.Web.Components;
+using DevOpsAgent.Web.Hosted;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 
@@ -19,9 +20,12 @@ builder.Services.AddScoped<ChatService>();
 builder.Services.AddScoped<ServerService>();
 builder.Services.AddScoped<ServerCapabilityService>();
 builder.Services.AddScoped<DiscoveryService>();
+builder.Services.AddScoped<DriftService>();
+builder.Services.AddScoped<DiscoveryScheduleService>();
 builder.Services.AddScoped<GraphBuilder>();
 builder.Services.AddScoped<ProviderStatusState>();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+builder.Services.AddHostedService<DiscoveryScheduler>();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddRazorPages();
