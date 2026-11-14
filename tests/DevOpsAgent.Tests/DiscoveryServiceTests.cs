@@ -91,6 +91,35 @@ public sealed class DiscoveryServiceTests
         Assert.Equal(SnapshotStatus.Completed, snapshot.Status);
     }
 
+    [Fact]
+    public async Task RunAsync_GraphPersistFailureMarksSnapshotFailedAndRethrows()
+    {
+        await using var database = await CreateDatabaseAsync();
+        AddServer(database.Context, "edge");
+        var service = new DiscoveryService(new ServerRepository(database.Context), new SnapshotRepository(database.Context),
+            new ThrowingGraphRepository(), new GraphBuilder(), new UnusedSshRunner(),
+            [new SuccessfulCollector("host", "hostname: edge")], TimeProvider.System);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.RunAsync(progress: null, CancellationToken.None));
+
+        var snapshot = await database.Context.Snapshots.AsNoTracking().SingleAsync();
+        Assert.Equal(SnapshotStatus.Failed, snapshot.Status);
+        Assert.NotNull(snapshot.FinishedAtUtc);
+        Assert.Equal(1, await database.Context.CollectorRuns.CountAsync());
+    }
+
+    private sealed class ThrowingGraphRepository : IGraphRepository
+    {
+        public Task SaveAsync(Guid snapshotId, GraphBuildResult graph, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("simulated graph persistence failure");
+
+        public Task MergeAsync(Guid snapshotId, Guid previousSnapshotId, GraphBuildResult graph, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("simulated graph persistence failure");
+
+        public Task<GraphSnapshotDto?> GetAsync(Guid snapshotId, GraphView view, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
     private static DiscoveryService CreateService(AppDbContext dbContext, params ICollector[] collectors) => new(
         new ServerRepository(dbContext),
         new SnapshotRepository(dbContext),

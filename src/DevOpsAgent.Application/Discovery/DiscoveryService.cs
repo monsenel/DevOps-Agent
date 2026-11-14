@@ -136,6 +136,21 @@ public sealed class DiscoveryService(
                 succeededServers, failedServers, cancelled: true, CancellationToken.None);
             throw;
         }
+        catch (Exception)
+        {
+            // Graph build/persist failures must not leave the snapshot Running forever.
+            try
+            {
+                await snapshotRepository.FailAsync(snapshot, runs.ToArray(), timeProvider.GetUtcNow(),
+                    succeededServers, failedServers, CancellationToken.None);
+            }
+            catch (Exception)
+            {
+                // Keep the original failure; it is the one the caller needs to see.
+            }
+
+            throw;
+        }
 
         progress?.Report(new DiscoveryProgress(snapshot.Id, DiscoveryProgressStage.Completed,
             Message: $"Discovery completed: {succeededServers} succeeded, {failedServers} failed."));

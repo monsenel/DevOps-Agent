@@ -54,4 +54,21 @@ public sealed class SnapshotRepository(AppDbContext dbContext) : ISnapshotReposi
         dbContext.CollectorRuns.AddRange(collectorRuns);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task FailAsync(
+        Snapshot snapshot,
+        IReadOnlyCollection<CollectorRun> collectorRuns,
+        DateTimeOffset finishedAtUtc,
+        int succeededServerCount,
+        int failedServerCount,
+        CancellationToken cancellationToken)
+    {
+        // The failure may have come from a half-applied SaveChanges; drop whatever the tracker still holds and
+        // persist only the snapshot outcome and the collector runs gathered so far.
+        dbContext.ChangeTracker.Clear();
+        snapshot.Fail(finishedAtUtc, succeededServerCount, failedServerCount);
+        dbContext.Snapshots.Update(snapshot);
+        dbContext.CollectorRuns.AddRange(collectorRuns);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
 }

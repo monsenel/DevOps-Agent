@@ -15,4 +15,13 @@ public interface ISnapshotRepository
         int failedServerCount,
         bool cancelled,
         CancellationToken cancellationToken);
+
+    /// <summary>Marks a snapshot that hit an unexpected error as Failed so it never stays Running.</summary>
+    Task FailAsync(
+        Snapshot snapshot,
+        IReadOnlyCollection<CollectorRun> collectorRuns,
+        DateTimeOffset finishedAtUtc,
+        int succeededServerCount,
+        int failedServerCount,
+        CancellationToken cancellationToken);
 }

@@ -127,6 +127,8 @@ public sealed class HealthCheckServiceTests
             Task.FromResult(new Snapshot(serverIds, startedAtUtc));
         public Task CompleteAsync(Snapshot value, IReadOnlyCollection<CollectorRun> collectorRuns, DateTimeOffset finishedAtUtc,
             int succeededServerCount, int failedServerCount, bool cancelled, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task FailAsync(Snapshot snapshot, IReadOnlyCollection<CollectorRun> collectorRuns, DateTimeOffset finishedAtUtc,
+            int succeededServerCount, int failedServerCount, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class FakeGraphRepository(GraphSnapshotDto? graph) : IGraphRepository

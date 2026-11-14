@@ -55,6 +55,8 @@ public sealed class AgentContextBuilderTests
         public Task<Snapshot> CreateAsync(IReadOnlyCollection<Guid> serverIds, DateTimeOffset startedAtUtc, CancellationToken cancellationToken) => Task.FromResult(snapshot);
         public Task CompleteAsync(Snapshot snapshot, IReadOnlyCollection<CollectorRun> collectorRuns, DateTimeOffset finishedAtUtc,
             int succeededServerCount, int failedServerCount, bool cancelled, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task FailAsync(Snapshot snapshot, IReadOnlyCollection<CollectorRun> collectorRuns, DateTimeOffset finishedAtUtc,
+            int succeededServerCount, int failedServerCount, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class FakeGraphs(GraphSnapshotDto graph) : IGraphRepository

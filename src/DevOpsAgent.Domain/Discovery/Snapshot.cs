@@ -43,6 +43,14 @@ public sealed class Snapshot
                 : SnapshotStatus.Completed;
     }
 
+    public void Fail(DateTimeOffset finishedAtUtc, int succeededServerCount, int failedServerCount)
+    {
+        FinishedAtUtc = finishedAtUtc;
+        SucceededServerCount = succeededServerCount;
+        FailedServerCount = failedServerCount;
+        Status = SnapshotStatus.Failed;
+    }
+
     public void Cancel(DateTimeOffset finishedAtUtc, int succeededServerCount, int failedServerCount)
     {
         FinishedAtUtc = finishedAtUtc;
