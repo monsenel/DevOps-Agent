@@ -98,6 +98,30 @@ public sealed class LlmProviderTests
         Assert.Equal("typed-key", lister.Calls[2].ApiKey);
     }
 
+    [Theory]
+    [InlineData("http://localhost:11434/v1", true)]
+    [InlineData("http://127.0.0.1:1234/v1", true)]
+    [InlineData("http://[::1]:11434", true)]
+    [InlineData("http://host.docker.internal:11434/v1", true)]
+    [InlineData("http://ollama:11434/v1", true)]
+    [InlineData("http://10.1.2.3:8080", true)]
+    [InlineData("http://172.16.0.5/v1", true)]
+    [InlineData("http://172.31.255.1/v1", true)]
+    [InlineData("http://192.168.1.20:1234/v1", true)]
+    [InlineData("http://[fd12:3456::1]:8080", true)]
+    [InlineData("http://[::ffff:192.168.1.5]:8080", true)]
+    [InlineData("http://172.32.0.1/v1", false)]
+    [InlineData("http://172.15.0.1/v1", false)]
+    [InlineData("http://8.8.8.8/v1", false)]
+    [InlineData("https://openrouter.ai/api/v1", false)]
+    [InlineData("https://api.openai.com/v1", false)]
+    [InlineData("https://ollama.com/v1", false)]
+    [InlineData("https://llm.example.com", false)]
+    [InlineData("not a url", false)]
+    [InlineData("", false)]
+    public void EndpointLocalityFollowsTheBaseUrlHost(string baseUrl, bool expected) =>
+        Assert.Equal(expected, LlmEndpointLocality.IsLocal(baseUrl));
+
     private sealed class RecordingModelLister : IModelLister
     {
         public List<(string BaseUrl, string? ApiKey)> Calls { get; } = [];

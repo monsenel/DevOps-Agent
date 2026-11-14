@@ -5,6 +5,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Agent;
+using DevOpsAgent.Application.Llm;
 using DevOpsAgent.Domain.Chat;
 using DevOpsAgent.Domain.Llm;
 using Microsoft.Extensions.AI;
@@ -188,9 +189,8 @@ public sealed class ChatService(
         : type == typeof(double) || type == typeof(float) || type == typeof(decimal) ? "number"
         : type == typeof(bool) ? "boolean" : "object";
 
-    private static bool IsLocal(LlmProvider provider) => provider.Type is ProviderType.Ollama or ProviderType.LmStudio
-        || Uri.TryCreate(provider.BaseUrl, UriKind.Absolute, out var uri)
-        && (uri.IsLoopback || uri.Host.Equals("host.docker.internal", StringComparison.OrdinalIgnoreCase));
+    // Locality is decided by where the requests actually go, not by the provider type: an "Ollama" provider can point at a cloud URL.
+    private static bool IsLocal(LlmProvider provider) => LlmEndpointLocality.IsLocal(provider.BaseUrl);
 
     private static ToolDescriptor[] SelectTools(string prompt, ToolRegistry tools)
     {
