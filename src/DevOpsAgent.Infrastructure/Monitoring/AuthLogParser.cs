@@ -19,6 +19,9 @@ public static partial class AuthLogParser
     [GeneratedRegex(@"Failed (?:password|publickey|keyboard-interactive) for (?:invalid user )?(?<user>\S+) from (?<ip>[0-9a-fA-F:.]+)", RegexOptions.IgnoreCase)]
     private static partial Regex FailedLoginRegex();
 
+    [GeneratedRegex(@"Invalid user (?<user>\S+) from (?<ip>[0-9a-fA-F:.]+)", RegexOptions.IgnoreCase)]
+    private static partial Regex InvalidUserRegex();
+
     [GeneratedRegex(@"Accepted \S+ for (?<user>\S+) from (?<ip>[0-9a-fA-F:.]+)", RegexOptions.IgnoreCase)]
     private static partial Regex SuccessfulLoginRegex();
 
@@ -36,6 +39,14 @@ public static partial class AuthLogParser
             {
                 events.Add(new AuthLogEvent(timestamp, AuthLogEventKind.FailedLogin,
                     failed.Groups["user"].Value, failedIp, EventKey: Fingerprint(line)));
+                continue;
+            }
+
+            var invalidUser = InvalidUserRegex().Match(line);
+            if (invalidUser.Success && TryGetIp(invalidUser.Groups["ip"].Value, out var invalidUserIp))
+            {
+                events.Add(new AuthLogEvent(timestamp, AuthLogEventKind.FailedLogin,
+                    invalidUser.Groups["user"].Value, invalidUserIp, EventKey: Fingerprint(line)));
                 continue;
             }
 

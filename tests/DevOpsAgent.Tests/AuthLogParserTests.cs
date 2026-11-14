@@ -9,17 +9,20 @@ public sealed class AuthLogParserTests
     {
         var events = AuthLogParser.Parse(Fixture(), DateTimeOffset.Parse("2026-11-14T12:01:00+00:00"));
 
-        Assert.Equal(4, events.Count);
+        Assert.Equal(5, events.Count);
         Assert.Equal(AuthLogEventKind.FailedLogin, events[0].Kind);
         Assert.Equal("root", events[0].Username);
         Assert.Equal("203.0.113.9", events[0].IpAddress);
-        Assert.Equal("2001:db8::9", events[1].IpAddress);
-        Assert.Equal(AuthLogEventKind.SuccessfulLogin, events[2].Kind);
-        Assert.Equal("operator", events[2].Username);
-        Assert.Equal("198.51.100.14", events[2].IpAddress);
-        Assert.Equal(AuthLogEventKind.SudoCommand, events[3].Kind);
-        Assert.Equal("deploy", events[3].Username);
-        Assert.Equal("/usr/bin/systemctl restart api", events[3].Command);
+        Assert.Equal(AuthLogEventKind.FailedLogin, events[1].Kind);
+        Assert.Equal("admin17", events[1].Username);
+        Assert.Equal("203.0.113.10", events[1].IpAddress);
+        Assert.Equal("2001:db8::9", events[2].IpAddress);
+        Assert.Equal(AuthLogEventKind.SuccessfulLogin, events[3].Kind);
+        Assert.Equal("operator", events[3].Username);
+        Assert.Equal("198.51.100.14", events[3].IpAddress);
+        Assert.Equal(AuthLogEventKind.SudoCommand, events[4].Kind);
+        Assert.Equal("deploy", events[4].Username);
+        Assert.Equal("/usr/bin/systemctl restart api", events[4].Command);
     }
 
     [Fact]
