@@ -4,30 +4,21 @@
 
 ## Waiting on owner
 
-- **T1.2 — SSH pool and runner:** provide an authorized non-production SSH host (and jump-host route if needed), its identity key under `/keys`, and independently verified `known_hosts` entries.
-- **T2.7 — Topology page:** provide two authorized non-production SSH targets, their identity keys, verified host keys, and network access between the hosts for real discovery acceptance.
-- **T3.3 — Evidence panel and Trace:** provide a non-production target with a real nginx-to-backend route, domain/path, SSH identity key, and verified host key for J3 acceptance.
 - **T5.4 — Notifications:** configure either Telegram bot token + chat ID or an ntfy URL + topic (and optional token), then send a test message and verify alert open/resolve delivery.
-- **T5.5 — Overview with real data:** unblock T3.3 by providing the non-production J3 target details above; T5.5 depends on T3.3.
-- **T6.4 — SSH attack detection and bans:** provide an authorized disposable non-production Linux container reachable over SSH, with an identity key and verified host key, for live J5. Production servers must not be used.
-- **T6.6 — MVP hardening:** J3 and J5 acceptance remain blocked by T3.3 and T6.4 above; notification acceptance needs the T5.4 destination above.
+- **T6.6 — MVP hardening:** end-to-end J7 still needs the T5.4 notification destination above; all supplied disposable lab details may be used for the server journeys.
 
 ---
 
 ## Current
 
-- **Task:** T6.4 SSH attack detection and bans
-- **Status:** blocked (implementation complete; live J5 acceptance pending)
+- **Task:** T1.2 SSH pool and runner
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
-- T6.1 was already complete in commit `de4590e`; confirmed typed registry, mode × access policy tests, and `run_shell` pending approval coverage. Build passed with 0 warnings/errors and tests passed (99/99).
-- T6.4 implementation is complete; only live J5 remains blocked. T6.3 and T5.3 dependencies are implemented. Do not use or propose any `prod` server; all verification here used fixture data and fake SSH/settings repositories.
-- Done: fixture-backed parser recognizes failed logins, successful SSH logins, and sudo commands; scanner persists a per-server cursor, seen IPs, and five-minute event window; rules cover 50+ failures, a successful login from a new IP, and sudo outside the configured allowlist. Alert details include usernames, IPs, successful-login state, detected ban tools, and current ban state.
-- Done: `block_ip`, `unblock_ip`, and `list_bans` support an active fail2ban SSH jail, active UFW, then dedicated timed nftables sets. `SecurityMonitoring:SudoAllowlist` uses normal .NET configuration; its environment-variable form is documented.
-- Verification: `dotnet build DevOpsAgent.slnx` succeeded with 0 warnings/errors; `dotnet test DevOpsAgent.slnx` passed 106/106. Graphify refreshed after `.graphifyignore` and T6.4 code (2,317 nodes, 6,351 edges, 157 communities); god-node list has no KC/Inb/jQb labels. Graphify outputs are ignored and untracked.
-- Exact next step: run J5 only after the owner supplies the disposable non-production SSH container and pinned host key; verify attack alert details, approve `block_ip`, confirm via `list_bans`, and resolve the alert. Then continue T6.6. T6.5 remains complete from its previous disposable Debian acceptance.
-- Files touched: `AGENTS.md`, `.env.example`, `docs/PROGRESS.md`, auth log scanner/parser, alert signal integration, tool command builder, app configuration, fixture, and tests.
+- The owner supplied a disposable SSH lab for T1.2, T2.7, T3.3, T6.4, and T6.5. The same target set supports T5.5. Add only `srv-edge`, `srv-app`, and `srv-db`; keep `srv-search` undiscovered so it can validate J2.
+- Exact next step: inspect SSH/key-store configuration, verify the supplied host fingerprints, copy the private key into the configured local key directory with restrictive permissions, then add the three supplied servers and verify direct plus jump-host connections. Never add `srv-search` and never use a server tagged `prod`.
+- Files touched so far in this resumed session: `docs/PROGRESS.md`.
 
 ## Blockers
 
@@ -64,7 +55,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T0.7 | Settings › LLM connection page | done | `feat(T0.7): llm connection settings` |
 | T0.8 | Basic chat (no tools) | done | `feat(T0.8): basic chat with Ollama and OpenRouter` |
 | T1.1 | Server inventory | done | `feat(T1.1): server inventory` |
-| T1.2 | SSH pool and runner | blocked | |
+| T1.2 | SSH pool and runner | in-progress | |
 | T1.3 | Import ssh config | done | `feat(T1.3): import ssh config` |
 | T2.1 | Collector framework and snapshots | done | `feat(T2.1): collector framework and snapshots` |
 | T2.2 | Host collector | done | `feat(T2.2): host collector` |
@@ -206,3 +197,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · resumed T6.1 · confirmed existing implementation and policy matrix; build clean and 99/99 tests pass; Graphify hygiene commit verified; started T6.4; added prod-server testing prohibition
 - 2026-11-14 · Codex / GPT-6 · T6.4 · auth-log parser/scanner, rolling cursor state, SSH attack alerts and fail2ban/UFW/nftables tool support complete; build clean and 106/106 tests pass with fakes only; live J5 awaits a disposable non-production SSH container
 - 2026-11-14 · Codex / GPT-6 · Graphify · incremental refresh after T6.4 (2,317 nodes, 6,351 edges, 157 communities); minified god-node labels remain absent; output ignored/untracked
+- 2026-11-14 · Codex / GPT-6 · resumed T1.2 · owner supplied a disposable SSH lab; start live acceptance with only srv-edge, srv-app, and srv-db; preserve srv-search as Unknown
