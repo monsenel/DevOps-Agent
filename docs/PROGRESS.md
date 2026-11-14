@@ -6,13 +6,13 @@
 
 ## Current
 
-- **Task:** T6.3 Agent chat with tools
+- **Task:** T6.5 Updates (UPD-1, UPD-2)
 - **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
-T5.1 (and dependent M5 tasks T5.2–T5.5) remain deferred at the owner's direction. Microsoft.Extensions.AI 11 tool declarations and message content APIs have been checked in the official docs and installed package XML. Added initial server/graph context builder, validated tool dispatcher, server targeting parameters, read-only command builders, and audited auto-policy proposals. Build passes (0 warnings/errors). Exact next step: implement ChatService native function-call and JSON fallback loop with redaction, persist tool transcript events, and surface tool runs/proposals in AgentChat; then add tests. Metrics/alerts context is unavailable while M5 is deferred; OpenRouter credentials remain absent and live acceptance cannot be completed without them.
+T5.1 (and dependent M5 tasks T5.2–T5.5) remain deferred at the owner's direction. T6.3 implementation now includes inventory/relevant graph context, the native Microsoft.Extensions.AI tool loop, JSON fallback, server-side argument validation, read-only SSH tools, policy-governed audited writes, inline proposals with approve/reject, action-result continuation, and remote-provider secret redaction. Protocol/redaction tests pass (72 total); build is clean. The Agent chat page was inspected in both themes. T6.3 acceptance remains blocked: no local Ollama is listening and no OpenRouter credentials are configured, so J4 cannot be live-verified; metrics/alerts context is absent while M5 is deferred. T6.4 is also blocked by T6.3 and deferred T5.3. Continue with independent T6.5. Exact next step: read T6.5's UPD requirements and current collector/update UI contracts, then implement deterministic update collection and reporting with fake SSH coverage.
 
 ## Blockers
 
@@ -27,6 +27,10 @@ T2.7 live acceptance is blocked by the same missing authorized SSH targets and p
 T3.3's implementation and synthetic trace tests are complete, but PLAN requires J3 to work on real servers. Verification is blocked by the missing authorized SSH targets and pinned host keys recorded under T1.2/T2.7. Resume real trace/evidence verification when those are available; do not treat the synthetic UI check as satisfying J3.
 
 T5.1–T5.5 are deferred at the owner's direction to skip M5 and start M6. T5.1 is marked blocked; T5.2–T5.5 remain todo because they depend on M5 monitoring data and checks. Revisit M5 when the owner requests it.
+
+T6.3 code and isolated tests are implemented, but its J4 live-provider acceptance is blocked because the local Ollama endpoint is unavailable and OpenRouter credentials are absent. M5 metrics/alerts context is also unavailable while M5 is deferred. Re-run J4 with an authorized local provider and OpenRouter credentials; restore M5 first if metrics/alerts context is required.
+
+T6.4 is deferred because it depends on incomplete T6.3 and T5.3; T5.3 depends on the deferred M5 phase. Resume after those dependencies are completed.
 
 ---
 
@@ -67,9 +71,9 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T5.5 | Overview with real data | todo | |
 | T6.1 | Tool registry and execution modes | done | `feat(T6.1): tool policies and approvals` |
 | T6.2 | Action log | done | `feat(T6.2): approved action execution and log` |
-| T6.3 | Agent chat with tools | in-progress | |
-| T6.4 | SSH attack detection and bans | todo | |
-| T6.5 | Updates | todo | |
+| T6.3 | Agent chat with tools | blocked | `wip(T6.3): add context and tool dispatch` |
+| T6.4 | SSH attack detection and bans | blocked | |
+| T6.5 | Updates | in-progress | |
 | T6.6 | MVP hardening pass | todo | |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
@@ -140,3 +144,5 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · resumed T6.2 · started approved-action execution and action log
 - 2026-11-14 · Codex / GPT-6 · T6.2 · per-server approved execution, persisted output and Action log verified in both themes; fresh migration, clean build and 66/66 tests pass
 - 2026-11-14 · Codex / GPT-6 · resumed T6.3 · started agent tool chat integration
+- 2026-11-14 · Codex / GPT-6 · T6.3 · context, native/JSON tool loops, read-only dispatch, approvals, redaction and inline review implemented; 72 tests pass; live J4 blocked by unavailable local Ollama/OpenRouter credentials and deferred M5 data
+- 2026-11-14 · Codex / GPT-6 · started T6.5 after deferring blocked T6.3 live acceptance and dependency-blocked T6.4

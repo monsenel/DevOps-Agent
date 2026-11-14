@@ -41,8 +41,9 @@ public sealed class AgentToolDispatcher(
             var query = (QueryGraphArgs)validated;
             var graph = await graphs.GetAsync(latest.Id, Enum.TryParse<GraphView>(query.View, true, out var view) ? view : GraphView.All, cancellationToken);
             if (graph is null) return new(name, "No discovery graph is available.");
-            var text = string.Concat(graph.Nodes.Select(node => node.Data.ToString()).Concat(graph.Edges.Select(edge => edge.Data.ToString())));
-            var result = string.IsNullOrWhiteSpace(query.Query) ? text : string.Join("\n", text.Split('\n').Where(line => line.Contains(query.Query, StringComparison.OrdinalIgnoreCase)));
+            var entries = graph.Nodes.Select(node => node.Data.ToString()).Concat(graph.Edges.Select(edge => edge.Data.ToString()));
+            var result = string.IsNullOrWhiteSpace(query.Query) ? string.Join("\n", entries)
+                : string.Join("\n", entries.Where(entry => entry.Contains(query.Query, StringComparison.OrdinalIgnoreCase)));
             return new(name, result.Length > 16000 ? result[..16000] : result);
         }
         if (name == "run_discovery")

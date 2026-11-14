@@ -38,6 +38,20 @@ public sealed class AgentToolPolicyTests
             "service_status", Json("{\"unit\":\"nginx\"}"))).Unit);
     }
 
+    [Fact]
+    public void RemoteReadOnlyCommandsAreBuiltWithoutSudoAndTargetIdsAreValidated()
+    {
+        var registry = new ToolRegistry();
+        var builder = new ToolCommandBuilder(registry);
+        var arguments = registry.ValidateArguments("docker_ps", Json("{\"serverIds\":[\"c4d7d14f-897d-4b31-8d33-455cc6e926d6\"]}"));
+
+        var command = builder.BuildReadOnly("docker_ps", arguments);
+
+        Assert.False(command.UseSudo);
+        Assert.Contains("docker ps", command.Command, StringComparison.Ordinal);
+        Assert.Throws<ArgumentException>(() => registry.ValidateArguments("docker_ps", Json("{\"serverIds\":[]}")));
+    }
+
     [Theory]
     [InlineData(ExecutionMode.ReadOnly, ToolAccess.ReadOnly, ToolApprovalState.ExecuteReadOnly)]
     [InlineData(ExecutionMode.ReadOnly, ToolAccess.Mutating, ToolApprovalState.Denied)]
@@ -74,7 +88,16 @@ public sealed class AgentToolPolicyTests
         }
         else
         {
-            Assert.Empty(await database.Context.ActionRecords.ToListAsync());
+            var records = await database.Context.ActionRecords.ToListAsync();
+            if (expected == ToolApprovalState.ExecuteAutomatically)
+            {
+                Assert.Single(records);
+                Assert.Equal(ActionRecordStatus.Proposed, records[0].Status);
+            }
+            else
+            {
+                Assert.Empty(records);
+            }
         }
     }
 

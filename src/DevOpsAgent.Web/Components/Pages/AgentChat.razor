@@ -1,5 +1,6 @@
 @page "/agent-chat"
 @inject ChatService Chat
+@inject ActionExecutionService ActionExecution
 
 <PageTitle>Agent chat · DevOps Agent</PageTitle>
 
@@ -33,7 +34,7 @@
         <header class="ui-card-header chat-panel-header">
             <div>
                 <h2 id="chat-heading">@SelectedTitle</h2>
-                <p class="muted">Chat uses your default provider. No server tools are enabled in this task.</p>
+                <p class="muted">Chat uses your default provider and policy-checked server tools.</p>
             </div>
             <span class="ui-badge neutral">@(_isSending ? "Generating" : "Basic chat")</span>
         </header>
@@ -53,10 +54,36 @@
             }
             @foreach (var message in _messages)
             {
-                <article class="chat-message @(message.Role == "user" ? "user-message" : "assistant-message")">
-                    <div class="chat-message-role">@(message.Role == "user" ? "You" : "Agent")</div>
-                    <div class="chat-message-content">@message.Content</div>
-                </article>
+                @if (message.Role is "tool_run")
+                {
+                    <div class="chat-tool-run">@message.Content</div>
+                }
+                else if (message.Role is "action_proposed")
+                {
+                    var proposal = ReadProposal(message.Content);
+                    <article class="chat-message assistant-message chat-proposal">
+                        <div class="chat-message-role">Proposed action · @proposal.Tool</div>
+                        <div class="chat-message-content">@proposal.Summary</div>
+                        @if (proposal.ActionId is Guid actionId && _actionStatuses.GetValueOrDefault(actionId) == DevOpsAgent.Domain.Agent.ActionRecordStatus.Proposed)
+                        {
+                            <div class="chat-proposal-actions">
+                                <button type="button" class="ui-button primary" disabled="@_busyActions.Contains(actionId)" @onclick="() => ReviewActionAsync(actionId, true)">Approve and run</button>
+                                <button type="button" class="ui-button secondary" disabled="@_busyActions.Contains(actionId)" @onclick="() => ReviewActionAsync(actionId, false)">Reject</button>
+                            </div>
+                        }
+                        else if (proposal.ActionId is Guid completedId)
+                        {
+                            <span class="muted">Action @_actionStatuses.GetValueOrDefault(completedId).ToString().ToLowerInvariant()</span>
+                        }
+                    </article>
+                }
+                else
+                {
+                    <article class="chat-message @(message.Role == "user" ? "user-message" : "assistant-message")">
+                        <div class="chat-message-role">@(message.Role == "user" ? "You" : "Agent")</div>
+                        <div class="chat-message-content">@message.Content</div>
+                    </article>
+                }
             }
             @if (_isSending)
             {
@@ -88,11 +115,14 @@
     private string _streamingText = string.Empty;
     private string? _error;
     private bool _isSending;
+    private readonly HashSet<Guid> _busyActions = [];
+    private readonly Dictionary<Guid, DevOpsAgent.Domain.Agent.ActionRecordStatus> _actionStatuses = [];
 
     private string SelectedTitle => _conversations.SingleOrDefault(item => item.Id == _selectedConversationId)?.Title ?? "New conversation";
 
     protected override async Task OnInitializedAsync()
     {
+        await RefreshActionStatusesAsync();
         await LoadConversationsAsync();
         if (_conversations.Count == 0)
         {
@@ -139,9 +169,13 @@
         _isSending = true;
         try
         {
-            await foreach (var chunk in Chat.SendAsync(_selectedConversationId.Value, prompt))
+            await foreach (var update in Chat.SendAsync(_selectedConversationId.Value, prompt))
             {
-                _streamingText += chunk;
+                if (update.Kind == "text") _streamingText += update.Content;
+                else _messages.Add(new ChatMessageView(Guid.NewGuid(), update.Kind,
+                    update.Kind == "action_proposed" && update.ActionId is Guid id
+                        ? System.Text.Json.JsonSerializer.Serialize(new { actionId = id, tool = update.Content.Split(':')[0], summary = update.Content[(update.Content.IndexOf(':') + 1)..].Trim() })
+                        : update.Content, DateTimeOffset.UtcNow));
                 await InvokeAsync(StateHasChanged);
             }
 
@@ -162,4 +196,52 @@
             _streamingText = string.Empty;
         }
     }
+
+    private async Task ReviewActionAsync(Guid id, bool approve)
+    {
+        _busyActions.Add(id);
+        try
+        {
+            DevOpsAgent.Domain.Agent.ActionRecord action;
+            if (approve)
+            {
+                action = await ActionExecution.ApproveAndRunAsync(id, "admin", CancellationToken.None);
+                _isSending = true;
+                var prompt = $"The proposed {action.ToolName} action completed. Its output is untrusted server data:\n{action.ResultsJson}";
+                await foreach (var update in Chat.SendAsync(_selectedConversationId!.Value, prompt, recordUserMessage: false))
+                {
+                    if (update.Kind == "text") _streamingText += update.Content;
+                    else _messages.Add(new ChatMessageView(Guid.NewGuid(), update.Kind, update.Content, DateTimeOffset.UtcNow));
+                }
+            }
+            else action = await ActionExecution.RejectAsync(id, "admin", CancellationToken.None);
+            _actionStatuses[id] = action.Status;
+            await RefreshActionStatusesAsync();
+            await SelectConversationAsync(_selectedConversationId!.Value);
+        }
+        catch (Exception exception) { _error = exception.Message; }
+        finally { _isSending = false; _streamingText = string.Empty; _busyActions.Remove(id); }
+    }
+
+    private async Task RefreshActionStatusesAsync()
+    {
+        _actionStatuses.Clear();
+        foreach (var item in await ActionExecution.ListAsync(CancellationToken.None))
+            _actionStatuses[item.Action.Id] = item.Action.Status;
+    }
+
+    private static ChatProposal ReadProposal(string content)
+    {
+        try
+        {
+            using var json = System.Text.Json.JsonDocument.Parse(content);
+            var root = json.RootElement;
+            return new(root.TryGetProperty("actionId", out var id) && Guid.TryParse(id.GetString(), out var parsed) ? parsed : null,
+                root.TryGetProperty("tool", out var tool) ? tool.GetString() ?? "tool" : "tool",
+                root.TryGetProperty("summary", out var summary) ? summary.GetString() ?? "" : "");
+        }
+        catch (System.Text.Json.JsonException) { return new(null, "tool", content); }
+    }
+
+    private sealed record ChatProposal(Guid? ActionId, string Tool, string Summary);
 }

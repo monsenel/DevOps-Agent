@@ -18,6 +18,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDevOpsPersistence(builder.Configuration);
 builder.Services.AddScoped<ProviderService>();
 builder.Services.AddScoped<ChatService>();
+builder.Services.AddScoped<AgentContextBuilder>();
+builder.Services.AddScoped<AgentToolDispatcher>();
 builder.Services.AddScoped<ServerService>();
 builder.Services.AddScoped<ServerCapabilityService>();
 builder.Services.AddScoped<DiscoveryService>();
