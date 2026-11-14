@@ -64,6 +64,29 @@ public sealed class AuthLogScannerTests
     }
 
     [Fact]
+    public async Task Scan_IgnoresDelimitersEmbeddedInSudoAuditLines()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var time = new MutableTimeProvider(now);
+        var timestamp = now.AddMinutes(-1).ToString("yyyy-MM-dd'T'HH:mm:sszzz");
+        var auditedCommand = $"{timestamp} host sudo[1]: dva : COMMAND=/bin/sh -c printf '__DVA_BAN_TOOLS__ __DVA_BAN_STATE__'";
+        var failures = string.Join('\n', Enumerable.Range(0, 50).Select(index =>
+            $"{timestamp} host sshd[{index}]: Invalid user admin{index} from 203.0.113.9 port {5000 + index}"));
+        var output = auditedCommand + "\n" + failures
+            + "\n__DVA_BAN_TOOLS__\nfail2ban-client\n__DVA_BAN_STATE__\nsshd currently banned: 1";
+        var scanner = new AuthLogScanner(new FixtureSshRunner(output), new MemorySettings(),
+            Options.Create(new SecurityMonitoringOptions()), time);
+        var server = new Server("edge", "edge.example", 22, "deploy", "id_ed25519", "staging");
+
+        var burst = Assert.Single(await scanner.ScanAsync(server, CancellationToken.None));
+
+        Assert.Equal("ssh-failed-burst", burst.Rule);
+        Assert.Contains("50 failed logins", burst.Details, StringComparison.Ordinal);
+        Assert.Contains("fail2ban-client", burst.Details, StringComparison.Ordinal);
+        Assert.Contains("currently banned: 1", burst.Details, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ScanFailure_DoesNotImmediatelyResolveRecentSecurityAlert()
     {
         var now = DateTimeOffset.UtcNow;

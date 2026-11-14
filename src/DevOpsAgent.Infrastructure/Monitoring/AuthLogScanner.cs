@@ -130,10 +130,12 @@ public sealed class AuthLogScanner(ISshRunner sshRunner, IAppSettingRepository s
     {
         const string toolsMarker = "__DVA_BAN_TOOLS__";
         const string stateMarker = "__DVA_BAN_STATE__";
-        var toolsIndex = output.IndexOf(toolsMarker, StringComparison.Ordinal);
+        // sudo audit records may contain the complete command, including these marker
+        // strings. The real separators are the last occurrences emitted after the log.
+        var toolsIndex = output.LastIndexOf(toolsMarker, StringComparison.Ordinal);
         if (toolsIndex < 0) return (output, [], "Not queried.");
-        var stateIndex = output.IndexOf(stateMarker, toolsIndex, StringComparison.Ordinal);
-        if (stateIndex < 0) return (output[..toolsIndex],
+        var stateIndex = output.LastIndexOf(stateMarker, StringComparison.Ordinal);
+        if (stateIndex < toolsIndex) return (output[..toolsIndex],
             output[(toolsIndex + toolsMarker.Length)..].Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             "Not queried.");
         var log = output[..toolsIndex];
