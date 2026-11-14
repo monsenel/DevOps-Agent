@@ -7,20 +7,12 @@
 ## Current
 
 - **Task:** T2.4 Docker collector (DSC-3)
-- **Status:** in-progress
+- **Status:** done
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
-What is done so far:
-- T2.3 is complete and committed as `8d7dbca`; listener collection parses process metadata when available and conditionally uses sudo.
-- Build passes with zero warnings/errors; all 23 tests pass.
-What is next (exact next step):
-- Implement deterministic Docker inspect/network parsers and read-only collection commands; redact environment values before persisting raw output, then test labels, network endpoints, ports, environment names, main PID, and listener PID mapping.
-Files touched:
-- `docs/PROGRESS.md`
-Gotchas found:
-- T1.2 live direct/jump SSH verification remains deferred by owner direction; its status stays blocked.
+_None; T2.4 is complete._
 
 ## Blockers
 
@@ -52,7 +44,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T2.1 | Collector framework and snapshots | done | `feat(T2.1): collector framework and snapshots` |
 | T2.2 | Host collector | done | `feat(T2.2): host collector` |
 | T2.3 | Listener collector | done | `feat(T2.3): listener collector` |
-| T2.4 | Docker collector | in-progress | |
+| T2.4 | Docker collector | done | `feat(T2.4): docker collector` |
 | T2.5 | systemd collector | todo | |
 | T2.6 | Graph builder | todo | |
 | T2.7 | Topology page | todo | |
@@ -114,3 +106,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T2.3 · started
 - 2026-11-14 · Codex / GPT-6 · T2.3 · listener parser and collector; fixture coverage for endpoints, wildcard/scoped addresses, missing process info, sudo behavior; build/test pass (23/23)
 - 2026-11-14 · Codex / GPT-6 · T2.4 · started
+- 2026-11-14 · Codex / GPT-6 · T2.4 · Docker container/network collection, env value redaction, ID validation and fixture parser; build/test pass (26/26)

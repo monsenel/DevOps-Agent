@@ -1,0 +1,22 @@
+[
+  {
+    "Name": "app-stack_default",
+    "Id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "Driver": "bridge",
+    "Scope": "local",
+    "Containers": {
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+        "Name": "api-svc",
+        "IPv4Address": "172.20.0.10/16",
+        "IPv6Address": "2001:db8:20::10/64",
+        "Aliases": ["api-svc", "api"]
+      },
+      "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+        "Name": "db-svc",
+        "IPv4Address": "172.20.0.11/16",
+        "IPv6Address": "",
+        "Aliases": ["db-svc", "db"]
+      }
+    }
+  }
+]

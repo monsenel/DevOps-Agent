@@ -1,0 +1,52 @@
+[
+  {
+    "Id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "Name": "/api-svc",
+    "Image": "sha256:api-image",
+    "State": { "Status": "running", "Running": true, "Pid": 220 },
+    "Config": {
+      "Image": "nginx:1.27",
+      "Labels": {
+        "com.docker.compose.project": "app-stack",
+        "com.docker.compose.service": "api"
+      },
+      "Env": ["PORT=8080", "DB_PASSWORD=fixture-secret-do-not-store", "MODE=production"]
+    },
+    "NetworkSettings": {
+      "Networks": {
+        "app-stack_default": {
+          "NetworkID": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "IPAddress": "172.20.0.10",
+          "GlobalIPv6Address": "2001:db8:20::10",
+          "Aliases": ["api-svc", "api"]
+        }
+      },
+      "Ports": {
+        "8080/tcp": [{ "HostIp": "0.0.0.0", "HostPort": "80" }],
+        "8443/tcp": null
+      }
+    }
+  },
+  {
+    "Id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "Name": "/db-svc",
+    "Image": "postgres:17",
+    "State": { "Status": "running", "Running": true, "Pid": 321 },
+    "Config": {
+      "Image": "postgres:17",
+      "Labels": { "com.docker.compose.project": "app-stack", "com.docker.compose.service": "db" },
+      "Env": ["POSTGRES_DB=app", "POSTGRES_PASSWORD=another-fixture-secret"]
+    },
+    "NetworkSettings": {
+      "Networks": {
+        "app-stack_default": {
+          "NetworkID": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "IPAddress": "172.20.0.11",
+          "GlobalIPv6Address": "",
+          "Aliases": ["db-svc", "db"]
+        }
+      },
+      "Ports": { "5432/tcp": null }
+    }
+  }
+]
