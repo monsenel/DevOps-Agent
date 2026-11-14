@@ -4,6 +4,7 @@
 @inject ProviderStatusState ProviderStatus
 @inject DiscoveryScheduleService DiscoverySchedule
 @inject ExecutionModeService ExecutionModes
+@inject NotificationService Notifications
 @inject ToolRegistry Tools
 @inject IJSRuntime JavaScript
 
@@ -99,6 +100,60 @@
             <button class="ui-button primary" type="button" disabled="@_savingDiscovery" @onclick="SaveDiscoveryIntervalAsync">
                 @(_savingDiscovery ? "Saving…" : "Save interval")
             </button>
+        </section>
+    }
+    else if (_section == "Notifications")
+    {
+        <section class="ui-card notification-settings-card" aria-labelledby="notification-settings-title">
+            <header class="ui-card-header"><h2 id="notification-settings-title">Alert notifications</h2></header>
+            <p class="muted">Send a message when an alert opens or resolves. Provider tokens are encrypted at rest.</p>
+            @if (!string.IsNullOrWhiteSpace(_notificationError))
+            {
+                <div class="settings-message error" role="alert">@_notificationError</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(_notificationMessage))
+            {
+                <div class="settings-message success" role="status">@_notificationMessage</div>
+            }
+            <fieldset class="notification-provider">
+                <legend>Telegram</legend>
+                <SwitchRow Title="Enable Telegram" Helper="Send alert changes to a Telegram chat" @bind-Value="_telegramEnabled" />
+                <div class="connection-form-grid">
+                    <div class="field">
+                        <label for="telegram-token">Bot token</label>
+                        <input id="telegram-token" type="password" autocomplete="new-password" @bind="_telegramToken" @bind:event="oninput"
+                               placeholder="@(_hasTelegramToken ? "Saved; blank keeps current token" : "Bot token")" />
+                        <span class="field-helper">@(_hasTelegramToken ? "A token is saved. Leave blank to keep it." : "Stored encrypted and never shown again.")</span>
+                    </div>
+                    <Field Id="telegram-chat-id" Label="Chat ID" @bind-Value="_telegramChatId" Mono="true" />
+                </div>
+            </fieldset>
+            <fieldset class="notification-provider">
+                <legend>ntfy</legend>
+                <SwitchRow Title="Enable ntfy" Helper="Publish to a topic on ntfy or your self-hosted server" @bind-Value="_ntfyEnabled" />
+                <div class="connection-form-grid">
+                    <Field Id="ntfy-url" Label="Server URL" @bind-Value="_ntfyBaseUrl" Mono="true" />
+                    <Field Id="ntfy-topic" Label="Topic" @bind-Value="_ntfyTopic" Mono="true" />
+                    <div class="field">
+                        <label for="ntfy-token">Access token (optional)</label>
+                        <input id="ntfy-token" type="password" autocomplete="new-password" @bind="_ntfyToken" @bind:event="oninput"
+                               placeholder="@(_hasNtfyToken ? "Saved; blank keeps current token" : "Bearer token")" />
+                        <span class="field-helper">@(_hasNtfyToken ? "A token is saved. Leave blank to keep it." : "Stored encrypted and never shown again.")</span>
+                    </div>
+                </div>
+            </fieldset>
+            <div class="select-field notification-severity">
+                <label for="notification-severity">Minimum severity</label>
+                <select id="notification-severity" @bind="_minimumSeverity">
+                    <option value="Low">Low and above</option>
+                    <option value="Medium">Medium and above</option>
+                    <option value="High">High only</option>
+                </select>
+            </div>
+            <div class="connection-actions">
+                <Button Disabled="_savingNotifications || _testingNotifications" OnClick="SaveNotificationsAsync">@(_savingNotifications ? "Saving…" : "Save notifications")</Button>
+                <Button Variant="secondary" Disabled="_savingNotifications || _testingNotifications" OnClick="TestNotificationsAsync">@(_testingNotifications ? "Sending…" : "Send test message")</Button>
+            </div>
         </section>
     }
     else if (_section != "LLM connection")
@@ -281,6 +336,21 @@
     private bool _savingExecutionGroup;
     private string? _executionMessage;
     private string? _executionError;
+    private bool _notificationsLoaded;
+    private bool _telegramEnabled;
+    private string _telegramToken = string.Empty;
+    private string _telegramChatId = string.Empty;
+    private bool _hasTelegramToken;
+    private bool _ntfyEnabled;
+    private string _ntfyBaseUrl = "https://ntfy.sh";
+    private string _ntfyTopic = string.Empty;
+    private string _ntfyToken = string.Empty;
+    private bool _hasNtfyToken;
+    private AlertSeverity _minimumSeverity = AlertSeverity.Medium;
+    private bool _savingNotifications;
+    private bool _testingNotifications;
+    private string? _notificationMessage;
+    private string? _notificationError;
     private LlmProviderSummary? _selectedProvider => _providers.SingleOrDefault(provider => provider.Id == _selectedProviderId);
 
     private string ApiKeyPlaceholder => _form.Type switch
@@ -368,8 +438,67 @@
             _executionPolicies.AddRange(await ExecutionModes.ListAsync(CancellationToken.None));
             _executionLoaded = true;
         }
+        if (section == "Notifications" && !_notificationsLoaded)
+        {
+            var saved = await Notifications.GetAsync(CancellationToken.None);
+            _telegramEnabled = saved.TelegramEnabled;
+            _telegramChatId = saved.TelegramChatId;
+            _hasTelegramToken = saved.HasTelegramBotToken;
+            _ntfyEnabled = saved.NtfyEnabled;
+            _ntfyBaseUrl = saved.NtfyBaseUrl;
+            _ntfyTopic = saved.NtfyTopic;
+            _hasNtfyToken = saved.HasNtfyToken;
+            _minimumSeverity = saved.MinimumSeverity;
+            _notificationsLoaded = true;
+        }
         _executionMessage = null;
         _executionError = null;
+        _notificationMessage = null;
+        _notificationError = null;
+    }
+
+    private async Task SaveNotificationsAsync()
+    {
+        _savingNotifications = true;
+        _notificationMessage = null;
+        _notificationError = null;
+        try
+        {
+            await Notifications.SaveAsync(new NotificationSettingsInput(_telegramEnabled, _telegramToken, _telegramChatId,
+                _ntfyEnabled, _ntfyBaseUrl, _ntfyTopic, _ntfyToken, _minimumSeverity), CancellationToken.None);
+            _telegramToken = string.Empty;
+            _ntfyToken = string.Empty;
+            var saved = await Notifications.GetAsync(CancellationToken.None);
+            _hasTelegramToken = saved.HasTelegramBotToken;
+            _hasNtfyToken = saved.HasNtfyToken;
+            _notificationMessage = "Notification settings saved.";
+        }
+        catch (ArgumentException exception) { _notificationError = exception.Message; }
+        finally { _savingNotifications = false; }
+    }
+
+    private async Task TestNotificationsAsync()
+    {
+        _testingNotifications = true;
+        _notificationMessage = null;
+        _notificationError = null;
+        try
+        {
+            await Notifications.SaveAsync(new NotificationSettingsInput(_telegramEnabled, _telegramToken, _telegramChatId,
+                _ntfyEnabled, _ntfyBaseUrl, _ntfyTopic, _ntfyToken, _minimumSeverity), CancellationToken.None);
+            _telegramToken = string.Empty;
+            _ntfyToken = string.Empty;
+            var saved = await Notifications.GetAsync(CancellationToken.None);
+            _hasTelegramToken = saved.HasTelegramBotToken;
+            _hasNtfyToken = saved.HasNtfyToken;
+            await Notifications.TestAsync(CancellationToken.None);
+            _notificationMessage = "Test notification sent.";
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or HttpRequestException)
+        {
+            _notificationError = exception.Message;
+        }
+        finally { _testingNotifications = false; }
     }
 
     private void UpdateExecutionModeForGroup(ExecutionModePolicy policy, ChangeEventArgs args)

@@ -1,9 +1,11 @@
 using DevOpsAgent.Application.Abstractions;
+using DevOpsAgent.Application.Notifications;
 using DevOpsAgent.Domain.Monitoring;
 
 namespace DevOpsAgent.Application.Monitoring;
 
-public sealed class AlertService(IAlertRepository alerts, IAlertSignalSource signals, TimeProvider timeProvider)
+public sealed class AlertService(IAlertRepository alerts, IAlertSignalSource signals, TimeProvider timeProvider,
+    IAlertNotificationService notifications)
 {
     public async Task<IReadOnlyList<AlertDto>> ListAsync(AlertState? state, CancellationToken cancellationToken) =>
         (await alerts.ListAsync(state, cancellationToken)).Select(ToDto).ToArray();
@@ -18,18 +20,34 @@ public sealed class AlertService(IAlertRepository alerts, IAlertSignalSource sig
         var activeByKey = conditions.ToDictionary(item => item.Key, StringComparer.Ordinal);
         var existing = await alerts.ListAsync(null, cancellationToken);
         var existingByKey = existing.ToDictionary(item => item.Key, StringComparer.Ordinal);
+        var opened = new List<Alert>();
+        var resolved = new List<Alert>();
 
         foreach (var condition in conditions)
         {
             if (existingByKey.TryGetValue(condition.Key, out var current))
+            {
+                var wasResolved = current.State == AlertState.Resolved;
                 current.Refresh(condition.Severity, condition.Title, condition.Details, now);
+                if (wasResolved) opened.Add(current);
+            }
             else
-                await alerts.AddAsync(new Alert(condition.Key, condition.Rule, condition.Severity, condition.ServerId,
-                    condition.Target, condition.Title, condition.Details, now), cancellationToken);
+            {
+                var alert = new Alert(condition.Key, condition.Rule, condition.Severity, condition.ServerId,
+                    condition.Target, condition.Title, condition.Details, now);
+                await alerts.AddAsync(alert, cancellationToken);
+                opened.Add(alert);
+            }
         }
 
-        foreach (var item in existing.Where(item => !activeByKey.ContainsKey(item.Key))) item.Resolve(now);
+        foreach (var item in existing.Where(item => !activeByKey.ContainsKey(item.Key) && item.State != AlertState.Resolved))
+        {
+            item.Resolve(now);
+            resolved.Add(item);
+        }
         if (existing.Count > 0) await alerts.SaveAsync(cancellationToken);
+        foreach (var item in opened) await notifications.NotifyOpenedAsync(ToDto(item), cancellationToken);
+        foreach (var item in resolved) await notifications.NotifyResolvedAsync(ToDto(item), cancellationToken);
     }
 
     public async Task<bool> AcknowledgeAsync(Guid id, CancellationToken cancellationToken)
@@ -45,8 +63,10 @@ public sealed class AlertService(IAlertRepository alerts, IAlertSignalSource sig
     {
         var alert = await alerts.GetAsync(id, cancellationToken);
         if (alert is null) return false;
+        var wasResolved = alert.State == AlertState.Resolved;
         alert.Resolve(timeProvider.GetUtcNow());
         await alerts.SaveAsync(cancellationToken);
+        if (!wasResolved) await notifications.NotifyResolvedAsync(ToDto(alert), cancellationToken);
         return true;
     }
 

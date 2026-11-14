@@ -6,6 +6,8 @@ using DevOpsAgent.Infrastructure.Llm;
 using DevOpsAgent.Infrastructure.Ssh;
 using DevOpsAgent.Infrastructure.Collectors;
 using DevOpsAgent.Infrastructure.Monitoring;
+using DevOpsAgent.Infrastructure.Notifications;
+using DevOpsAgent.Application.Notifications;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -57,6 +59,11 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<ISshRunner, SshRunner>();
         services.AddHttpClient("llm", client => client.Timeout = Timeout.InfiniteTimeSpan);
         services.AddHttpClient("health", client => client.Timeout = TimeSpan.FromSeconds(10));
+        // Telegram credentials appear in the Bot API request path. Avoid HttpClientFactory's
+        // default request URI logging for this client so a token can never enter application logs.
+        services.AddSingleton(_ => new HttpClient { Timeout = TimeSpan.FromSeconds(15) });
+        services.AddSingleton<HttpNotifier>();
+        services.AddSingleton<INotifier>(provider => provider.GetRequiredService<HttpNotifier>());
         services.AddSingleton<OpenAiCompatibleChatClientFactory>();
         services.AddSingleton<IChatClientFactory>(serviceProvider =>
             serviceProvider.GetRequiredService<OpenAiCompatibleChatClientFactory>());

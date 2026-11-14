@@ -12,8 +12,10 @@
 
 ## WIP notes
 - T5.4 resumed with a clean tree after restoring only Graphify query timestamp noise. Baseline `dotnet build DevOpsAgent.slnx` passed with 0 warnings/errors; `dotnet test DevOpsAgent.slnx` passed 90/90. Existing `AppSetting`, Data Protection, alert lifecycle, and Settings section patterns inspected.
-- Next: implement protected Telegram/ntfy settings, severity threshold, test-send, and alert open/resolve dispatch; add tests and UI verification.
-- Files touched: `docs/PROGRESS.md` (handoff only).
+- Implemented protected Telegram/ntfy settings, severity filtering, test-send, and alert open/reopen/resolve delivery. Settings UI is verified in light/dark and narrow mobile layout. Unit tests cover token protection/preservation, severity filtering, and alert dedupe.
+- Current verification: build clean (0 warnings/errors); 92/92 tests passed before adding HTTP sender tests.
+- Next: run full build/tests including HTTP payload tests, inspect diff, complete Graphify update, then commit. Live delivery criterion still needs a user-configured Telegram or ntfy destination to receive a real test message.
+- Files touched: Application notifications/alert service, Infrastructure HTTP notifier/DI, Settings UI/imports/CSS, notification and alert tests.
 
 ## Blockers
 
@@ -184,4 +186,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T5.3 · live acceptance passed: selected container alert opened within 2 minutes, container restarted successfully, alert auto-resolved; Add server key validation fixed; build clean, 90/90 tests
 
 - 2026-11-14 · Codex / GPT-6 · started T5.4 · inspect notification contracts, settings persistence, alert lifecycle, and UI conventions; then implement Telegram/ntfy configuration and test delivery
-- 2026-11-14 · Codex / GPT-6 · resumed T5.4 · clean baseline: build 0 warnings/errors and 90/90 tests; next implement notification settings, senders, and lifecycle delivery
+- 2026-11-14 · Codex / GPT-6 · resumed T5.4 · clean baseline: build 0 warnings/errors and 90/90 tests; notification settings/senders/lifecycle implemented; both themes and mobile form verified; 92/92 tests pass; real delivery awaits a configured destination

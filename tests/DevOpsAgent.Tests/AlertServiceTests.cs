@@ -1,5 +1,6 @@
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Monitoring;
+using DevOpsAgent.Application.Notifications;
 using DevOpsAgent.Domain.Monitoring;
 
 namespace DevOpsAgent.Tests;
@@ -15,6 +16,7 @@ public sealed class AlertServiceTests
 
         await fixture.Service.EvaluateAsync(CancellationToken.None);
         await fixture.Service.EvaluateAsync(CancellationToken.None);
+        Assert.Single(fixture.Notifications.Opened);
         var open = Assert.Single(await fixture.Service.ListAsync(AlertState.Open, CancellationToken.None));
         Assert.Equal(2, open.Count);
         Assert.Equal(1, await fixture.Service.GetOpenCountAsync(CancellationToken.None));
@@ -25,6 +27,7 @@ public sealed class AlertServiceTests
         await fixture.Service.EvaluateAsync(CancellationToken.None);
         var resolved = Assert.Single(await fixture.Service.ListAsync(AlertState.Resolved, CancellationToken.None));
         Assert.Equal(AlertState.Resolved, resolved.State);
+        Assert.Single(fixture.Notifications.Resolved);
     }
 
     [Fact]
@@ -47,9 +50,18 @@ public sealed class AlertServiceTests
     {
         public FakeAlertRepository Repository { get; } = new();
         public FakeSignals Signals { get; } = new();
+        public FakeNotifications Notifications { get; } = new();
         public AlertService Service { get; }
 
-        public Fixture() => Service = new AlertService(Repository, Signals, TimeProvider.System);
+        public Fixture() => Service = new AlertService(Repository, Signals, TimeProvider.System, Notifications);
+    }
+
+    private sealed class FakeNotifications : IAlertNotificationService
+    {
+        public List<AlertDto> Opened { get; } = [];
+        public List<AlertDto> Resolved { get; } = [];
+        public Task NotifyOpenedAsync(AlertDto alert, CancellationToken cancellationToken) { Opened.Add(alert); return Task.CompletedTask; }
+        public Task NotifyResolvedAsync(AlertDto alert, CancellationToken cancellationToken) { Resolved.Add(alert); return Task.CompletedTask; }
     }
 
     private sealed class FakeSignals : IAlertSignalSource

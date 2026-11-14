@@ -1571,6 +1571,32 @@ p {
     color: var(--dva-muted);
 }
 
+.notification-settings-card {
+    display: grid;
+    gap: 18px;
+    max-width: 860px;
+}
+
+.notification-settings-card > p { margin: -6px 0 0; }
+
+.notification-provider {
+    display: grid;
+    gap: 16px;
+    min-width: 0;
+    margin: 0;
+    padding: 18px;
+    border: 1px solid var(--dva-line);
+    border-radius: 18px;
+    background: var(--dva-surface);
+}
+
+.notification-provider legend {
+    padding: 0 8px;
+    font-weight: 700;
+}
+
+.notification-severity { max-width: 320px; }
+
 .execution-group {
     display: grid;
     gap: 16px;
