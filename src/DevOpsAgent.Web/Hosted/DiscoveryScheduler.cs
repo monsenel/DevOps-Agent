@@ -15,7 +15,7 @@ public sealed class DiscoveryScheduler(
         {
             using var scope = scopeFactory.CreateScope();
             var snapshots = scope.ServiceProvider.GetRequiredService<ISnapshotRepository>();
-            if (await snapshots.GetLatestAsync(stoppingToken) is { } latest)
+            if (await snapshots.GetLatestRunAsync(stoppingToken) is { } latest)
             {
                 lastAttemptAt = latest.StartedAtUtc;
             }
@@ -40,7 +40,7 @@ public sealed class DiscoveryScheduler(
                 var snapshots = scope.ServiceProvider.GetRequiredService<ISnapshotRepository>();
                 var discovery = scope.ServiceProvider.GetRequiredService<DiscoveryService>();
                 var intervalHours = await schedule.GetIntervalHoursAsync(stoppingToken);
-                var latest = await snapshots.GetLatestAsync(stoppingToken);
+                var latest = await snapshots.GetLatestRunAsync(stoppingToken);
                 var referenceTime = latest?.StartedAtUtc > lastAttemptAt ? latest.StartedAtUtc : lastAttemptAt;
                 if (timeProvider.GetUtcNow() < referenceTime.AddHours(intervalHours)) continue;
 

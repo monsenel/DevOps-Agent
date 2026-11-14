@@ -53,6 +53,61 @@ public sealed class DiscoveryServiceTests
     }
 
     [Fact]
+    public async Task FailedAndCancelledSnapshotsAreNeverTheGraphBaseButStayTheLatestRun()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var repository = new SnapshotRepository(database.Context);
+        var start = new DateTimeOffset(2026, 11, 14, 8, 0, 0, TimeSpan.Zero);
+        var good = await repository.CreateAsync([], start, CancellationToken.None);
+        await repository.CompleteAsync(good, [], start.AddMinutes(1), 1, 0, cancelled: false, CancellationToken.None);
+        var partial = await repository.CreateAsync([], start.AddHours(1), CancellationToken.None);
+        await repository.CompleteAsync(partial, [], start.AddHours(1).AddMinutes(1), 1, 1, cancelled: false, CancellationToken.None);
+        var failed = await repository.CreateAsync([], start.AddHours(2), CancellationToken.None);
+        await repository.FailAsync(failed, [], start.AddHours(2).AddMinutes(1), 0, 0, CancellationToken.None);
+        var cancelled = await repository.CreateAsync([], start.AddHours(3), CancellationToken.None);
+        await repository.CompleteAsync(cancelled, [], start.AddHours(3).AddMinutes(1), 0, 0, cancelled: true, CancellationToken.None);
+
+        Assert.Equal(partial.Id, (await repository.GetLatestAsync(CancellationToken.None))!.Id);
+        Assert.Equal(cancelled.Id, (await repository.GetLatestRunAsync(CancellationToken.None))!.Id);
+        Assert.Equal([partial.Id, good.Id], (await repository.ListAsync(CancellationToken.None)).Select(item => item.Id));
+    }
+
+    [Fact]
+    public async Task RunServerAndMergeAsync_MergesIntoTheLastUsableSnapshotNotAFailedRun()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var existing = AddServer(database.Context, "existing");
+        var added = AddServer(database.Context, "added");
+        var graphs = new RecordingGraphRepository(new GraphRepository(database.Context));
+        var service = new DiscoveryService(new ServerRepository(database.Context), new SnapshotRepository(database.Context), graphs,
+            new GraphBuilder(), new UnusedSshRunner(), [new RecordingCollector()], TimeProvider.System);
+        var good = await service.RunAsync(progress: null, CancellationToken.None);
+        var failed = await new SnapshotRepository(database.Context).CreateAsync([existing.Id], DateTimeOffset.UtcNow.AddMinutes(5), CancellationToken.None);
+        await new SnapshotRepository(database.Context).FailAsync(failed, [], DateTimeOffset.UtcNow.AddMinutes(6), 0, 0, CancellationToken.None);
+
+        _ = await service.RunServerAndMergeAsync(added.Id, progress: null, CancellationToken.None);
+
+        Assert.Equal(good.Id, graphs.LastMergeBase);
+    }
+
+    private sealed class RecordingGraphRepository(IGraphRepository inner) : IGraphRepository
+    {
+        public Guid? LastMergeBase { get; private set; }
+
+        public Task SaveAsync(Guid snapshotId, GraphBuildResult graph, CancellationToken cancellationToken) =>
+            inner.SaveAsync(snapshotId, graph, cancellationToken);
+
+        public Task MergeAsync(Guid snapshotId, Guid previousSnapshotId, GraphBuildResult graph, CancellationToken cancellationToken)
+        {
+            LastMergeBase = previousSnapshotId;
+            return inner.MergeAsync(snapshotId, previousSnapshotId, graph, cancellationToken);
+        }
+
+        public Task<GraphSnapshotDto?> GetAsync(Guid snapshotId, GraphView view, CancellationToken cancellationToken) =>
+            inner.GetAsync(snapshotId, view, cancellationToken);
+    }
+
+    [Fact]
     public async Task RunAsync_RunsCollectorsSequentiallyWithinEachServer()
     {
         await using var database = await CreateDatabaseAsync();

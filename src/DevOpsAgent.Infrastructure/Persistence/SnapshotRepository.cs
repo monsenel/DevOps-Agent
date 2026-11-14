@@ -6,7 +6,14 @@ namespace DevOpsAgent.Infrastructure.Persistence;
 
 public sealed class SnapshotRepository(AppDbContext dbContext) : ISnapshotRepository
 {
+    // Failed and Cancelled runs have no trustworthy graph, so they are never a merge base or drift/topology source.
     public async Task<Snapshot?> GetLatestAsync(CancellationToken cancellationToken)
+    {
+        var snapshots = await GraphSnapshots().ToArrayAsync(cancellationToken);
+        return snapshots.MaxBy(snapshot => snapshot.StartedAtUtc);
+    }
+
+    public async Task<Snapshot?> GetLatestRunAsync(CancellationToken cancellationToken)
     {
         var snapshots = await dbContext.Snapshots.AsNoTracking()
             .Where(snapshot => snapshot.FinishedAtUtc != null)
@@ -16,11 +23,13 @@ public sealed class SnapshotRepository(AppDbContext dbContext) : ISnapshotReposi
 
     public async Task<IReadOnlyList<Snapshot>> ListAsync(CancellationToken cancellationToken)
     {
-        var items = await dbContext.Snapshots.AsNoTracking()
-            .Where(snapshot => snapshot.FinishedAtUtc != null)
-            .ToArrayAsync(cancellationToken);
+        var items = await GraphSnapshots().ToArrayAsync(cancellationToken);
         return items.OrderByDescending(snapshot => snapshot.StartedAtUtc).ToArray();
     }
+
+    private IQueryable<Snapshot> GraphSnapshots() => dbContext.Snapshots.AsNoTracking()
+        .Where(snapshot => snapshot.FinishedAtUtc != null
+            && (snapshot.Status == SnapshotStatus.Completed || snapshot.Status == SnapshotStatus.Partial));
 
     public async Task<Snapshot> CreateAsync(
         IReadOnlyCollection<Guid> serverIds,

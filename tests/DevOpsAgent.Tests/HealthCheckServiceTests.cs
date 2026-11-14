@@ -127,6 +127,7 @@ public sealed class HealthCheckServiceTests
     {
         public Snapshot? Snapshot { get; } = snapshot;
         public Task<Snapshot?> GetLatestAsync(CancellationToken cancellationToken) => Task.FromResult(Snapshot);
+        public Task<Snapshot?> GetLatestRunAsync(CancellationToken cancellationToken) => Task.FromResult(Snapshot);
         public Task<IReadOnlyList<Snapshot>> ListAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Snapshot>>(Snapshot is null ? [] : [Snapshot]);
         public Task<Snapshot> CreateAsync(IReadOnlyCollection<Guid> serverIds, DateTimeOffset startedAtUtc, CancellationToken cancellationToken) =>
             Task.FromResult(new Snapshot(serverIds, startedAtUtc));
