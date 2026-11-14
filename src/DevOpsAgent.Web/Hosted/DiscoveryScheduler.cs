@@ -11,13 +11,23 @@ public sealed class DiscoveryScheduler(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var lastAttemptAt = timeProvider.GetUtcNow();
-        using (var scope = scopeFactory.CreateScope())
+        try
         {
+            using var scope = scopeFactory.CreateScope();
             var snapshots = scope.ServiceProvider.GetRequiredService<ISnapshotRepository>();
             if (await snapshots.GetLatestAsync(stoppingToken) is { } latest)
             {
                 lastAttemptAt = latest.StartedAtUtc;
             }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception exception)
+        {
+            // An unhandled exception here would stop the whole host; fall back to "now" and keep the scheduler alive.
+            logger.LogWarning(exception, "Could not read the latest discovery snapshot; scheduling from the current time.");
         }
 
         while (!stoppingToken.IsCancellationRequested)
