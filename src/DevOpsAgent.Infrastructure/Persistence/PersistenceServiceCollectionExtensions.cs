@@ -1,9 +1,11 @@
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Servers;
+using DevOpsAgent.Application.Monitoring;
 using DevOpsAgent.Infrastructure.Security;
 using DevOpsAgent.Infrastructure.Llm;
 using DevOpsAgent.Infrastructure.Ssh;
 using DevOpsAgent.Infrastructure.Collectors;
+using DevOpsAgent.Infrastructure.Monitoring;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -34,6 +36,8 @@ public static class PersistenceServiceCollectionExtensions
         services.AddScoped<IUpdatePackageRepository, UpdatePackageRepository>();
         services.AddScoped<IUpdateScanRepository, UpdateScanRepository>();
         services.AddScoped<IMetricRepository, MetricRepository>();
+        services.AddScoped<IHealthCheckRepository, HealthCheckRepository>();
+        services.AddTransient<IHealthProbe, HealthProbe>();
         services.AddScoped<IUpdatesCollector, DevOpsAgent.Infrastructure.Collectors.UpdatesCollectorService>();
         services.AddScoped<IChatConversationRepository, ChatConversationRepository>();
         services.AddScoped<IServerRepository, ServerRepository>();
@@ -50,6 +54,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<ISshConnectionPool>(serviceProvider => serviceProvider.GetRequiredService<SshConnectionPool>());
         services.AddSingleton<ISshRunner, SshRunner>();
         services.AddHttpClient("llm", client => client.Timeout = Timeout.InfiniteTimeSpan);
+        services.AddHttpClient("health", client => client.Timeout = TimeSpan.FromSeconds(10));
         services.AddSingleton<OpenAiCompatibleChatClientFactory>();
         services.AddSingleton<IChatClientFactory>(serviceProvider =>
             serviceProvider.GetRequiredService<OpenAiCompatibleChatClientFactory>());

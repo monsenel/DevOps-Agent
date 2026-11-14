@@ -459,6 +459,64 @@ namespace DevOpsAgent.Infrastructure.Migrations
                     b.ToTable("LlmProviders");
                 });
 
+            modelBuilder.Entity("DevOpsAgent.Domain.Monitoring.HealthCheck", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("IntervalSeconds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset?>("LastCheckedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastStatus")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("LastStatusCode")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ServerId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Target")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("TlsDaysRemaining")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ServerId", "IsEnabled");
+
+                    b.ToTable("HealthChecks");
+                });
+
             modelBuilder.Entity("DevOpsAgent.Domain.Monitoring.MetricRollup", b =>
                 {
                     b.Property<Guid>("Id")
@@ -750,6 +808,15 @@ namespace DevOpsAgent.Infrastructure.Migrations
                     b.HasOne("DevOpsAgent.Domain.Discovery.Snapshot", null)
                         .WithMany()
                         .HasForeignKey("SnapshotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DevOpsAgent.Domain.Monitoring.HealthCheck", b =>
+                {
+                    b.HasOne("DevOpsAgent.Domain.Servers.Server", null)
+                        .WithMany()
+                        .HasForeignKey("ServerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

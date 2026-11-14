@@ -7,9 +7,9 @@
 ## Current
 
 - **Task:** T5.2 Health checks
-- **Status:** in-progress
+- **Status:** done
 - **Last updated:** 2026-11-14 by Codex
-T5.1 is complete: one read-only SSH poll per server every 60 seconds; fixture-tested load/memory/disk/CPU/network parsing; baseline-based CPU/network rates; persisted raw and five-minute aggregate samples; raw retention 24 hours and rollup retention 30 days; server detail shows current metrics and recent samples. Build clean and 84/84 tests pass. Exact next step: inspect graph/server contracts for HTTPS/listener suggestions, then implement health-check CRUD/persistence and HTTP/TCP/TLS probes on a scheduled background service; add isolated tests, verify server-detail status UI, and build/test.
+T5.2 is complete: health check CRUD and EF persistence; graph-based HTTPS and TCP suggestions; scheduled HTTP, HTTPS/TLS-expiry, and TCP probes; server detail status UI. Build clean with 0 warnings/errors and 87/87 tests pass. Migration applied in isolated SQLite; page verified with seeded status in both themes and at a 390px viewport.
 ## WIP notes
 
 
@@ -24,7 +24,7 @@ T2.7 live acceptance is blocked by the same missing authorized SSH targets and p
 
 T3.3's implementation and synthetic trace tests are complete, but PLAN requires J3 to work on real servers. Verification is blocked by the missing authorized SSH targets and pinned host keys recorded under T1.2/T2.7. Resume real trace/evidence verification when those are available; do not treat the synthetic UI check as satisfying J3.
 
-The prior M5 deferral has been lifted by the owner's instruction to continue task by task. T5.1 is in progress. T5.2–T5.5 remain todo and depend on the metric poller and/or health checks.
+The prior M5 deferral has been lifted by the owner's instruction to continue task by task. T5.1 and T5.2 are complete; T5.3 is in progress. T5.3 live acceptance needs an authorized test server where a container can be stopped and restarted.
 
 T6.4 is deferred because it depends on incomplete T6.3 and T5.3; T5.3 depends on the deferred M5 phase. Resume after those dependencies are completed.
 
@@ -63,8 +63,8 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T4.2 | Unknown nodes | done | `feat(T4.2): unknown node expansion` |
 | T4.3 | Drift and scheduled discovery | done | `feat(T4.3): drift and scheduled discovery` |
 | T5.1 | Metric poller | done | `feat(T5.1): metric polling and server detail` |
-| T5.2 | Health checks | in-progress | |
-| T5.3 | Alert engine and Alerts page | todo | |
+| T5.2 | Health checks | done | `feat(T5.2): scheduled health checks` |
+| T5.3 | Alert engine and Alerts page | in-progress | |
 | T5.4 | Notifications | todo | |
 | T5.5 | Overview with real data | todo | |
 | T6.1 | Tool registry and execution modes | done | `feat(T6.1): tool policies and approvals` |
@@ -166,3 +166,5 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T6.5 · started update inventory and apply reporting implementation
 - 2026-11-14 · Codex / GPT-6 · T6.5 · apt/dnf parsers, persisted scans, security classification, single-server approval flow and restart/reboot report added; migration verified in isolated SQLite; build clean and 77/77 tests pass; J6 live SSH acceptance blocked by unavailable authorized test server
 - 2026-11-14 · Codex / GPT-6 · refreshed Graphify after T6.5; 5,591 nodes, 19,025 edges, 291 communities; fixed one C# parser ambiguity and reverified build/tests
+
+- 2026-11-14 · Codex / GPT-6 · resumed T5.2 · health checks implemented; build clean, 87/87 tests pass, migration applied in isolated SQLite, detail UI verified in light/dark and 390px; started T5.3

@@ -25,6 +25,7 @@ builder.Services.AddScoped<AgentToolDispatcher>();
 builder.Services.AddScoped<UpdatesService>();
 builder.Services.AddScoped<MetricService>();
 builder.Services.AddScoped<RollupService>();
+builder.Services.AddScoped<HealthCheckService>();
 builder.Services.AddScoped<ServerService>();
 builder.Services.AddScoped<ServerCapabilityService>();
 builder.Services.AddScoped<DiscoveryService>();
@@ -41,6 +42,7 @@ builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddHostedService<DiscoveryScheduler>();
 builder.Services.AddHostedService<MetricPollerService>();
 builder.Services.AddHostedService<MetricRollupHostedService>();
+builder.Services.AddHostedService<HealthCheckHostedService>();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddRazorPages();

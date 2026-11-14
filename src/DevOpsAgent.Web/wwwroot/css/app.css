@@ -2298,6 +2298,103 @@ p {
     min-width: 0;
 }
 
+.health-check-card {
+    min-width: 0;
+}
+
+.health-check-heading {
+    align-items: flex-start;
+}
+
+.health-check-heading h2,
+.health-suggestions h3 {
+    margin: 0;
+}
+
+.health-check-heading p {
+    margin: 4px 0 0;
+}
+
+.health-check-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.health-check-table td,
+.health-check-table th {
+    white-space: nowrap;
+}
+
+.health-suggestions {
+    display: grid;
+    gap: 10px;
+    margin-top: 20px;
+    padding-top: 18px;
+    border-top: 1px solid var(--dva-line);
+}
+
+.health-suggestions h3 {
+    font-size: 14px;
+}
+
+.health-suggestion {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px;
+    border: 1px solid var(--dva-line);
+    border-radius: var(--dva-radius-tile);
+}
+
+.health-suggestion > div {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+
+.health-suggestion .mono {
+    overflow-wrap: anywhere;
+}
+
+.health-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 20px;
+    padding-top: 18px;
+    border-top: 1px solid var(--dva-line);
+}
+
+.health-form .health-target-field {
+    grid-column: 1 / -1;
+}
+
+.health-form input,
+.health-form select {
+    width: 100%;
+}
+
+.health-enabled {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+}
+
+.health-enabled input {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--dva-accent);
+}
+
+.health-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
 .metric-table th:first-child {
     min-width: 190px;
 }
@@ -2548,6 +2645,22 @@ p {
     .server-detail-heading {
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .health-check-heading {
+        flex-direction: column;
+    }
+
+    .health-check-table {
+        min-width: 850px;
+    }
+
+    .health-form {
+        grid-template-columns: 1fr;
+    }
+
+    .health-form .health-target-field {
+        grid-column: auto;
     }
 
     .servers-heading {

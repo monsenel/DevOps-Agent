@@ -1,6 +1,7 @@
 @page "/servers/{ServerId:guid}"
 @inject ServerService Servers
 @inject MetricService Metrics
+@inject HealthCheckService HealthChecks
 @inject NavigationManager Navigation
 
 <PageTitle>@(_server?.Name ?? "Server") · DevOps Agent</PageTitle>
@@ -28,6 +29,75 @@
             <StatTile Label="Memory" Value="@Format("memory_percent")" Suffix="%" IconName="server" />
             <StatTile Label="Disk · /" Value="@Format("disk_percent")" Suffix="%" IconName="server" />
             <StatTile Label="Load · 1 min" Value="@Format("load_1m")" IconName="activity" />
+        </section>
+
+        <section class="ui-card health-check-card" aria-labelledby="health-check-title">
+            <div class="ui-card-header health-check-heading">
+                <div>
+                    <h2 id="health-check-title">Health checks</h2>
+                    <p class="muted">Scheduled HTTP, HTTPS, and TCP checks for this server.</p>
+                </div>
+                <div class="health-check-actions">
+                    <button class="ui-button secondary" type="button" @onclick="SuggestChecksAsync">Suggest from discovery</button>
+                    <button class="ui-button primary" type="button" @onclick="OpenNewHealthCheck">Add check</button>
+                </div>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(_healthError))
+            {
+                <div class="alert-message error" role="alert">@_healthError</div>
+            }
+            @if (_healthChecks.Count == 0)
+            {
+                <EmptyState Title="No health checks yet" Description="Add a URL or port check, or suggest checks from the latest discovery." />
+            }
+            else
+            {
+                <div class="table-scroll">
+                    <table class="servers-table health-check-table">
+                        <thead><tr><th scope="col">Check</th><th scope="col">Target</th><th scope="col">Interval</th><th scope="col">Status</th><th scope="col">TLS expiry</th><th scope="col">Last checked</th><th scope="col" aria-label="Actions"></th></tr></thead>
+                        <tbody>
+                            @foreach (var check in _healthChecks)
+                            {
+                                <tr @key="check.Id">
+                                    <th scope="row">@check.Name <span class="ui-badge neutral">@check.Type</span></th>
+                                    <td class="mono">@check.Target</td>
+                                    <td class="mono">@check.IntervalSeconds s</td>
+                                    <td><span class="ui-badge @(check.Status == HealthCheckStatus.Healthy ? "soft" : check.Status == HealthCheckStatus.Unhealthy ? "danger" : "neutral")">@check.Status@(check.StatusCode is int code ? $" · {code}" : string.Empty)</span></td>
+                                    <td>@(check.TlsDaysRemaining is int days ? $"{days} days" : check.Type == HealthCheckType.Https ? "Pending" : "—")</td>
+                                    <td class="mono">@(check.CheckedAtUtc?.ToLocalTime().ToString("g") ?? "Never")</td>
+                                    <td><div class="table-actions"><button class="ui-button secondary compact" type="button" @onclick="() => EditHealthCheck(check)">Edit</button><button class="ui-button ghost-danger compact" type="button" @onclick="() => _deleteHealthCheckId = check.Id">Remove</button></div></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            @if (_suggestions.Count > 0)
+            {
+                <div class="health-suggestions">
+                    <h3>Suggested from latest discovery</h3>
+                    @foreach (var suggestion in _suggestions)
+                    {
+                        <div class="health-suggestion" @key="suggestion.Target">
+                            <div><strong>@suggestion.Name</strong><span class="mono muted">@suggestion.Target</span></div>
+                            <button class="ui-button secondary compact" type="button" @onclick="() => AddSuggestionAsync(suggestion)">Add check</button>
+                        </div>
+                    }
+                </div>
+            }
+            @if (_healthFormOpen)
+            {
+                <EditForm Model="_healthForm" OnValidSubmit="SaveHealthCheckAsync">
+                    <div class="health-form">
+                        <div class="field"><label for="health-name">Name</label><InputText id="health-name" @bind-Value="_healthForm.Name" /></div>
+                        <div class="field"><label for="health-type">Type</label><InputSelect id="health-type" @bind-Value="_healthForm.Type"><option value="Http">HTTP</option><option value="Https">HTTPS</option><option value="Tcp">TCP</option></InputSelect></div>
+                        <div class="field health-target-field"><label for="health-target">Target</label><InputText id="health-target" class="mono" @bind-Value="_healthForm.Target" placeholder="https://example.com/ or host:443" /></div>
+                        <div class="field"><label for="health-interval">Interval · seconds</label><InputNumber id="health-interval" @bind-Value="_healthForm.IntervalSeconds" min="15" max="86400" /></div>
+                        <label class="health-enabled"><InputCheckbox @bind-Value="_healthForm.IsEnabled" /> Enabled</label>
+                        <div class="health-form-actions"><button class="ui-button secondary" type="button" @onclick="CloseHealthForm">Cancel</button><button class="ui-button primary" type="submit" disabled="@_healthSaving">@(_healthSaving ? "Saving…" : "Save check")</button></div>
+                    </div>
+                </EditForm>
+            }
         </section>
 
         <section class="ui-card server-metric-history" aria-labelledby="metric-history-title">
@@ -64,11 +134,33 @@
     }
 </div>
 
+@if (_deleteHealthCheckId.HasValue)
+{
+    <div class="dialog-backdrop">
+        <section class="ui-card confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-health-check-title">
+            <h2 id="delete-health-check-title">Remove health check?</h2>
+            <p class="muted">This removes the scheduled check and its latest status.</p>
+            <div class="dialog-actions">
+                <button class="ui-button secondary" type="button" @onclick="() => _deleteHealthCheckId = null">Cancel</button>
+                <button class="ui-button ghost-danger" type="button" @onclick="DeleteHealthCheckAsync">Remove check</button>
+            </div>
+        </section>
+    </div>
+}
+
 @code {
     [Parameter] public Guid ServerId { get; set; }
 
     private ServerSummary? _server;
     private ServerMetrics? _metrics;
+    private IReadOnlyList<HealthCheckDto> _healthChecks = [];
+    private IReadOnlyList<HealthCheckSuggestion> _suggestions = [];
+    private HealthCheckForm _healthForm = new();
+    private bool _healthFormOpen;
+    private bool _healthSaving;
+    private Guid? _editingHealthCheckId;
+    private Guid? _deleteHealthCheckId;
+    private string? _healthError;
     private bool _missing;
 
     protected override async Task OnParametersSetAsync()
@@ -76,6 +168,7 @@
         _server = (await Servers.ListAsync(CancellationToken.None)).SingleOrDefault(item => item.Id == ServerId);
         _missing = _server is null;
         _metrics = _server is null ? null : await Metrics.GetServerMetricsAsync(ServerId, CancellationToken.None);
+        _healthChecks = _server is null ? [] : await HealthChecks.ListAsync(ServerId, CancellationToken.None);
     }
 
     private string Format(string name)
@@ -85,6 +178,77 @@
     }
 
     private void BackToServers() => Navigation.NavigateTo("/servers");
+
+    private void OpenNewHealthCheck()
+    {
+        _editingHealthCheckId = null;
+        _healthForm = new HealthCheckForm { Name = $"HTTP · {_server?.Name}", Target = $"http://{_server?.Host}/" };
+        _healthError = null;
+        _healthFormOpen = true;
+    }
+
+    private void EditHealthCheck(HealthCheckDto check)
+    {
+        _editingHealthCheckId = check.Id;
+        _healthForm = new HealthCheckForm
+        {
+            Name = check.Name, Type = check.Type, Target = check.Target, IntervalSeconds = check.IntervalSeconds,
+            IsEnabled = check.IsEnabled
+        };
+        _healthError = null;
+        _healthFormOpen = true;
+    }
+
+    private void CloseHealthForm() => _healthFormOpen = false;
+
+    private async Task SaveHealthCheckAsync()
+    {
+        _healthSaving = true;
+        _healthError = null;
+        try
+        {
+            var input = new HealthCheckInput(_healthForm.Name, _healthForm.Type, _healthForm.Target,
+                _healthForm.IntervalSeconds, _healthForm.IsEnabled);
+            if (_editingHealthCheckId is Guid id)
+                _ = await HealthChecks.UpdateAsync(id, input, CancellationToken.None);
+            else
+                _ = await HealthChecks.CreateAsync(ServerId, input, CancellationToken.None);
+            await LoadHealthChecksAsync();
+            _healthFormOpen = false;
+        }
+        catch (ArgumentException exception) { _healthError = exception.Message; }
+        finally { _healthSaving = false; }
+    }
+
+    private async Task SuggestChecksAsync()
+    {
+        _healthError = null;
+        _suggestions = await HealthChecks.SuggestAsync(ServerId, CancellationToken.None);
+        if (_suggestions.Count == 0) _healthError = "No HTTPS domains or listening TCP ports were found in the latest discovery.";
+    }
+
+    private async Task AddSuggestionAsync(HealthCheckSuggestion suggestion)
+    {
+        try
+        {
+            _ = await HealthChecks.CreateAsync(ServerId,
+                new HealthCheckInput(suggestion.Name, suggestion.Type, suggestion.Target, suggestion.IntervalSeconds),
+                CancellationToken.None);
+            _suggestions = _suggestions.Where(item => item.Target != suggestion.Target).ToArray();
+            await LoadHealthChecksAsync();
+        }
+        catch (ArgumentException exception) { _healthError = exception.Message; }
+    }
+
+    private async Task LoadHealthChecksAsync() =>
+        _healthChecks = await HealthChecks.ListAsync(ServerId, CancellationToken.None);
+
+    private async Task DeleteHealthCheckAsync()
+    {
+        if (_deleteHealthCheckId is Guid id) _ = await HealthChecks.DeleteAsync(id, CancellationToken.None);
+        _deleteHealthCheckId = null;
+        await LoadHealthChecksAsync();
+    }
 
     private static string Label(string name) => name switch
     {
@@ -110,4 +274,13 @@
         "network_receive_bytes_per_second" or "network_transmit_bytes_per_second" => $"{value / 1024d / 1024d:0.00} MiB/s",
         _ => value.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)
     };
+
+    private sealed class HealthCheckForm
+    {
+        public string Name { get; set; } = string.Empty;
+        public HealthCheckType Type { get; set; } = HealthCheckType.Http;
+        public string Target { get; set; } = string.Empty;
+        public int IntervalSeconds { get; set; } = 60;
+        public bool IsEnabled { get; set; } = true;
+    }
 }
