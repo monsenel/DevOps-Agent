@@ -154,6 +154,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(action => action.ServerIdsJson).IsRequired();
             entity.Property(action => action.ArgumentsJson).IsRequired();
             entity.Property(action => action.Status).HasConversion<string>().HasMaxLength(24).IsRequired();
+            entity.Property(action => action.ApprovedBy).HasMaxLength(120);
+            entity.Property(action => action.CommandsJson).IsRequired();
+            entity.Property(action => action.ResultsJson).IsRequired();
             entity.HasIndex(action => new { action.Status, action.CreatedAtUtc });
         });
     }

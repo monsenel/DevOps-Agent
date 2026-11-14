@@ -12,7 +12,7 @@
 
 ## WIP notes
 
-T5.1 (and dependent M5 tasks T5.2–T5.5) remain deferred at the owner's direction. T6.2 start: inspect ActionRecord persistence, SSH runner, existing action log page, and `DESIGN.md §8`; then implement approval transitions, execution per server with parallelism and output capture, plus the action log view. Next step is to design the executor boundary and record state fields before coding.
+T5.1 (and dependent M5 tasks T5.2–T5.5) remain deferred at the owner's direction. T6.2 slice 1: `ActionExecutionService` now approves proposed records, checks current group policy, runs a generated command on targets with a four-server concurrency cap, and stores per-server command/output/error/exit details and final status. Added command plans for restart, package updates, IP block/unblock, and explicit `run_shell`. Action log now lists records, expands to arguments/commands/output, and supports approve/reject. Build passes. Next: generate migration for lifecycle/output fields, add multi-server fake SSH tests for success/failure/rejection/concurrency, then verify migration/build/tests and action log in both themes. Files touched: `src/DevOpsAgent.Domain/Agent/ExecutionPolicy.cs`, `src/DevOpsAgent.Application/Agent/{ActionExecutionService,ToolCommandBuilder}.cs`, `src/DevOpsAgent.Application/Abstractions/IActionRecordRepository.cs`, `src/DevOpsAgent.Infrastructure/Persistence/{ActionRecordRepository,AppDbContext}.cs`, `src/DevOpsAgent.Web/Components/Pages/ActionLog.razor`, `src/DevOpsAgent.Web/Program.cs`, `src/DevOpsAgent.Web/wwwroot/css/app.css`.
 
 ## Blockers
 

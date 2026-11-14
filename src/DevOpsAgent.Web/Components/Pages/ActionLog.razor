@@ -1,3 +1,194 @@
 @page "/action-log"
+@inject ActionExecutionService ActionExecution
+@inject AuthenticationStateProvider AuthenticationState
+
 <PageTitle>Action log · DevOps Agent</PageTitle>
-<PagePlaceholder Title="Action log" Description="The record of proposed and completed actions will appear here." />
+
+<section class="ui-card action-log-card" aria-labelledby="action-log-title">
+    <header class="ui-card-header">
+        <h2 id="action-log-title">Action log</h2>
+        <button class="ui-button secondary" type="button" disabled="@_loading" @onclick="LoadAsync">
+            @(_loading ? "Refreshing…" : "Refresh")
+        </button>
+    </header>
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="settings-message error" role="alert">@_error</div>
+    }
+    else if (_entries.Count == 0 && !_loading)
+    {
+        <div class="action-log-empty">
+            <strong>No actions yet</strong>
+            <p>Proposed and completed tool actions will appear here.</p>
+        </div>
+    }
+    else
+    {
+        <div class="action-log-table-wrap">
+            <table class="action-log-table">
+                <thead>
+                    <tr><th scope="col">Time</th><th scope="col">Tool</th><th scope="col">Servers</th><th scope="col">Status</th><th scope="col">Duration</th><th scope="col"><span class="sr-only">Details</span></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var entry in _entries)
+                    {
+                        var action = entry.Action;
+                        var expanded = _expandedId == action.Id;
+                        <tr class="action-log-row">
+                            <td class="action-log-time">@action.CreatedAtUtc.ToLocalTime().ToString("g")</td>
+                            <td class="action-log-tool mono">@action.ToolName</td>
+                            <td>@string.Join(", ", entry.ServerNames)</td>
+                            <td><span class="ui-badge @StatusClass(action.Status)">@StatusText(action.Status)</span></td>
+                            <td class="mono">@(action.DurationMilliseconds is { } duration ? $"{duration:N0} ms" : "—")</td>
+                            <td><button class="action-log-details-button" type="button" aria-expanded="@expanded"
+                                        aria-label="@(expanded ? "Hide" : "Show") details for @action.ToolName"
+                                        @onclick="() => ToggleExpanded(action.Id)">@(expanded ? "Hide" : "Details")</button></td>
+                        </tr>
+                        @if (expanded)
+                        {
+                            <tr class="action-log-expanded-row">
+                                <td colspan="6">
+                                    <div class="action-log-expanded">
+                                        <section class="action-detail-section">
+                                            <h3>Arguments</h3>
+                                            <CodeBlock Content="action.ArgumentsJson" />
+                                        </section>
+                                        @if (action.Status == ActionRecordStatus.Proposed)
+                                        {
+                                            <div class="action-log-review">
+                                                <p>This action has not run. Review the exact command for every target before approving.</p>
+                                                @foreach (var preview in entry.PendingCommandPreviews)
+                                                {
+                                                    <section class="action-detail-section">
+                                                        <h3>@preview.ServerName</h3>
+                                                        <CodeBlock Content="preview.Command" />
+                                                    </section>
+                                                }
+                                                <button class="ui-button primary" type="button" disabled="@_executing"
+                                                        @onclick="() => ApproveAsync(action.Id)">@(_executing ? "Running…" : "Approve and run")</button>
+                                                <button class="ui-button secondary" type="button" disabled="@_executing"
+                                                        @onclick="() => RejectAsync(action.Id)">Reject</button>
+                                            </div>
+                                        }
+                                        @foreach (var result in entry.Results)
+                                        {
+                                            <section class="action-detail-section">
+                                                <h3>@result.ServerName · Exit @(result.ExitCode?.ToString() ?? "—")</h3>
+                                                <label>Command</label>
+                                                <CodeBlock Content="result.Command" />
+                                                @if (!string.IsNullOrWhiteSpace(result.Error))
+                                                {
+                                                    <p class="action-result-error">@result.Error</p>
+                                                }
+                                                @if (!string.IsNullOrWhiteSpace(result.StandardOutput))
+                                                {
+                                                    <label>Standard output</label>
+                                                    <CodeBlock Content="result.StandardOutput" />
+                                                }
+                                                @if (!string.IsNullOrWhiteSpace(result.StandardError))
+                                                {
+                                                    <label>Standard error</label>
+                                                    <CodeBlock Content="result.StandardError" />
+                                                }
+                                            </section>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+@code {
+    private readonly List<ActionLogEntry> _entries = [];
+    private Guid? _expandedId;
+    private string? _error;
+    private bool _loading;
+    private bool _executing;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _entries.Clear();
+            _entries.AddRange(await ActionExecution.ListAsync(CancellationToken.None));
+        }
+        catch (Exception)
+        {
+            _error = "Could not load the action log. Refresh and try again.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ToggleExpanded(Guid id) => _expandedId = _expandedId == id ? null : id;
+
+    private async Task ApproveAsync(Guid id)
+    {
+        _executing = true;
+        _error = null;
+        try
+        {
+            var user = await AuthenticationState.GetAuthenticationStateAsync();
+            var approvedBy = user.User.Identity?.Name ?? "admin";
+            await ActionExecution.ApproveAndRunAsync(id, approvedBy, CancellationToken.None);
+            await LoadAsync();
+            _expandedId = id;
+        }
+        catch (Exception)
+        {
+            _error = "Could not run this action. Check its targets and execution policy.";
+        }
+        finally
+        {
+            _executing = false;
+        }
+    }
+
+    private async Task RejectAsync(Guid id)
+    {
+        _error = null;
+        try
+        {
+            var user = await AuthenticationState.GetAuthenticationStateAsync();
+            await ActionExecution.RejectAsync(id, user.User.Identity?.Name ?? "admin", CancellationToken.None);
+            await LoadAsync();
+            _expandedId = id;
+        }
+        catch (Exception)
+        {
+            _error = "Could not reject this action. Refresh the action log and try again.";
+        }
+    }
+
+    private static string StatusText(ActionRecordStatus status) => status switch
+    {
+        ActionRecordStatus.Proposed => "Proposed",
+        ActionRecordStatus.Approved => "Approved",
+        ActionRecordStatus.Rejected => "Rejected",
+        ActionRecordStatus.Running => "Running",
+        ActionRecordStatus.Succeeded => "Succeeded",
+        ActionRecordStatus.Failed => "Failed",
+        _ => status.ToString()
+    };
+
+    private static string StatusClass(ActionRecordStatus status) => status switch
+    {
+        ActionRecordStatus.Proposed => "warn",
+        ActionRecordStatus.Approved or ActionRecordStatus.Running => "soft",
+        ActionRecordStatus.Succeeded => "success",
+        ActionRecordStatus.Failed => "danger",
+        ActionRecordStatus.Rejected => "neutral",
+        _ => "neutral"
+    };
+}

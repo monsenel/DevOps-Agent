@@ -49,4 +49,67 @@ public sealed class ActionRecord
     public Guid? ConversationId { get; private set; }
     public ActionRecordStatus Status { get; private set; }
     public DateTimeOffset CreatedAtUtc { get; private set; }
+    public string? ApprovedBy { get; private set; }
+    public DateTimeOffset? ApprovedAtUtc { get; private set; }
+    public DateTimeOffset? CompletedAtUtc { get; private set; }
+    public string CommandsJson { get; private set; } = "{}";
+    public string ResultsJson { get; private set; } = "[]";
+    public int? ExitCode { get; private set; }
+    public long? DurationMilliseconds { get; private set; }
+
+    public void Approve(string approvedBy, DateTimeOffset approvedAtUtc)
+    {
+        EnsureProposed();
+        ApprovedBy = approvedBy;
+        ApprovedAtUtc = approvedAtUtc;
+        Status = ActionRecordStatus.Approved;
+    }
+
+    public void Reject(string rejectedBy, DateTimeOffset rejectedAtUtc)
+    {
+        EnsureProposed();
+        ApprovedBy = rejectedBy;
+        ApprovedAtUtc = rejectedAtUtc;
+        CompletedAtUtc = rejectedAtUtc;
+        Status = ActionRecordStatus.Rejected;
+    }
+
+    public void MarkRunning() 
+    {
+        if (Status != ActionRecordStatus.Approved)
+        {
+            throw new InvalidOperationException("Only approved actions can start running.");
+        }
+
+        Status = ActionRecordStatus.Running;
+    }
+
+    public void Complete(
+        string commandsJson,
+        string resultsJson,
+        int? exitCode,
+        long durationMilliseconds,
+        DateTimeOffset completedAtUtc,
+        bool succeeded)
+    {
+        if (Status != ActionRecordStatus.Running)
+        {
+            throw new InvalidOperationException("Only running actions can be completed.");
+        }
+
+        CommandsJson = commandsJson;
+        ResultsJson = resultsJson;
+        ExitCode = exitCode;
+        DurationMilliseconds = Math.Max(0, durationMilliseconds);
+        CompletedAtUtc = completedAtUtc;
+        Status = succeeded ? ActionRecordStatus.Succeeded : ActionRecordStatus.Failed;
+    }
+
+    private void EnsureProposed()
+    {
+        if (Status != ActionRecordStatus.Proposed)
+        {
+            throw new InvalidOperationException("Only proposed actions can be approved or rejected.");
+        }
+    }
 }

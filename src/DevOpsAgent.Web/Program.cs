@@ -26,6 +26,8 @@ builder.Services.AddScoped<DiscoveryScheduleService>();
 builder.Services.AddSingleton<ToolRegistry>();
 builder.Services.AddScoped<ExecutionModeService>();
 builder.Services.AddScoped<ApprovalService>();
+builder.Services.AddScoped<ActionExecutionService>();
+builder.Services.AddSingleton<ToolCommandBuilder>();
 builder.Services.AddScoped<GraphBuilder>();
 builder.Services.AddScoped<ProviderStatusState>();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
