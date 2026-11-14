@@ -49,7 +49,15 @@ public sealed class ApprovalService(
             return new(ToolApprovalState.Denied, exception.Message);
         }
 
-        var targetIds = request.ServerIds.Distinct().ToArray();
+        var argumentIds = (arguments as IServerTargetArgs)?.ServerIds?.Distinct().ToArray() ?? [];
+        var requestedIds = request.ServerIds.Distinct().ToArray();
+        if (argumentIds.Length > 0 && requestedIds.Length > 0
+            && !argumentIds.Order().SequenceEqual(requestedIds.Order()))
+        {
+            return new(ToolApprovalState.Denied, "Target servers in the tool arguments do not match the approved targets.");
+        }
+
+        var targetIds = requestedIds.Length > 0 ? requestedIds : argumentIds;
         if (descriptor.RequiresServer && targetIds.Length == 0)
         {
             return new(ToolApprovalState.Denied, $"Tool '{request.ToolName}' requires at least one target server.");
@@ -84,11 +92,6 @@ public sealed class ApprovalService(
 
         var forceApproval = request.ToolName == "run_shell" || policies.Any(policy =>
             policy.Mode != ExecutionMode.Auto || !policy.AllowedTools.Contains(request.ToolName, StringComparer.Ordinal));
-        if (!forceApproval)
-        {
-            return new(ToolApprovalState.ExecuteAutomatically, "Tool is allowed by every target group.", ValidatedArguments: arguments);
-        }
-
         var action = new ActionRecord(
             request.ToolName,
             string.Join(",", policies.Select(policy => policy.Group).Order(StringComparer.Ordinal)),
@@ -97,6 +100,11 @@ public sealed class ApprovalService(
             request.ConversationId,
             timeProvider.GetUtcNow());
         await actions.AddAsync(action, cancellationToken);
+        if (!forceApproval)
+        {
+            return new(ToolApprovalState.ExecuteAutomatically, "Tool is allowed by every target group.", action.Id, arguments);
+        }
+
         return new(ToolApprovalState.PendingApproval, "This action needs explicit approval.", action.Id, arguments);
     }
 }

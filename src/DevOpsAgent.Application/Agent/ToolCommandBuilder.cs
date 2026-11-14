@@ -23,6 +23,32 @@ public sealed class ToolCommandBuilder(ToolRegistry tools)
         };
     }
 
+    public ToolCommand BuildReadOnly(string toolName, object arguments)
+    {
+        ArgumentNullException.ThrowIfNull(arguments);
+        return (toolName, arguments) switch
+        {
+            ("service_status", ServiceStatusArgs value) => new(
+                $"systemctl show --property=Id,LoadState,ActiveState,SubState,UnitFileState -- {Quote(value.Unit)}", false),
+            ("docker_ps", DockerPsArgs) => new(
+                "docker ps --no-trunc --format '{{.ID}} {{.Names}} {{.Image}} {{.Status}} {{.Ports}}'", false),
+            ("docker_logs", DockerLogsArgs value) => new($"docker logs --tail {value.Tail} {Quote(value.Container)} 2>&1", false),
+            ("tail_log", TailLogArgs value) => new($"tail -n {value.Lines} -- {Quote(value.Path)}", false),
+            ("read_file", ReadFileArgs value) => new($"head -c {value.MaxBytes} -- {Quote(value.Path)}", false),
+            ("disk_usage", DiskUsageArgs { Path: not null } value) => new($"df -P -- {Quote(value.Path)}", false),
+            ("disk_usage", DiskUsageArgs) => new("df -P", false),
+            ("list_updates", ListUpdatesArgs) => new(
+                "if command -v apt >/dev/null 2>&1; then apt list --upgradable 2>/dev/null; "
+                + "elif command -v dnf >/dev/null 2>&1; then dnf check-update; "
+                + "else printf '%s\\n' 'No supported package manager found.' >&2; exit 127; fi", false),
+            ("list_bans", ListBansArgs) => new(
+                "if command -v fail2ban-client >/dev/null 2>&1; then fail2ban-client status sshd; "
+                + "elif command -v ufw >/dev/null 2>&1; then ufw status numbered; "
+                + "else printf '%s\\n' 'No supported firewall tool found.'; fi", false),
+            _ => throw new InvalidOperationException($"Tool '{toolName}' has no read-only command implementation.")
+        };
+    }
+
     private static string BuildApplyUpdates(ApplyUpdatesArgs value)
     {
         var packages = string.Join(" ", value.Packages.Select(Quote));

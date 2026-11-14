@@ -12,7 +12,7 @@
 
 ## WIP notes
 
-T5.1 (and dependent M5 tasks T5.2–T5.5) remain deferred at the owner's direction. T6.3 start: inspect current chat persistence/streaming and UI, then check Microsoft.Extensions.AI 11 native tool and assistant message APIs before integrating. Implement a tool loop with policy enforcement, structured fallback, context assembly from currently available server/graph evidence, and inline action proposals. Metrics/alerts context is unavailable while M5 is deferred; OpenRouter credentials remain absent, so those portions must be recorded as acceptance blockers if still unavailable. Exact next step: read `ChatService`, chat UI/contracts, provider client configuration, and existing chat tests; verify the current API docs before coding.
+T5.1 (and dependent M5 tasks T5.2–T5.5) remain deferred at the owner's direction. Microsoft.Extensions.AI 11 tool declarations and message content APIs have been checked in the official docs and installed package XML. Added initial server/graph context builder, validated tool dispatcher, server targeting parameters, read-only command builders, and audited auto-policy proposals. Build passes (0 warnings/errors). Exact next step: implement ChatService native function-call and JSON fallback loop with redaction, persist tool transcript events, and surface tool runs/proposals in AgentChat; then add tests. Metrics/alerts context is unavailable while M5 is deferred; OpenRouter credentials remain absent and live acceptance cannot be completed without them.
 
 ## Blockers
 

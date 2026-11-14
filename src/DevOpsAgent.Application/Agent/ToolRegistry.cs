@@ -93,37 +93,49 @@ public sealed class ToolRegistry
 public sealed record EmptyToolArgs;
 public sealed record ListServersArgs;
 
+public interface IServerTargetArgs
+{
+    IReadOnlyList<Guid>? ServerIds { get; }
+}
+
 public sealed record QueryGraphArgs(
     [property: StringLength(300)] string? Query = null,
     [property: RegularExpression("^(service|network)$", ErrorMessage = "View must be service or network.")] string? View = null);
 
-public sealed record RunDiscoveryArgs(IReadOnlyList<Guid>? ServerIds = null);
+public sealed record RunDiscoveryArgs(IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 
 public sealed record ServiceStatusArgs(
-    [property: Required, StringLength(200, MinimumLength = 1), RegularExpression("^[A-Za-z0-9][A-Za-z0-9@_.:-]*$")] string Unit);
+    [property: Required, StringLength(200, MinimumLength = 1), RegularExpression("^[A-Za-z0-9][A-Za-z0-9@_.:-]*$")] string Unit,
+    [property: MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 
 public sealed record RestartServiceArgs(
-    [property: Required, StringLength(200, MinimumLength = 1), RegularExpression("^[A-Za-z0-9][A-Za-z0-9@_.:-]*$")] string Unit);
+    [property: Required, StringLength(200, MinimumLength = 1), RegularExpression("^[A-Za-z0-9][A-Za-z0-9@_.:-]*$")] string Unit,
+    [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 
-public sealed record DockerPsArgs;
+public sealed record DockerPsArgs([property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 
 public sealed record DockerLogsArgs(
     [property: Required, StringLength(128, MinimumLength = 1), RegularExpression("^[A-Za-z0-9][A-Za-z0-9_.-]*$")] string Container,
-    [property: Range(1, 2000)] int Tail = 200);
+    [property: Range(1, 2000)] int Tail = 200,
+    [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 
 public sealed record TailLogArgs(
     [property: Required, StringLength(1024, MinimumLength = 1)] string Path,
-    [property: Range(1, 2000)] int Lines = 100);
+    [property: Range(1, 2000)] int Lines = 100,
+    [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 
 public sealed record ReadFileArgs(
     [property: Required, StringLength(1024, MinimumLength = 1)] string Path,
-    [property: Range(1, 1048576)] int MaxBytes = 65536);
+    [property: Range(1, 1048576)] int MaxBytes = 65536,
+    [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 
-public sealed record DiskUsageArgs([property: StringLength(1024)] string? Path = null);
-public sealed record ListUpdatesArgs;
+public sealed record DiskUsageArgs([property: StringLength(1024)] string? Path = null,
+    [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
+public sealed record ListUpdatesArgs([property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 
 public sealed record ApplyUpdatesArgs(
-    [property: Required, MinLength(1), MaxLength(100)] IReadOnlyList<string> Packages) : IValidatableObject
+    [property: Required, MinLength(1), MaxLength(100)] IReadOnlyList<string> Packages,
+    [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IValidatableObject, IServerTargetArgs
 {
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
@@ -138,7 +150,8 @@ public sealed record ApplyUpdatesArgs(
 }
 
 public sealed record BlockIpArgs(
-    [property: Required, StringLength(64, MinimumLength = 3)] string Address) : IValidatableObject
+    [property: Required, StringLength(64, MinimumLength = 3)] string Address,
+    [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IValidatableObject, IServerTargetArgs
 {
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
@@ -150,7 +163,8 @@ public sealed record BlockIpArgs(
 }
 
 public sealed record UnblockIpArgs(
-    [property: Required, StringLength(64, MinimumLength = 3)] string Address) : IValidatableObject
+    [property: Required, StringLength(64, MinimumLength = 3)] string Address,
+    [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IValidatableObject, IServerTargetArgs
 {
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
@@ -161,7 +175,8 @@ public sealed record UnblockIpArgs(
     }
 }
 
-public sealed record ListBansArgs;
+public sealed record ListBansArgs([property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 
 public sealed record RunShellArgs(
-    [property: Required, StringLength(10000, MinimumLength = 1)] string Command);
+    [property: Required, StringLength(10000, MinimumLength = 1)] string Command,
+    [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
