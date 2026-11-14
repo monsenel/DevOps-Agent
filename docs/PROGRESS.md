@@ -86,7 +86,7 @@ One line per session: date · tool/model · tasks touched · result.
 
 - 2026-11-14 · Codex / GPT-6 · started T0.8 · owner supplied an OpenRouter key; checking local Ollama and resuming live basic-chat acceptance in temporary app storage
 - 2026-11-14 · Codex / GPT-6 · T0.8 · fixed native tool schema lifetime; build passed with 0 warnings/errors and 78/78 tests; qwen2.5:0.5b and OpenRouter free route streamed replies and survived reload
-- 2026-11-14 · Codex / GPT-6 · started T6.3 · local and OpenRouter providers available; verifying J4 tools and approvals
+- 2026-11-14 · Codex / GPT-6 · T6.3 checkpoint · OpenRouter read-only and approved mutation passed; Ollama native tool call succeeded on retry; JSON fallback streamed tool call was displayed as text but not dispatched; next use streamed text for fallback parsing and add regression coverage
 
 - 2026-11-14 · Codex / GPT-6 · T6.5 · J6 steps 1–3 passed on disposable Debian apt target; security and standard updates classified, explicit approval executed both, report exit 0/no restarts/reboot false, follow-up scan showed 0 pending; temporary test environment removed
 
