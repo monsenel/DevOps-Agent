@@ -1,3 +1,4 @@
+using System.Net;
 using DevOpsAgent.Application.Discovery;
 
 namespace DevOpsAgent.Infrastructure.Collectors;
@@ -60,6 +61,11 @@ public static class ConnectionCollectorParser
             if (separator <= 0) return false;
             address = value[..separator];
             portText = value[(separator + 1)..];
+        }
+
+        if (IPAddress.TryParse(address, out var parsedAddress) && parsedAddress.IsIPv4MappedToIPv6)
+        {
+            address = parsedAddress.MapToIPv4().ToString();
         }
 
         return int.TryParse(portText, out port) && port is >= 0 and <= 65535;

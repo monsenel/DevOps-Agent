@@ -4,6 +4,34 @@ Self-hosted, Dockerized web app that maps, monitors and operates your servers ov
 
 This folder is the **planning and handoff kit** for building it with an AI coding agent (Codex, Antigravity, Claude Code, or any tool that can read files and run commands). It is designed so you can switch account, tool or model at any point and continue.
 
+## Run the app
+
+Requirements: Docker Compose v2, a Linux server reachable over SSH, its private key, and its SSH host key.
+
+1. Create local data and key folders, then copy SSH material into `./keys`:
+
+   ```bash
+   mkdir -p data keys
+   chmod 700 keys
+   chmod 600 keys/your_private_key
+   ```
+
+   Put private identity files in `./keys`. Put verified OpenSSH host-key lines in `./keys/known_hosts` (for non-default ports, use OpenSSH's `[host]:port` format). The app mounts this directory read-only at `/keys`; configure each server and select its identity in **Servers**.
+
+2. Configure the single-user login in `.env`. Start from `.env.example` and set a unique `ADMIN_USER` and `ADMIN_PASSWORD`. For deployment, prefer `ADMIN_PASSWORD_HASH`; keep `.env` private and never commit it.
+
+3. Start the app:
+
+   ```bash
+   docker compose up --build -d
+   ```
+
+   Open `http://localhost:8080`, sign in, add a server group and server, then run discovery from **Topology**. `./data` stores the SQLite database and persistent data-protection keys. Back up that directory securely.
+
+4. Add an LLM provider in **Settings → LLM** to enable Agent chat and proposed actions. Ollama can also run with `docker compose --profile ollama up --build -d`.
+
+Keep the app and its SSH access behind a VPN or WireGuard. The app must be able to route to the server addresses from inside its container; do not expose its unauthenticated network path or SSH keys to the public internet.
+
 ## Files
 
 | File | What it is |

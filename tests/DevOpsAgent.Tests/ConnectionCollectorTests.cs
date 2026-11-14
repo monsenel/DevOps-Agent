@@ -33,13 +33,15 @@ public sealed class ConnectionCollectorTests
         var result = ConnectionCollectorParser.Parse(
             File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "ss-established-no-state.txt")));
 
-        Assert.Equal(3, result.Connections.Count);
+        Assert.Equal(4, result.Connections.Count);
         Assert.Contains(result.Connections, item => item.State == "ESTAB" && item.LocalAddress == "172.26.0.4"
             && item.LocalPort == 57006 && item.PeerAddress == "172.26.0.3" && item.PeerPort == 9200);
         Assert.Contains(result.Connections, item => item.State == "ESTAB" && item.LocalAddress == "172.26.0.2"
             && item.LocalPort == 5432 && item.PeerAddress == "172.26.0.4" && item.PeerPort == 45640);
         Assert.Contains(result.Connections, item => item.LocalAddress == "2001:db8::10"
             && item.PeerAddress == "2001:db8::20" && item.PeerPort == 5432);
+        Assert.Contains(result.Connections, item => item.LocalAddress == "172.17.0.2"
+            && item.LocalPort == 80 && item.PeerAddress == "172.26.0.5" && item.PeerPort == 58486);
     }
 
     [Fact]

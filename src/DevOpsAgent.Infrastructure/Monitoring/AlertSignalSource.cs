@@ -27,7 +27,7 @@ public sealed class AlertSignalSource(
             var remoteStatus = await TryGetRemoteStatusAsync(server.Id, cancellationToken);
             if (remoteStatus is null)
             {
-                result.Add(Condition("server-unreachable", "server", AlertSeverity.High, server.Id, server.Host,
+                result.Add(Condition("server-unreachable", server.Id.ToString("N"), AlertSeverity.High, server.Id, server.Host,
                     $"{server.Name} is unreachable", "The scheduled read-only SSH status check could not reach the server."));
             }
             else

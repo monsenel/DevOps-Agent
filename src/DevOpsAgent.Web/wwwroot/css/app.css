@@ -317,6 +317,7 @@ p {
 
 .bento-third {
     flex: 1 1 280px;
+    min-width: 0;
 }
 
 .ui-card {
@@ -761,6 +762,12 @@ p {
     display: flex;
     align-items: baseline;
     gap: 10px;
+    min-width: 0;
+}
+
+.drift-item > * {
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .drift-kind {
@@ -1111,6 +1118,7 @@ p {
     }
 
     .app-main {
+        flex-basis: 100%;
         margin-left: 0;
     }
 
@@ -1301,6 +1309,7 @@ p {
 .overview-alert-row small {
     grid-column: 2;
     color: var(--dva-muted);
+    overflow-wrap: anywhere;
 }
 
 .overview-agent-ready {
