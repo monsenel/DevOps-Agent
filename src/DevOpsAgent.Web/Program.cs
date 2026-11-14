@@ -83,6 +83,19 @@ var app = builder.Build();
 _ = app.Services.GetRequiredService<AdminCredentialVerifier>();
 await app.Services.ApplyMigrationsAsync();
 
+// Actions left Running by a crash or restart can never finish; mark them Failed instead of leaving them stuck.
+try
+{
+    await using var recoveryScope = app.Services.CreateAsyncScope();
+    var interrupted = await recoveryScope.ServiceProvider.GetRequiredService<ActionExecutionService>()
+        .RecoverInterruptedAsync(CancellationToken.None);
+    if (interrupted > 0) app.Logger.LogWarning("Marked {InterruptedActions} interrupted action(s) as failed.", interrupted);
+}
+catch (Exception exception)
+{
+    app.Logger.LogError(exception, "Could not sweep interrupted actions.");
+}
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {

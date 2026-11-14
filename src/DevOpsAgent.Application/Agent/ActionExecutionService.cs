@@ -132,6 +132,32 @@ public sealed class ActionExecutionService(
         return action;
     }
 
+    /// <summary>
+    /// Startup sweep: an action still Running when the app starts was interrupted by a crash or restart. Mark it Failed with a
+    /// clear note so it is not stuck forever; its real outcome on the servers is unknown. Returns the number of actions swept.
+    /// </summary>
+    public async Task<int> RecoverInterruptedAsync(CancellationToken cancellationToken)
+    {
+        var interruptedIds = (await actions.ListAsync(cancellationToken))
+            .Where(action => action.Status == ActionRecordStatus.Running).Select(action => action.Id).ToArray();
+        var recovered = 0;
+        foreach (var id in interruptedIds)
+        {
+            var action = await actions.GetAsync(id, cancellationToken);
+            if (action is null || action.Status != ActionRecordStatus.Running) continue;
+
+            var now = timeProvider.GetUtcNow();
+            var note = new ActionServerResult(Guid.Empty, "(interrupted)", string.Empty, null, string.Empty, string.Empty, 0,
+                "Interrupted: the app stopped while this action was running. Its outcome on the servers is unknown; check them before retrying.");
+            var elapsed = action.ApprovedAtUtc is { } started ? (long)(now - started).TotalMilliseconds : 0;
+            action.Complete("{}", JsonSerializer.Serialize(new[] { note }, JsonOptions), null, elapsed, now, succeeded: false);
+            await actions.SaveAsync(action, cancellationToken);
+            recovered++;
+        }
+
+        return recovered;
+    }
+
     public async Task<ActionRecord> RejectAsync(Guid actionId, string rejectedBy, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(rejectedBy)) throw new ArgumentException("Reviewer is required.", nameof(rejectedBy));

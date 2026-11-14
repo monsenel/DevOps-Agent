@@ -129,6 +129,32 @@ public sealed class ActionExecutionTests
     }
 
     [Fact]
+    public async Task StartupSweepFailsActionsStuckInRunningAndLeavesOthersAlone()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var servers = await AddServersAsync(database.Context, 1, "staging");
+        var stuck = AddProposedAction(database.Context, "restart_service", servers, "{\"unit\":\"nginx\"}");
+        var waiting = AddProposedAction(database.Context, "restart_service", servers, "{\"unit\":\"cron\"}");
+        var rejected = AddProposedAction(database.Context, "restart_service", servers, "{\"unit\":\"ssh\"}");
+        var repository = new ActionRecordRepository(database.Context);
+        Assert.True(await repository.TryTransitionFromProposedAsync(stuck.Id, ActionRecordStatus.Running, "admin", DateTimeOffset.UtcNow.AddMinutes(-3), CancellationToken.None));
+        Assert.True(await repository.TryTransitionFromProposedAsync(rejected.Id, ActionRecordStatus.Rejected, "admin", DateTimeOffset.UtcNow, CancellationToken.None));
+        var execution = CreateService(database.Context, new TestSshRunner());
+
+        Assert.Equal(1, await execution.RecoverInterruptedAsync(CancellationToken.None));
+        Assert.Equal(0, await execution.RecoverInterruptedAsync(CancellationToken.None));
+
+        var records = await database.Context.ActionRecords.AsNoTracking().ToDictionaryAsync(action => action.Id);
+        Assert.Equal(ActionRecordStatus.Failed, records[stuck.Id].Status);
+        Assert.NotNull(records[stuck.Id].CompletedAtUtc);
+        Assert.Contains("Interrupted", records[stuck.Id].ResultsJson, StringComparison.Ordinal);
+        Assert.Equal(ActionRecordStatus.Proposed, records[waiting.Id].Status);
+        Assert.Equal(ActionRecordStatus.Rejected, records[rejected.Id].Status);
+        var entry = (await execution.ListAsync(CancellationToken.None)).Single(item => item.Action.Id == stuck.Id);
+        Assert.Contains("outcome on the servers is unknown", Assert.Single(entry.Results).Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task SecondApproveAfterCompletionFailsWithoutRunningAgain()
     {
         await using var database = await CreateDatabaseAsync();
