@@ -11,18 +11,19 @@
 ## Current
 
 - **Task:** T6.6 MVP hardening pass — finish provider-dependent J4/J7 acceptance
-- **Status:** blocked
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 - T5.5 is **done**: Overview uses live lab server/snapshot/graph/evidence/alerts/metrics/update/provider data. Run discovery rerenders correctly; live refresh and both themes were checked; build clean and 109/109 tests passed. Commit: `4e7a606`.
 - T6.3 implementation is complete, but the earlier J4 live result predates the disposable SSH lab and is invalid for the requested server journey. Live acceptance is **blocked** until the owner adds an LLM provider. After that, run on this lab exactly: ask “anything I should look at?”, then “why is disk usage on srv-app what it is?”, confirm read-only tools execute on lab servers, then propose and explicitly approve restarting container `web` on `srv-app`; record the tool/action-log result. Keep srv-search out of inventory.
+- T6.3 provider check for the current test app at 127.0.0.1:5155 found an empty Providers list, no default model, and no saved last-test result. Per owner instruction, did not configure a provider; J4 remains blocked. Continue independent T6.6 acceptance.
 - T6.4 J5 passed on disposable staging: 60 failed SSH logins opened the attack alert and fail2ban ban; threshold restored and all bans cleared. Build clean, 110/110 tests.
 - T6.5/J6 is now **done** after the prior acceptance claim was retracted and re-run on this lab. Updates now use a configurable update-only SSH command timeout (default 300s) and bounded package-repository retries/timeouts. On `srv-edge`, `libexpat1` was downgraded to `2.5.0-1+deb12u2`, scanned as a `bookworm-security` Security update (`2.5.0-1+deb12u5` candidate), approved in Updates, and applied; action log: exit 0, no restarted services, `REBOOT_REQUIRED=false`. `srv-db` completed its scan quickly with `Repositories unreachable (apt)`; fake offline coverage passes. Build clean, 115/115 tests pass.
 - T5.4 is **done**: owner configured ntfy and confirmed the test message, alert-open, and alert-resolve notifications were all received.
 - T6.6 journey results on the disposable lab: J1 direct/jump inventory confirmed for srv-edge, srv-app and srv-db; srv-search remains unregistered. J2 passed after fixing the parser for four-column `ss -tnH state established` output, retaining outbound unknown peers in `GraphBuilder`, and normalizing IPv4-mapped IPv6 endpoints; latest discovery recorded 3/3 successes with 27 nodes/16 connections, including srv-app → Unknown for srv-search :9200. J3 passed: `api.test.local` traced 4 nodes/3 connections with `/etc/nginx/conf.d/demo.conf:10` evidence. J4 is blocked per T6.3 until the owner adds an LLM provider; the old pre-lab pass is invalid. J5 attack/ban passed via disposable `attack` script (60 failed SSH attempts, alert + fail2ban ban); threshold restored and bans cleared. J6 now passed on the current lab as recorded above. J7 detected a new `python3` listener on :9000 and removal of worker-redis after temporary staging changes; nginx config, listener and worker-redis were restored and verified. No systemd acceptance was attempted, per owner exception.
 - T6.6 hardening: fixed IPv4-mapped endpoint handling, duplicate `server-unreachable` alert keys across servers (with a regression test), and 390px horizontal overflow; added app setup/key/known_hosts/VPN guidance to README. 390px layout has no document overflow on Overview and all main routes. Both theme palettes and contrast were checked. Build is clean with 0 warnings/errors; 115/115 tests pass. Graphify output remains ignored and excludes vendored/generated files; god nodes contain no minified KC/Inb/jQb names.
-- T6.6 restore discovery is now verified: after restoring the lab's J7 changes, isolated review app discovery completed at 2026-11-14 22:38 with 3 succeeded/0 failed and persisted a new snapshot; graph showed 27 nodes/16 connections and the restored baseline. No discovery bug found. Exact next step: after the owner adds an LLM provider, run J4 on the disposable lab with the requested prompts and explicitly approved `web` restart; finish provider-dependent T6.6 J4/J7 agent acceptance. Keep srv-search unregistered and systemd-specific checks excepted.
+- T6.6 restore discovery is verified: after restoring the lab's J7 changes, isolated review app discovery completed at 2026-11-14 22:38 with 3 succeeded/0 failed and persisted a new snapshot; graph showed 27 nodes/16 connections and the restored baseline. No discovery bug found. Current work: add/test optional systemd lab node, then re-walk J1–J7 and perform isolated Docker fresh-start. Exact next step after independent acceptance: complete the fresh-start checks and documentation; after the owner adds a provider, run J4 and close provider-dependent T6.6 acceptance. Keep srv-search unregistered.
 
 ## Blockers
 
@@ -72,7 +73,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T6.3 | Agent chat with tools | blocked | `feat(T6.3): complete J4 tool and approval flow` |
 | T6.4 | SSH attack detection and bans | done | `feat(T6.4): verify SSH attack detection in disposable lab` |
 | T6.5 | Updates | done | `feat(T6.5): verify security update workflow and resilient scans` |
-| T6.6 | MVP hardening pass | blocked | |
+| T6.6 | MVP hardening pass | in-progress | |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
 
@@ -81,6 +82,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 ## Session log
 
 One line per session: date · tool/model · tasks touched · result.
+
+- 2026-11-14 · Codex / GPT-6 · resumed T6.6 release acceptance · test app has no default LLM provider or last test result, so J4 remains blocked; proceed with systemd lab verification and release hardening
 
 - 2026-11-14 · Codex / GPT-6 · T5.4 · owner configured ntfy and confirmed the test message and alert open/resolve notifications all arrived; marked live acceptance done
 
