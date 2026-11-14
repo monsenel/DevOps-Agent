@@ -46,6 +46,24 @@ public sealed class AlertServiceTests
         Assert.Equal(2, reopened.Count);
     }
 
+    [Fact]
+    public async Task DuplicateConditionKeysDoNotBreakEvaluationOrOpenTwoAlerts()
+    {
+        var fixture = new Fixture();
+        fixture.Signals.Conditions =
+        [
+            new AlertCondition("dup:srv1", "threshold-disk", AlertSeverity.High, null, "srv1", "Disk usage is high", "91% used"),
+            new AlertCondition("dup:srv1", "threshold-disk", AlertSeverity.High, null, "srv1", "Disk usage is high", "92% used")
+        ];
+
+        await fixture.Service.EvaluateAsync(CancellationToken.None);
+        await fixture.Service.EvaluateAsync(CancellationToken.None);
+
+        var open = Assert.Single(await fixture.Service.ListAsync(AlertState.Open, CancellationToken.None));
+        Assert.Equal("91% used", open.Details);
+        Assert.Single(fixture.Notifications.Opened);
+    }
+
     private sealed class Fixture
     {
         public FakeAlertRepository Repository { get; } = new();

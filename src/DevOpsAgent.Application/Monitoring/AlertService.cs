@@ -1,11 +1,12 @@
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Notifications;
 using DevOpsAgent.Domain.Monitoring;
+using Microsoft.Extensions.Logging;
 
 namespace DevOpsAgent.Application.Monitoring;
 
 public sealed class AlertService(IAlertRepository alerts, IAlertSignalSource signals, TimeProvider timeProvider,
-    IAlertNotificationService notifications)
+    IAlertNotificationService notifications, ILogger<AlertService>? logger = null)
 {
     public async Task<IReadOnlyList<AlertDto>> ListAsync(AlertState? state, CancellationToken cancellationToken) =>
         (await alerts.ListAsync(state, cancellationToken)).Select(ToDto).ToArray();
@@ -16,10 +17,11 @@ public sealed class AlertService(IAlertRepository alerts, IAlertSignalSource sig
     public async Task EvaluateAsync(CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
-        var conditions = await signals.GetActiveConditionsAsync(cancellationToken);
+        // Duplicate keys must never break an evaluation cycle: keep the first condition/alert per key and log the rest.
+        var conditions = Distinct(await signals.GetActiveConditionsAsync(cancellationToken), item => item.Key, "condition");
         var activeByKey = conditions.ToDictionary(item => item.Key, StringComparer.Ordinal);
         var existing = await alerts.ListAsync(null, cancellationToken);
-        var existingByKey = existing.ToDictionary(item => item.Key, StringComparer.Ordinal);
+        var existingByKey = Distinct(existing, item => item.Key, "alert").ToDictionary(item => item.Key, StringComparer.Ordinal);
         var opened = new List<Alert>();
         var resolved = new List<Alert>();
 
@@ -68,6 +70,26 @@ public sealed class AlertService(IAlertRepository alerts, IAlertSignalSource sig
         await alerts.SaveAsync(cancellationToken);
         if (!wasResolved) await notifications.NotifyResolvedAsync(ToDto(alert), cancellationToken);
         return true;
+    }
+
+    private IReadOnlyList<T> Distinct<T>(IEnumerable<T> items, Func<T, string> keyOf, string kind)
+    {
+        var result = new List<T>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var item in items)
+        {
+            var key = keyOf(item);
+            if (seen.Add(key))
+            {
+                result.Add(item);
+            }
+            else
+            {
+                logger?.LogWarning("Ignoring duplicate {Kind} key {AlertKey} during alert evaluation.", kind, key);
+            }
+        }
+
+        return result;
     }
 
     private static AlertDto ToDto(Alert item) => new(item.Id, item.Rule, item.Severity, item.State, item.ServerId,
