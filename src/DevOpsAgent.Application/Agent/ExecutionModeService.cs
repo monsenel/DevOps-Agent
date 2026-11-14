@@ -1,12 +1,17 @@
 using System.Text.Json;
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Domain.Agent;
+using Microsoft.Extensions.Logging;
 
 namespace DevOpsAgent.Application.Agent;
 
 public sealed record ExecutionModePolicy(string Group, ExecutionMode Mode, IReadOnlyList<string> AllowedTools);
 
-public sealed class ExecutionModeService(IAppSettingRepository settings, IServerRepository servers, ToolRegistry tools)
+public sealed class ExecutionModeService(
+    IAppSettingRepository settings,
+    IServerRepository servers,
+    ToolRegistry tools,
+    ILogger<ExecutionModeService>? logger = null)
 {
     private const string SettingKey = "agent.execution-modes";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -17,17 +22,17 @@ public sealed class ExecutionModeService(IAppSettingRepository settings, IServer
             .Select(server => server.Group)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Order(StringComparer.OrdinalIgnoreCase);
-        var configured = await ReadAsync(cancellationToken);
+        var (configured, corrupt) = await ReadAsync(cancellationToken);
         return serverGroups.Select(group => configured.TryGetValue(group, out var policy)
             ? policy with { Group = group }
-            : Default(group)).ToArray();
+            : Default(group, corrupt)).ToArray();
     }
 
     public async Task<ExecutionModePolicy> GetAsync(string group, CancellationToken cancellationToken)
     {
         ValidateGroup(group);
-        var configured = await ReadAsync(cancellationToken);
-        return configured.TryGetValue(group, out var policy) ? policy with { Group = group } : Default(group);
+        var (configured, corrupt) = await ReadAsync(cancellationToken);
+        return configured.TryGetValue(group, out var policy) ? policy with { Group = group } : Default(group, corrupt);
     }
 
     public async Task SaveAsync(ExecutionModePolicy policy, CancellationToken cancellationToken)
@@ -49,34 +54,39 @@ public sealed class ExecutionModeService(IAppSettingRepository settings, IServer
         }
 
         var normalized = policy with { Group = policy.Group.Trim().ToLowerInvariant(), AllowedTools = allowedTools };
-        var configured = await ReadAsync(cancellationToken);
+        // Saving replaces an unreadable setting, which is the recovery path after corruption.
+        var (configured, _) = await ReadAsync(cancellationToken);
         configured[normalized.Group] = normalized;
         await settings.SetAsync(SettingKey, JsonSerializer.Serialize(configured, JsonOptions), cancellationToken);
     }
 
     public async Task<ExecutionModePolicy> GetForGroupAsync(string group, CancellationToken cancellationToken)
     {
-        var configured = await ReadAsync(cancellationToken);
+        var (configured, corrupt) = await ReadAsync(cancellationToken);
         var normalized = group.Trim().ToLowerInvariant();
-        return configured.TryGetValue(normalized, out var policy) ? policy : Default(normalized);
+        return configured.TryGetValue(normalized, out var policy) ? policy : Default(normalized, corrupt);
     }
 
-    private async Task<Dictionary<string, ExecutionModePolicy>> ReadAsync(CancellationToken cancellationToken)
+    // A stored setting that cannot be read fails closed: every group is treated as read-only until the policies are saved again.
+    private async Task<(Dictionary<string, ExecutionModePolicy> Policies, bool Corrupt)> ReadAsync(CancellationToken cancellationToken)
     {
         var json = await settings.GetAsync(SettingKey, cancellationToken);
-        if (string.IsNullOrWhiteSpace(json)) return new(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(json)) return (new(StringComparer.OrdinalIgnoreCase), false);
         try
         {
             var values = JsonSerializer.Deserialize<Dictionary<string, ExecutionModePolicy>>(json, JsonOptions) ?? [];
-            return new(values, StringComparer.OrdinalIgnoreCase);
+            return (new(values, StringComparer.OrdinalIgnoreCase), false);
         }
         catch (JsonException)
         {
-            return new(StringComparer.OrdinalIgnoreCase);
+            // The setting content is intentionally not logged.
+            logger?.LogError("Stored execution mode policies are unreadable; treating every group as read-only.");
+            return (new(StringComparer.OrdinalIgnoreCase), true);
         }
     }
 
-    private static ExecutionModePolicy Default(string group) => new(group, ExecutionMode.Confirm, []);
+    private static ExecutionModePolicy Default(string group, bool failClosed = false) =>
+        new(group, failClosed ? ExecutionMode.ReadOnly : ExecutionMode.Confirm, []);
 
     private static void ValidateGroup(string group)
     {

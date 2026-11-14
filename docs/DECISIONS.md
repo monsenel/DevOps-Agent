@@ -107,3 +107,8 @@ Format: `D-<number> · <date> · <title>` then Decision / Why / Consequences.
 - **Decision:** Broad daily reviews use persisted inventory, alerts, latest metrics, recent graph, and snapshot drift without remote tool calls. Read-only questions expose only read-only tools; mutating tools are exposed only for matching requests, and arbitrary shell requires an explicit shell request. Disk diagnosis reports filesystem mounts and Docker usage separately and leaves unexplained usage unknown.
 - **Why:** J4 acceptance showed that an OpenAI-compatible model can chain irrelevant tool calls, propose shell commands for read-only questions, and infer causes not supported by measured data.
 - **Consequences:** Keep prompt-to-tool scoping covered by tests, preserve explicit approval for mutations, and do not infer disk causes from `df` alone.
+
+### D-025 · 2026-11-15 · Logging abstractions in the Application layer
+- **Decision:** Reference `Microsoft.Extensions.Logging.Abstractions` (10.0.14, same train as EF Core) from `DevOpsAgent.Application`.
+- **Why:** Application services must log failures (corrupt settings, duplicate alert keys, partial tool failures) through `ILogger<T>` per the code conventions without depending on ASP.NET Core. The package is already part of the transitive graph of Infrastructure/Web, so nothing new ships.
+- **Consequences:** Application services take `ILogger<T>`; never log secrets or setting contents.

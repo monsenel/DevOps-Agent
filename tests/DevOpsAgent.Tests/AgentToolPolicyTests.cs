@@ -261,6 +261,24 @@ public sealed class AgentToolPolicyTests
             new ExecutionModePolicy("staging", ExecutionMode.Auto, ["apply_updates"]), CancellationToken.None));
     }
 
+    [Fact]
+    public async Task CorruptExecutionModeSettingFailsClosedToReadOnly()
+    {
+        await using var database = await CreateDatabaseAsync();
+        await AddServerAsync(database.Context, "prod");
+        var settings = new AppSettingRepository(database.Context);
+        await settings.SetAsync("agent.execution-modes", "{ not valid json", CancellationToken.None);
+        var service = new ExecutionModeService(settings, new ServerRepository(database.Context), new ToolRegistry());
+
+        Assert.Equal(ExecutionMode.ReadOnly, (await service.GetForGroupAsync("prod", CancellationToken.None)).Mode);
+        Assert.Equal(ExecutionMode.ReadOnly, (await service.GetAsync("never-seen", CancellationToken.None)).Mode);
+        Assert.All(await service.ListAsync(CancellationToken.None), policy => Assert.Equal(ExecutionMode.ReadOnly, policy.Mode));
+
+        await service.SaveAsync(new ExecutionModePolicy("prod", ExecutionMode.Confirm, []), CancellationToken.None);
+        Assert.Equal(ExecutionMode.Confirm, (await service.GetForGroupAsync("prod", CancellationToken.None)).Mode);
+        Assert.Equal(ExecutionMode.Confirm, (await service.GetForGroupAsync("unknown-group", CancellationToken.None)).Mode);
+    }
+
     private static JsonElement Json(string value) => JsonDocument.Parse(value).RootElement.Clone();
 
     private static async Task<Server> AddServerAsync(AppDbContext context, string group)
