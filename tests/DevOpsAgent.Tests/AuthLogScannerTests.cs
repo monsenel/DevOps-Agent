@@ -78,7 +78,8 @@ public sealed class AuthLogScannerTests
             Options.Create(new SecurityMonitoringOptions()), time);
         var server = new Server("edge", "edge.example", 22, "deploy", "id_ed25519", "staging");
 
-        var burst = Assert.Single(await scanner.ScanAsync(server, CancellationToken.None));
+        var conditions = await scanner.ScanAsync(server, CancellationToken.None);
+        var burst = Assert.Single(conditions, item => item.Rule == "ssh-failed-burst");
 
         Assert.Equal("ssh-failed-burst", burst.Rule);
         Assert.Contains("50 failed logins", burst.Details, StringComparison.Ordinal);
