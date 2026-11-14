@@ -106,3 +106,5 @@ If the solution format or a command differs once the skeleton exists, update thi
 - Upgrade packages or the target framework as a side effect.
 - Commit secrets, real server IPs, or private keys. Use `.env` (git-ignored) and `.env.example`.
 - Run destructive commands on remote servers from tests. Tests never open real SSH connections.
+- Never stop, restart, or modify anything on servers tagged `prod`, and never propose using those servers for tests.
+- Use disposable containers for alert tests that need a runtime environment.

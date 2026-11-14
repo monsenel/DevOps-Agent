@@ -2,19 +2,27 @@
 
 **This file is the handoff.** Update it at the start of a task, at every checkpoint, and at the end. A new session (another account, another tool, another model) continues from here with no other context.
 
+## Waiting on owner
+
+- **T1.2 — SSH pool and runner:** provide an authorized non-production SSH host (and jump-host route if needed), its identity key under `/keys`, and independently verified `known_hosts` entries.
+- **T2.7 — Topology page:** provide two authorized non-production SSH targets, their identity keys, verified host keys, and network access between the hosts for real discovery acceptance.
+- **T3.3 — Evidence panel and Trace:** provide a non-production target with a real nginx-to-backend route, domain/path, SSH identity key, and verified host key for J3 acceptance.
+- **T5.4 — Notifications:** configure either Telegram bot token + chat ID or an ntfy URL + topic (and optional token), then send a test message and verify alert open/resolve delivery.
+- **T5.5 — Overview with real data:** unblock T3.3 by providing the non-production J3 target details above; T5.5 depends on T3.3.
+
 ---
 
 ## Current
 
-- **Task:** T5.4 Notifications
-- **Status:** blocked
+- **Task:** T6.4 SSH attack detection and bans
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
-- T5.4 implementation is complete: encrypted Telegram/ntfy credentials, severity threshold, test-send, and open/reopen/resolve alert notifications. HTTP sender contracts, secret preservation, severity filtering, and lifecycle dispatch are covered by tests. Settings checked in both themes and at 390px.
-- Verification passed: `dotnet build DevOpsAgent.slnx` (0 warnings/errors), `dotnet test DevOpsAgent.slnx` (94/94). Graphify refreshed and committed.
-- Exact next step: configure either a Telegram bot token + chat ID or an ntfy server URL + topic (and optional token) in Settings › Notifications, click “Send test message”, then verify a live alert opens and resolves through that destination. No destination credentials were configured or transmitted in this session. After live acceptance, mark T5.4 done and resume the next eligible PLAN task.
-- Files touched: Application notifications/alert service, Infrastructure HTTP notifier/DI, Settings UI/imports/CSS, notification and alert tests, Graphify outputs.
+- T6.1 was already complete in commit `de4590e`; confirmed typed registry, mode × access policy tests, and `run_shell` pending approval coverage. Build passed with 0 warnings/errors and tests passed (99/99).
+- T6.4 implementation is the current task. T6.3 and T5.3 dependencies are implemented. Do not use or propose any `prod` server; use fakes/unit tests, and any runtime alert testing must use a disposable container.
+- Exact next step: inspect existing security/alert contracts, then implement the auth-log collector, detection rules, available ban-tool discovery, alert details, and fixture-backed tests. After build/test pass, block only the live J5 acceptance until an authorized disposable non-production target is available.
+- Files touched so far in this resumed session: `AGENTS.md`, `docs/PROGRESS.md`.
 
 ## Blockers
 
@@ -30,7 +38,7 @@ The prior M5 deferral has been lifted by the owner's instruction to continue tas
 
 T5.4 live acceptance is blocked because no Telegram bot token/chat ID or ntfy topic/token is configured. Code and mocked HTTP contracts are verified; no message was sent to a third-party destination. Exact unblock step: configure one destination in Settings › Notifications, use Send test message, then verify both alert-open and alert-resolve delivery.
 
-T6.4 is deferred because it depends on incomplete T6.3 and blocked T5.3. Resume after those dependencies are completed.
+T6.4's live J5 acceptance must use an authorized disposable non-production target. Its implementation can proceed with fakes and fixture-backed tests; do not run it against any server tagged `prod`.
 
 T6.6 remains blocked because T6.3 and T6.4 acceptance is unresolved; it depends on all preceding tasks and requires end-to-end journey checks.
 
@@ -190,3 +198,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · resumed T5.4 · clean baseline: build 0 warnings/errors and 90/90 tests; notification settings/senders/lifecycle implemented; both themes and mobile form verified; final build clean and 94/94 tests pass; real delivery awaits a configured destination
 - 2026-11-14 · Codex / GPT-6 · Graphify · refreshed to 5,990 nodes / 20,300 edges / 203 communities; 60 self-loops and no dangling/missing endpoints; tokens.css skipped by sensitivity detector; outputs committed
 - 2026-11-14 · Codex / GPT-6 · T5.4 · implementation and automated/UI verification complete; live destination test blocked until owner configures Telegram or ntfy
+- 2026-11-14 · Codex / GPT-6 · resumed T6.1 · confirmed existing implementation and policy matrix; build clean and 99/99 tests pass; Graphify hygiene commit verified; started T6.4; added prod-server testing prohibition
