@@ -12,7 +12,7 @@
 
 ## WIP notes
 
-T6.3/J4 and the owner-requested sidebar layout are complete. Resume verification passed: clean working tree, build with 0 warnings/errors, and 79/79 tests. The owner has now directed work to continue task by task, lifting the previous M5 deferral. T5.1 is active. Exact next step: inspect T5.1's architecture and UI requirements, then implement the combined per-server metric poller, CPU sampling, persistence/rollups, and server-detail metrics view; add parser tests with fixtures, then build/test and check each acceptance criterion. Temporary app/SSH/Ollama services and test credentials from prior checks were removed. Graphify was last incrementally refreshed at 5,415 nodes, 18,841 edges, and 299 communities; refresh it again after repository changes.
+T6.3/J4 and the owner-requested sidebar layout are complete. Resume verification passed: clean working tree, build with 0 warnings/errors, and 79/79 tests. The owner lifted the previous M5 deferral. Implemented T5.1 parser/fixture tests, one-command SSH polling, CPU/network deltas, raw/rollup persistence, 24-hour retention, hosted poll/rollup services, and a server detail metrics page. Build passes with 0 warnings/errors and 84/84 tests. Exact next step: verify fresh SQLite migration/startup using a temporary database, visually inspect server detail in both themes and at 390px, fix any issues, then re-run build/tests and Graphify incremental update. Temporary app/SSH/Ollama services and test credentials from prior checks were removed. Graphify was last incrementally refreshed at 5,415 nodes, 18,841 edges, and 299 communities.
 
 ## Blockers
 

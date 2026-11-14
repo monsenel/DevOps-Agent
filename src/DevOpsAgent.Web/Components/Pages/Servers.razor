@@ -53,7 +53,7 @@
                         @foreach (var server in _servers)
                         {
                             <tr @key="server.Id">
-                                <th scope="row">@server.Name</th>
+                                <th scope="row"><a href="/servers/@server.Id">@server.Name</a></th>
                                 <td><span class="mono">@server.User@@@server.Host:@server.Port</span></td>
                                 <td><span class="ui-badge neutral">@server.Group</span></td>
                                 <td>

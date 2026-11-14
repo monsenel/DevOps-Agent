@@ -1,0 +1,113 @@
+@page "/servers/{ServerId:guid}"
+@inject ServerService Servers
+@inject MetricService Metrics
+@inject NavigationManager Navigation
+
+<PageTitle>@(_server?.Name ?? "Server") · DevOps Agent</PageTitle>
+
+<div class="page-stack">
+    @if (_missing)
+    {
+        <section class="ui-card">
+            <EmptyState Title="Server not found" Description="This server is no longer in the inventory." ActionLabel="Back to servers" OnAction="BackToServers" />
+        </section>
+    }
+    else if (_server is not null)
+    {
+        <section class="ui-card server-detail-heading">
+            <div>
+                <p class="eyebrow">Server detail · @_server.Group</p>
+                <h2>@_server.Name</h2>
+                <p class="muted mono">@_server.User@@@_server.Host:@_server.Port · @(_server.OsInfo ?? "OS not detected")</p>
+            </div>
+            <a class="ui-button secondary" href="/servers">Back to servers</a>
+        </section>
+
+        <section class="server-metric-grid" aria-label="Latest server metrics">
+            <StatTile Label="CPU" Value="@Format("cpu_percent")" Suffix="%" IconName="server" />
+            <StatTile Label="Memory" Value="@Format("memory_percent")" Suffix="%" IconName="server" />
+            <StatTile Label="Disk · /" Value="@Format("disk_percent")" Suffix="%" IconName="server" />
+            <StatTile Label="Load · 1 min" Value="@Format("load_1m")" IconName="activity" />
+        </section>
+
+        <section class="ui-card server-metric-history" aria-labelledby="metric-history-title">
+            <div class="ui-card-header">
+                <div>
+                    <h2 id="metric-history-title">Recent metrics</h2>
+                    <p class="muted">Raw samples from the last 24 hours. Polling runs every 60 seconds.</p>
+                </div>
+                <span class="mono muted">@(_metrics?.Latest.MaxBy(item => item.AtUtc)?.AtUtc.ToLocalTime().ToString("g") ?? "No samples yet")</span>
+            </div>
+            @if (_metrics is null || _metrics.Recent.Count == 0)
+            {
+                <EmptyState Title="No metric samples yet" Description="The poller will show CPU, memory, disk, load, and network data after its next successful SSH check." />
+            }
+            else
+            {
+                <div class="table-scroll">
+                    <table class="servers-table metric-table">
+                        <thead><tr><th scope="col">Metric</th><th scope="col">Value</th><th scope="col">Sampled</th></tr></thead>
+                        <tbody>
+                            @foreach (var sample in _metrics.Recent.OrderByDescending(item => item.AtUtc).Take(100))
+                            {
+                                <tr @key="(sample.Name, sample.AtUtc)">
+                                    <th scope="row">@Label(sample.Name)</th>
+                                    <td class="mono">@FormatValue(sample.Name, sample.Value)</td>
+                                    <td class="mono">@sample.AtUtc.ToLocalTime().ToString("g")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid ServerId { get; set; }
+
+    private ServerSummary? _server;
+    private ServerMetrics? _metrics;
+    private bool _missing;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _server = (await Servers.ListAsync(CancellationToken.None)).SingleOrDefault(item => item.Id == ServerId);
+        _missing = _server is null;
+        _metrics = _server is null ? null : await Metrics.GetServerMetricsAsync(ServerId, CancellationToken.None);
+    }
+
+    private string Format(string name)
+    {
+        var value = _metrics?.Latest.FirstOrDefault(item => item.Name == name)?.Value;
+        return value.HasValue ? value.Value.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) : "—";
+    }
+
+    private void BackToServers() => Navigation.NavigateTo("/servers");
+
+    private static string Label(string name) => name switch
+    {
+        "cpu_percent" => "CPU",
+        "memory_percent" => "Memory",
+        "memory_used_bytes" => "Memory used",
+        "memory_total_bytes" => "Memory total",
+        "disk_percent" => "Disk · /",
+        "disk_used_bytes" => "Disk used · /",
+        "disk_total_bytes" => "Disk total · /",
+        "load_1m" => "Load · 1 min",
+        "load_5m" => "Load · 5 min",
+        "load_15m" => "Load · 15 min",
+        "network_receive_bytes_per_second" => "Network received",
+        "network_transmit_bytes_per_second" => "Network sent",
+        _ => name
+    };
+
+    private static string FormatValue(string name, double value) => name switch
+    {
+        "cpu_percent" or "memory_percent" or "disk_percent" => $"{value:0.0}%",
+        "memory_used_bytes" or "memory_total_bytes" or "disk_used_bytes" or "disk_total_bytes" => $"{value / 1024d / 1024d:0.0} MiB",
+        "network_receive_bytes_per_second" or "network_transmit_bytes_per_second" => $"{value / 1024d / 1024d:0.00} MiB/s",
+        _ => value.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)
+    };
+}

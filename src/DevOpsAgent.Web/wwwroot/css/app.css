@@ -2272,6 +2272,41 @@ p {
     min-width: 0;
 }
 
+.server-detail-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+}
+
+.server-detail-heading h2 {
+    margin: 4px 0;
+    font-size: 24px;
+}
+
+.server-detail-heading p {
+    margin-bottom: 0;
+}
+
+.server-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 20px;
+}
+
+.server-metric-history {
+    min-width: 0;
+}
+
+.metric-table th:first-child {
+    min-width: 190px;
+}
+
+.metric-table td,
+.metric-table th {
+    white-space: nowrap;
+}
+
 .servers-heading {
     display: flex;
     align-items: center;
@@ -2506,6 +2541,15 @@ p {
 }
 
 @media (max-width: 680px) {
+    .server-metric-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .server-detail-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
     .servers-heading {
         align-items: flex-start;
     }

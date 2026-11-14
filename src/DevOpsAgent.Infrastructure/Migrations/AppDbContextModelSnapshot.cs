@@ -459,6 +459,70 @@ namespace DevOpsAgent.Infrastructure.Migrations
                     b.ToTable("LlmProviders");
                 });
 
+            modelBuilder.Entity("DevOpsAgent.Domain.Monitoring.MetricRollup", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("Average")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTimeOffset>("BucketStartUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("Maximum")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("Metric")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("Minimum")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("SampleCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("ServerId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ServerId", "Metric", "BucketStartUtc")
+                        .IsUnique();
+
+                    b.ToTable("MetricRollups");
+                });
+
+            modelBuilder.Entity("DevOpsAgent.Domain.Monitoring.MetricSample", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("AtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Metric")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ServerId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("Value")
+                        .HasColumnType("REAL");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ServerId", "Metric", "AtUtc");
+
+                    b.ToTable("MetricSamples");
+                });
+
             modelBuilder.Entity("DevOpsAgent.Domain.Servers.Server", b =>
                 {
                     b.Property<Guid>("Id")
@@ -686,6 +750,24 @@ namespace DevOpsAgent.Infrastructure.Migrations
                     b.HasOne("DevOpsAgent.Domain.Discovery.Snapshot", null)
                         .WithMany()
                         .HasForeignKey("SnapshotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DevOpsAgent.Domain.Monitoring.MetricRollup", b =>
+                {
+                    b.HasOne("DevOpsAgent.Domain.Servers.Server", null)
+                        .WithMany()
+                        .HasForeignKey("ServerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DevOpsAgent.Domain.Monitoring.MetricSample", b =>
+                {
+                    b.HasOne("DevOpsAgent.Domain.Servers.Server", null)
+                        .WithMany()
+                        .HasForeignKey("ServerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

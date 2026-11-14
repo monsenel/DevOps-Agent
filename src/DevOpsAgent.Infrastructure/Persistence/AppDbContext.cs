@@ -6,6 +6,7 @@ using DevOpsAgent.Domain.Discovery;
 using DevOpsAgent.Domain.Graph;
 using DevOpsAgent.Domain.Agent;
 using DevOpsAgent.Domain.Updates;
+using DevOpsAgent.Domain.Monitoring;
 using Microsoft.EntityFrameworkCore;
 
 namespace DevOpsAgent.Infrastructure.Persistence;
@@ -26,6 +27,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<ActionRecord> ActionRecords => Set<ActionRecord>();
     public DbSet<UpdatePackage> UpdatePackages => Set<UpdatePackage>();
     public DbSet<UpdateScan> UpdateScans => Set<UpdateScan>();
+    public DbSet<MetricSample> MetricSamples => Set<MetricSample>();
+    public DbSet<MetricRollup> MetricRollups => Set<MetricRollup>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -180,6 +183,22 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(item => item.PackageManager).HasMaxLength(24);
             entity.Property(item => item.Error).HasMaxLength(2000);
             entity.HasOne<Server>().WithOne().HasForeignKey<UpdateScan>(item => item.ServerId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MetricSample>(entity =>
+        {
+            entity.HasKey(sample => sample.Id);
+            entity.Property(sample => sample.Metric).HasMaxLength(120).IsRequired();
+            entity.HasIndex(sample => new { sample.ServerId, sample.Metric, sample.AtUtc });
+            entity.HasOne<Server>().WithMany().HasForeignKey(sample => sample.ServerId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MetricRollup>(entity =>
+        {
+            entity.HasKey(sample => sample.Id);
+            entity.Property(sample => sample.Metric).HasMaxLength(120).IsRequired();
+            entity.HasIndex(sample => new { sample.ServerId, sample.Metric, sample.BucketStartUtc }).IsUnique();
+            entity.HasOne<Server>().WithMany().HasForeignKey(sample => sample.ServerId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

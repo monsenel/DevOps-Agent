@@ -1,0 +1,18 @@
+__DVA_LOADAVG__
+1.10 0.74 0.40 2/337 2054
+__DVA_MEMINFO__
+MemTotal:       16384000 kB
+MemFree:         1024000 kB
+MemAvailable:    8192000 kB
+Buffers:          256000 kB
+Cached:          3072000 kB
+__DVA_CPUSTAT__
+cpu  140 20 70 830 10 5 15 10 0 0
+__DVA_DISK__
+Filesystem  1024-blocks Used Available Capacity Mounted on
+/dev/vda1    52428800 31457280 20971520 60% /
+__DVA_NETDEV__
+Inter-| Receive                                                | Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+    lo:   1000      20    0    0    0     0          0         0     1000      20    0    0    0     0       0          0
+  eth0: 160000    1200    0    0    0     0          0         0    80000     700    0    0    0     0       0          0
