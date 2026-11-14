@@ -67,7 +67,9 @@ public sealed class ToolCommandBuilder(ToolRegistry tools)
             + "for unit in $units; do printf '%s %s\\n' \"$unit\" \"$(systemctl show -p MainPID --value \"$unit\" 2>/dev/null || true)\"; done > \"$after\"; "
             + "printf '%s\\n' 'RESTARTED_SERVICES_BEGIN'; awk 'NR==FNR {before[$1]=$2; next} ($1 in before) && before[$1]!=$2 {print $1}' \"$before\" \"$after\"; "
             + "printf '%s\\n' 'RESTARTED_SERVICES_END'; if [ -e /var/run/reboot-required ]; then printf '%s\\n' 'REBOOT_REQUIRED=true'; "
-            + "elif command -v needs-restarting >/dev/null 2>&1 && needs-restarting -r >/dev/null 2>&1; then printf '%s\\n' 'REBOOT_REQUIRED=true'; "
+            // `needs-restarting -r` exits 1 when a reboot IS needed and 0 when it is not; any other status is unknown and treated as no reboot.
+            + "elif command -v needs-restarting >/dev/null 2>&1; then rc=0; needs-restarting -r >/dev/null 2>&1 || rc=$?; "
+            + "if [ \"$rc\" -eq 1 ]; then printf '%s\\n' 'REBOOT_REQUIRED=true'; else printf '%s\\n' 'REBOOT_REQUIRED=false'; fi; "
             + "else printf '%s\\n' 'REBOOT_REQUIRED=false'; fi";
     }
 

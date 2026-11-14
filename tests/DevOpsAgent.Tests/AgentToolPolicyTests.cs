@@ -105,6 +105,10 @@ public sealed class AgentToolPolicyTests
         Assert.True(command.UseSudo);
         Assert.Contains("apt-get install -y", command.Command, StringComparison.Ordinal);
         Assert.Contains("RESTARTED_SERVICES_BEGIN", command.Command, StringComparison.Ordinal);
+        // dnf's `needs-restarting -r` exits 1 when a reboot IS required, so only status 1 may report it (and set -e must not abort).
+        Assert.Contains("needs-restarting -r >/dev/null 2>&1 || rc=$?", command.Command, StringComparison.Ordinal);
+        Assert.Contains("if [ \"$rc\" -eq 1 ]; then printf '%s\\n' 'REBOOT_REQUIRED=true'", command.Command, StringComparison.Ordinal);
+        Assert.DoesNotContain("&& needs-restarting", command.Command, StringComparison.Ordinal);
         Assert.Contains("REBOOT_REQUIRED=true", command.Command, StringComparison.Ordinal);
         Assert.Throws<ArgumentException>(() => registry.ValidateArguments("apply_updates",
             Json("{\"packages\":[\"nginx\"],\"serverIds\":[\"c4d7d14f-897d-4b31-8d33-455cc6e926d6\",\"392b7bfc-677d-4613-9e34-8e7ccfd8ce5a\"]}")));
