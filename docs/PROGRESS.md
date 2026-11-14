@@ -11,15 +11,14 @@
 
 ## Current
 
-- **Task:** T1.2 SSH pool and runner
-- **Status:** done
+- **Task:** T2.7 Topology page
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
-- The owner supplied a disposable SSH lab for T1.2, T2.7, T3.3, T6.4, and T6.5. The same target set supports T5.5. Add only `srv-edge`, `srv-app`, and `srv-db`; keep `srv-search` undiscovered so it can validate J2.
-- Done: verified all three lab containers are running and their private IPs and ED25519 fingerprints match the supplied values. Copied the private key into ignored `./keys` without displaying its contents; key and `known_hosts` are owned by the app user with mode 0600, and the folder is 0700. Only the three approved host keys are pinned.
 - T1.2 live acceptance passed: `srv-edge` connected directly; `srv-app` and `srv-db` connected through `srv-edge`. Capability probes reported Debian 12, uptime, passwordless sudo, and `docker`, `ip`, `ss` on all three. The app inventory contains only the requested three staging servers; `srv-search` was not added. Build passed with 0 warnings/errors; tests passed (106/106).
 - Files touched so far in this resumed session: `docs/PROGRESS.md`; ignored local `keys/dva_test_ed25519` and `keys/known_hosts`.
+- Exact next step: run discovery on `srv-edge`, `srv-app`, and `srv-db`; verify nested host/container/service graph, theme switching and node details, and confirm `srv-search` appears only as an Unknown node. Note systemd collector cannot be verified inside these containers, without blocking. Never use a server tagged `prod`.
 
 ## Blockers
 
@@ -190,4 +189,3 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · Graphify · incremental refresh after T6.4 (2,317 nodes, 6,351 edges, 157 communities); minified god-node labels remain absent; output ignored/untracked
 - 2026-11-14 · Codex / GPT-6 · resumed T1.2 · owner supplied a disposable SSH lab; start live acceptance with only srv-edge, srv-app, and srv-db; preserve srv-search as Unknown
 - 2026-11-14 · Codex / GPT-6 · T1.2 · live direct and jump SSH capability probes passed for the three staging targets; build clean and 106/106 tests pass; srv-search not added
-- 2026-11-14 · Codex / GPT-6 · started T2.7 · run discovery on the disposable lab, verify graph, Unknown srv-search, themes and node details
