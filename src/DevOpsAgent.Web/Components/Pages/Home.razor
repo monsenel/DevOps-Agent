@@ -211,6 +211,7 @@
     private IReadOnlyList<LoadRow> _loadRows = [];
     private GraphSnapshotDto? _graph;
     private Snapshot? _latestSnapshot;
+    private Snapshot? _latestRun;
     private JsonElement? _selectedEdge;
     private GraphEvidenceDto? _selectedEvidence;
     private LlmProviderSummary? _defaultProvider;
@@ -223,9 +224,7 @@
     private int _highAlerts;
     private bool _updatesChecked;
 
-    private string LastDiscoverySummary => _latestSnapshot is null
-        ? "Discovery has not run yet."
-        : $"Last discovery ran {_latestSnapshot.StartedAtUtc.ToLocalTime():g} and found {_driftChanges.Count} changes since the previous snapshot.";
+    private string LastDiscoverySummary => DiscoveryStatusText.Describe(_latestRun, _latestSnapshot, _driftChanges.Count);
 
     protected override async Task OnInitializedAsync()
     {
@@ -251,6 +250,7 @@
             var snapshots = (await SnapshotRepository.ListAsync(cancellationToken))
                 .OrderByDescending(snapshot => snapshot.StartedAtUtc).ToArray();
             _latestSnapshot = snapshots.FirstOrDefault();
+            _latestRun = await SnapshotRepository.GetLatestRunAsync(cancellationToken);
             var completedSnapshots = snapshots.Where(snapshot => snapshot.Status is SnapshotStatus.Completed or SnapshotStatus.Partial).ToArray();
             if (_latestSnapshot is not null)
             {
@@ -337,12 +337,14 @@
         _pageError = null;
         try
         {
-            _latestSnapshot = await Discovery.RunAsync(null, CancellationToken.None);
+            _ = await Discovery.RunAsync(null, CancellationToken.None);
             await LoadOverviewAsync(CancellationToken.None);
         }
         catch (Exception exception)
         {
             _pageError = $"Discovery failed: {exception.Message}";
+            // The failed run is recorded as Failed; reload so the status line shows it instead of the previous success.
+            await LoadOverviewAsync(CancellationToken.None);
         }
         finally
         {

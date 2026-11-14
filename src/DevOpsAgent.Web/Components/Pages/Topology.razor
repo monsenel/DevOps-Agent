@@ -60,9 +60,9 @@
         <span><i class="legend-line observed"></i>Declared + observed</span>
         <span><i class="legend-line only-observed"></i>Observed only</span>
         <span><i class="legend-line traced"></i>Traced path</span>
-        @if (_snapshot is not null)
+        @if ((_latestRun ?? _snapshot) is { } lastRun)
         {
-            <span class="muted topology-last-run">Last discovery @_snapshot.StartedAtUtc.ToLocalTime().ToString("g") · @_snapshot.Status</span>
+            <span class="muted topology-last-run">Last discovery @lastRun.StartedAtUtc.ToLocalTime().ToString("g") · @lastRun.Status</span>
         }
     </div>
     @if (!string.IsNullOrWhiteSpace(_progressMessage))
@@ -211,6 +211,7 @@
     private IJSObjectReference? _graphModule;
     private DotNetObjectReference<Topology>? _dotNetReference;
     private Snapshot? _snapshot;
+    private Snapshot? _latestRun;
     private GraphSnapshotDto? _graph;
     private IReadOnlyList<ServerSummary> _servers = [];
     private IReadOnlyList<JsonElement> _visibleNodes = [];
@@ -274,6 +275,7 @@
             .GroupBy(alert => alert.ServerId!.Value.ToString("N"), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.OrderByDescending(alert => alert.Severity).First().Severity.ToString(), StringComparer.OrdinalIgnoreCase);
         _snapshot = await SnapshotRepository.GetLatestAsync(CancellationToken.None);
+        _latestRun = await SnapshotRepository.GetLatestRunAsync(CancellationToken.None);
         if (_snapshot is not null)
         {
             await LoadGraphAsync(_snapshot.Id);
@@ -342,6 +344,7 @@
                 _ = InvokeAsync(StateHasChanged);
             });
             _snapshot = await Discovery.RunAsync(progress, CancellationToken.None);
+            _latestRun = _snapshot;
             await LoadGraphAsync(_snapshot.Id);
             _progressMessage = $"Discovery finished: {_snapshot.SucceededServerCount} succeeded, {_snapshot.FailedServerCount} failed.";
             await PushGraphAsync();
