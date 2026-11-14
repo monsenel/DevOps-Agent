@@ -9,9 +9,11 @@
 - **Task:** T5.4 Notifications
 - **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
-T5.3 live acceptance passed and is committed. T5.4 start: inspect existing AppSetting, Data Protection, alert lifecycle, and Settings UI patterns. Next step: implement Telegram and ntfy notification settings, severity threshold, test-send action, and open/resolve delivery.
-## WIP notes
 
+## WIP notes
+- T5.4 resumed with a clean tree after restoring only Graphify query timestamp noise. Baseline `dotnet build DevOpsAgent.slnx` passed with 0 warnings/errors; `dotnet test DevOpsAgent.slnx` passed 90/90. Existing `AppSetting`, Data Protection, alert lifecycle, and Settings section patterns inspected.
+- Next: implement protected Telegram/ntfy settings, severity threshold, test-send, and alert open/resolve dispatch; add tests and UI verification.
+- Files touched: `docs/PROGRESS.md` (handoff only).
 
 ## Blockers
 
@@ -182,3 +184,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T5.3 · live acceptance passed: selected container alert opened within 2 minutes, container restarted successfully, alert auto-resolved; Add server key validation fixed; build clean, 90/90 tests
 
 - 2026-11-14 · Codex / GPT-6 · started T5.4 · inspect notification contracts, settings persistence, alert lifecycle, and UI conventions; then implement Telegram/ntfy configuration and test delivery
+- 2026-11-14 · Codex / GPT-6 · resumed T5.4 · clean baseline: build 0 warnings/errors and 90/90 tests; next implement notification settings, senders, and lifecycle delivery
