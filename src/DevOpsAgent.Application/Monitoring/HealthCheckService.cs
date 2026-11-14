@@ -138,9 +138,12 @@ public sealed class HealthCheckService(
                 throw new ArgumentException(input.Type == HealthCheckType.Https
                     ? "HTTPS checks need an absolute https:// URL."
                     : "HTTP checks need an absolute http:// URL.", nameof(input));
+            // Credentials in a URL would be stored, shown in the UI, and written to logs and alerts.
+            if (!string.IsNullOrEmpty(uri.UserInfo))
+                throw new ArgumentException("Health check URLs cannot contain credentials (user:password@).", nameof(input));
         }
         else if (!Uri.TryCreate($"tcp://{target}", UriKind.Absolute, out var tcpUri) ||
-                 string.IsNullOrWhiteSpace(tcpUri.Host) || tcpUri.Port is < 1 or > 65535)
+                 string.IsNullOrWhiteSpace(tcpUri.Host) || tcpUri.Port is < 1 or > 65535 || !string.IsNullOrEmpty(tcpUri.UserInfo))
         {
             throw new ArgumentException("TCP targets must use host:port format.", nameof(input));
         }

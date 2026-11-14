@@ -21,6 +21,11 @@ public sealed class HealthCheckServiceTests
         Assert.Equal(HealthCheckStatus.Unknown, created.Status);
         await Assert.ThrowsAsync<ArgumentException>(() => fixture.Service.CreateAsync(fixture.Server.Id,
             new HealthCheckInput("Bad scheme", HealthCheckType.Https, "http://app.example.test/", 60), CancellationToken.None));
+        var credentials = await Assert.ThrowsAsync<ArgumentException>(() => fixture.Service.CreateAsync(fixture.Server.Id,
+            new HealthCheckInput("Creds", HealthCheckType.Http, "http://admin:hunter2@app.example.test/", 60), CancellationToken.None));
+        Assert.DoesNotContain("hunter2", credentials.Message, StringComparison.Ordinal);
+        await Assert.ThrowsAsync<ArgumentException>(() => fixture.Service.CreateAsync(fixture.Server.Id,
+            new HealthCheckInput("Creds tcp", HealthCheckType.Tcp, "admin:hunter2@app.example.test:5432", 60), CancellationToken.None));
         await fixture.Service.RunDueAsync(CancellationToken.None);
         var checkedItem = Assert.Single(await fixture.Service.ListAsync(fixture.Server.Id, CancellationToken.None));
         Assert.Equal(HealthCheckStatus.Healthy, checkedItem.Status);
