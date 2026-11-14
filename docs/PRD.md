@@ -173,8 +173,8 @@ DevOps Agent is a self-hosted web app, shipped as a Docker image, that connects 
 
 ### J4 — Daily check
 1. Overview shows server count, pending updates, open alerts, drift since yesterday, load per server.
-2. Ask the agent "anything I should look at?" → ranked list from alerts, metrics, drift.
-3. Follow-up "why is disk on srv-tools at 91%?" → read-only tools → top consumers.
+2. Ask the agent "anything I should look at?" → ranked list from active alerts, latest metrics, the two most recent discovery snapshots, and relevant graph context. Missing metric or drift coverage is stated explicitly.
+3. Follow-up "why is disk on srv-tools at 91%?" → read-only filesystem, mount, and Docker usage checks. If measured paths do not explain the filesystem total, report that the cause is unknown instead of guessing.
 4. Agent proposes cleanup; I approve; result in action log.
 
 ### J5 — Attack alert
