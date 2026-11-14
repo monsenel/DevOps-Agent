@@ -23,4 +23,17 @@ public sealed class ServerGroupOptionsTests
         Assert.Equal(["prod", "staging"], ServerGroupOptions.Build([], "").Select(option => option.Value));
         Assert.Equal(["prod", "staging"], ServerGroupOptions.Build([], null).Select(option => option.Value));
     }
+
+    [Fact]
+    public void LegacyMixedCaseGroupsMatchTheLowerCaseOptionTheDomainUses()
+    {
+        var current = ServerGroupOptions.Normalize("  PROD ");
+        var options = ServerGroupOptions.Build(["PROD", "Staging"], current);
+
+        Assert.Equal("prod", current);
+        Assert.Contains(options, option => option.Value == current);
+        Assert.Equal(["prod", "staging"], options.Select(option => option.Value));
+        Assert.Equal("dmz", ServerGroupOptions.Build([], "DMZ").Last().Value);
+        Assert.Equal(string.Empty, ServerGroupOptions.Normalize(null));
+    }
 }

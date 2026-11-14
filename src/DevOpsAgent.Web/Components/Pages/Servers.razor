@@ -409,7 +409,7 @@
             User = server.User,
             KeyFile = server.KeyFile,
             JumpServerId = server.JumpServerId,
-            Group = server.Group,
+            Group = ServerGroupOptions.Normalize(server.Group),
             TagsText = string.Join(", ", server.Tags)
         };
         _formOpen = true;
