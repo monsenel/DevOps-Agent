@@ -6,10 +6,10 @@
 
 ## Current
 
-- **Task:** T5.1 Metric poller
-- **Status:** done
+- **Task:** T5.2 Health checks
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
-
+T5.1 is complete: one read-only SSH poll per server every 60 seconds; fixture-tested load/memory/disk/CPU/network parsing; baseline-based CPU/network rates; persisted raw and five-minute aggregate samples; raw retention 24 hours and rollup retention 30 days; server detail shows current metrics and recent samples. Build clean and 84/84 tests pass. Exact next step: inspect graph/server contracts for HTTPS/listener suggestions, then implement health-check CRUD/persistence and HTTP/TCP/TLS probes on a scheduled background service; add isolated tests, verify server-detail status UI, and build/test.
 ## WIP notes
 
 
@@ -63,7 +63,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T4.2 | Unknown nodes | done | `feat(T4.2): unknown node expansion` |
 | T4.3 | Drift and scheduled discovery | done | `feat(T4.3): drift and scheduled discovery` |
 | T5.1 | Metric poller | done | `feat(T5.1): metric polling and server detail` |
-| T5.2 | Health checks | todo | |
+| T5.2 | Health checks | in-progress | |
 | T5.3 | Alert engine and Alerts page | todo | |
 | T5.4 | Notifications | todo | |
 | T5.5 | Overview with real data | todo | |
@@ -92,6 +92,7 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · resumed T5.1 · clean tree; build passed with 0 warnings/errors and tests passed (79/79); owner lifted M5 deferral
 - 2026-11-14 · Codex / GPT-6 · T5.1 · combined read-only polling, CPU/network deltas, raw samples, five-minute rollups, 24-hour raw retention, and server detail complete; SQLite migration/startup verified; values shown in both themes, mobile layout checked; build clean and 84/84 tests pass
 - 2026-11-14 · Codex / GPT-6 · T5.1 follow-up · enforced PRD's 30-day rollup retention; build clean and 84/84 tests pass
+- 2026-11-14 · Codex / GPT-6 · started T5.2 · health check CRUD, scheduled HTTP/TCP/TLS probes, and server-detail status
 
 - 2026-11-14 · Codex / GPT-6 · T6.5 · J6 steps 1–3 passed on disposable Debian apt target; security and standard updates classified, explicit approval executed both, report exit 0/no restarts/reboot false, follow-up scan showed 0 pending; temporary test environment removed
 
