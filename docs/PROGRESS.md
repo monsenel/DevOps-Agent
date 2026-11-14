@@ -6,17 +6,16 @@
 
 ## Current
 
-- **Task:** T4.1 Live connections
-- **Status:** done
+- **Task:** T4.2 Unknown nodes
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
 What is done so far:
-- T3.3 implementation is committed as `wip(T3.3): trace evidence UI`; J3's real-server acceptance is blocked by missing authorized SSH targets and pinned host keys.
-- T4.1 adds `ss -tnH state established` collection on hosts and sudo-gated container network namespaces, deterministic fixture parsing, timestamped socket-pair evidence, listener-directed observed edges, and declared+observed edge classification. Without sudo, container namespace skips appear as host evidence. Build is clean; 45/45 tests pass.
+- T4.1 is complete and committed as `feat(T4.1): observed connections`; build is clean and 45/45 tests pass.
 What is next (exact next step):
-- Read the T4.2 requirements and existing server add flow; implement Unknown node detail and the prefilled add-server/discover-and-merge flow.
+- Read J2 steps 3–6 and inspect the Unknown node detail and server add/discovery flows; implement the add-server prefill, suggested jump host, targeted discovery, and snapshot graph merge.
 Files touched:
 - `docs/PROGRESS.md`
 - `src/DevOpsAgent.Application/Discovery/ConnectionDiscoveryResult.cs`
@@ -78,7 +77,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T3.2 | Edge resolution | done | `feat(T3.2): nginx edge resolution` |
 | T3.3 | Evidence panel and Trace | blocked | `wip(T3.3): trace evidence UI` |
 | T4.1 | Live connections | done | `feat(T4.1): observed connections` |
-| T4.2 | Unknown nodes | todo | |
+| T4.2 | Unknown nodes | in-progress | |
 | T4.3 | Drift and scheduled discovery | todo | |
 | T5.1 | Metric poller | todo | |
 | T5.2 | Health checks | todo | |
@@ -149,3 +148,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · resumed T3.3 · edge evidence, trace graph and path highlighting implemented; build clean, 40/40 tests pass, light/dark UI checked; real-server J3 verification blocked
 - 2026-11-14 · Codex / GPT-6 · T4.1 · started after deferring T3.3's real-server acceptance
 - 2026-11-14 · Codex / GPT-6 · T4.1 · host/container connection parsing, observed-edge ownership and evidence; build clean, 45/45 tests pass
+- 2026-11-14 · Codex / GPT-6 · T4.2 · started
