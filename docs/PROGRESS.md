@@ -6,13 +6,21 @@
 
 ## Current
 
-- **Task:** T4.2 Unknown nodes
-- **Status:** done
+- **Task:** T4.3 Drift and scheduled discovery
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
-No active WIP. T4.2 is complete.
+What is done so far:
+- T4.2 is complete and committed as `85e3b68 feat(T4.2): unknown node expansion`; build is clean and 47/47 tests pass, with the prefilled flow checked in both themes.
+What is next (exact next step):
+- Inspect snapshot/graph persistence, existing Settings › Discovery page, hosted-service registration, and related drift requirements; implement `DriftService` fixture comparison first.
+Files touched:
+- `docs/PROGRESS.md`
+Gotchas found:
+- T1.2 live direct/jump SSH verification remains deferred by owner direction; its status stays blocked.
+- T2.7's real two-server discovery criterion cannot be verified until authorized targets and pinned keys are configured; the browser check used a temporary synthetic persisted graph.
 
 ## Blockers
 
@@ -57,7 +65,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T3.3 | Evidence panel and Trace | blocked | `wip(T3.3): trace evidence UI` |
 | T4.1 | Live connections | done | `feat(T4.1): observed connections` |
 | T4.2 | Unknown nodes | done | `feat(T4.2): unknown node expansion` |
-| T4.3 | Drift and scheduled discovery | todo | |
+| T4.3 | Drift and scheduled discovery | in-progress | |
 | T5.1 | Metric poller | todo | |
 | T5.2 | Health checks | todo | |
 | T5.3 | Alert engine and Alerts page | todo | |
@@ -130,3 +138,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T4.2 · started
 - 2026-11-14 · Codex / GPT-6 · resumed T4.2 · Unknown detail, prefilled inventory flow, targeted discovery/merge; build clean, 47/47 tests pass and both themes checked
 - 2026-11-14 · Codex / GPT-6 · T4.2 · complete; synthetic J2 flow verified, live SSH unavailable
+- 2026-11-14 · Codex / GPT-6 · resumed T4.3 · started drift comparison and scheduled discovery
