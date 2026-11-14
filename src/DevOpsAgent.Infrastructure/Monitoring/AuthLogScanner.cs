@@ -142,11 +142,13 @@ public sealed class AuthLogScanner(ISshRunner sshRunner, IAppSettingRepository s
     private static string BuildCommand(DateTimeOffset cursor) =>
         // sudo does not run under the ssh units, so it is read with a second journal query (matches on different
         // fields are ANDed, and mixing -u with `+` is ambiguous); both are read-only.
-        "log_output=''; if command -v journalctl >/dev/null 2>&1; then log_output=$(journalctl -u ssh -u sshd --since '@" + cursor.ToUnixTimeSeconds()
+        // The auth.log fallback depends only on the sshd journal query being empty, not on the sudo query.
+        "ssh_output=''; sudo_output=''; if command -v journalctl >/dev/null 2>&1; then ssh_output=$(journalctl -u ssh -u sshd --since '@" + cursor.ToUnixTimeSeconds()
         + "' --no-pager -o short-iso 2>/dev/null || true); "
         + "sudo_output=$(journalctl SYSLOG_IDENTIFIER=sudo --since '@" + cursor.ToUnixTimeSeconds()
-        + "' --no-pager -o short-iso 2>/dev/null || true); log_output=$(printf '%s\\n%s' \"$log_output\" \"$sudo_output\"); fi; "
-        + "if [ -n \"$(printf '%s' \"$log_output\" | tr -d '[:space:]')\" ]; then printf '%s\\n' \"$log_output\"; elif [ -r /var/log/auth.log ]; then tail -n 1000 /var/log/auth.log; fi; "
+        + "' --no-pager -o short-iso 2>/dev/null || true); fi; "
+        + "if [ -n \"$(printf '%s' \"$ssh_output\" | tr -d '[:space:]')\" ]; then printf '%s\\n%s\\n' \"$ssh_output\" \"$sudo_output\"; "
+        + "elif [ -r /var/log/auth.log ]; then tail -n 1000 /var/log/auth.log; else printf '%s\\n' \"$sudo_output\"; fi; "
         + "printf '\\n__DVA_BAN_TOOLS__\\n'; for tool in fail2ban-client nft ufw; do command -v \"$tool\" >/dev/null 2>&1 && printf '%s\\n' \"$tool\"; done; "
         + "printf '__DVA_BAN_STATE__\\n'; if command -v fail2ban-client >/dev/null 2>&1; then fail2ban-client status sshd 2>/dev/null || true; fi; "
         + "if command -v nft >/dev/null 2>&1; then nft list set inet dva blocked_ipv4 2>/dev/null || true; nft list set inet dva blocked_ipv6 2>/dev/null || true; fi; "

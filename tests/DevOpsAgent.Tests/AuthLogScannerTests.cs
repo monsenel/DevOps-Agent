@@ -132,6 +132,12 @@ public sealed class AuthLogScannerTests
         Assert.Contains("journalctl SYSLOG_IDENTIFIER=sudo --since", runner.LastCommand, StringComparison.Ordinal);
         Assert.Contains("tail -n 1000 /var/log/auth.log", runner.LastCommand, StringComparison.Ordinal);
         Assert.Contains("command -v journalctl", runner.LastCommand, StringComparison.Ordinal);
+        // The auth.log fallback must depend only on the sshd journal output, never on the sudo query.
+        var fallbackCondition = runner.LastCommand[runner.LastCommand.IndexOf("if [ -n", StringComparison.Ordinal)..];
+        fallbackCondition = fallbackCondition[..fallbackCondition.IndexOf("; then", StringComparison.Ordinal)];
+        Assert.Contains("$ssh_output", fallbackCondition, StringComparison.Ordinal);
+        Assert.DoesNotContain("sudo_output", fallbackCondition, StringComparison.Ordinal);
+        Assert.Contains("elif [ -r /var/log/auth.log ]", runner.LastCommand, StringComparison.Ordinal);
         Assert.DoesNotContain("--vacuum", runner.LastCommand, StringComparison.Ordinal);
         Assert.DoesNotContain("--rotate", runner.LastCommand, StringComparison.Ordinal);
     }
