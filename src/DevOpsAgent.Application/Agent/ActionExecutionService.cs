@@ -99,9 +99,15 @@ public sealed class ActionExecutionService(
         }
 
         var plan = commandBuilder.Build(action);
-        action.Approve(approvedBy.Trim(), timeProvider.GetUtcNow());
-        action.MarkRunning();
-        await actions.SaveAsync(action, cancellationToken);
+        // Atomic claim: only one caller can move Proposed -> Running, so an action can never execute twice.
+        if (!await actions.TryTransitionFromProposedAsync(actionId, ActionRecordStatus.Running, approvedBy.Trim(),
+                timeProvider.GetUtcNow(), cancellationToken))
+        {
+            throw new InvalidOperationException("The action was already approved, rejected, or is running.");
+        }
+
+        action = await actions.GetAsync(actionId, cancellationToken)
+            ?? throw new KeyNotFoundException("The proposed action no longer exists.");
 
         using var throttle = new SemaphoreSlim(MaxParallelServers);
         var stopwatch = Stopwatch.StartNew();
@@ -121,11 +127,16 @@ public sealed class ActionExecutionService(
     public async Task<ActionRecord> RejectAsync(Guid actionId, string rejectedBy, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(rejectedBy)) throw new ArgumentException("Reviewer is required.", nameof(rejectedBy));
-        var action = await actions.GetAsync(actionId, cancellationToken)
+        _ = await actions.GetAsync(actionId, cancellationToken)
             ?? throw new KeyNotFoundException("The proposed action no longer exists.");
-        action.Reject(rejectedBy.Trim(), timeProvider.GetUtcNow());
-        await actions.SaveAsync(action, cancellationToken);
-        return action;
+        if (!await actions.TryTransitionFromProposedAsync(actionId, ActionRecordStatus.Rejected, rejectedBy.Trim(),
+                timeProvider.GetUtcNow(), cancellationToken))
+        {
+            throw new InvalidOperationException("Only proposed actions can be approved or rejected.");
+        }
+
+        return await actions.GetAsync(actionId, cancellationToken)
+            ?? throw new KeyNotFoundException("The proposed action no longer exists.");
     }
 
     private async Task<ActionServerResult> ExecuteServerAsync(

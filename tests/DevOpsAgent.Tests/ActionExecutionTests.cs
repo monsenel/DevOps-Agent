@@ -103,6 +103,68 @@ public sealed class ActionExecutionTests
         Assert.Equal(ActionRecordStatus.Proposed, (await database.Context.ActionRecords.SingleAsync()).Status);
     }
 
+    [Fact]
+    public async Task SecondApproveAfterCompletionFailsWithoutRunningAgain()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var servers = await AddServersAsync(database.Context, 1, "staging");
+        var action = AddProposedAction(database.Context, "restart_service", servers, "{\"unit\":\"nginx\"}");
+        var runner = new TestSshRunner();
+        var execution = CreateService(database.Context, runner);
+
+        await execution.ApproveAndRunAsync(action.Id, "admin", CancellationToken.None);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            execution.ApproveAndRunAsync(action.Id, "other", CancellationToken.None));
+        Assert.Single(runner.Commands);
+    }
+
+    [Fact]
+    public async Task ApproveAfterAnotherCircuitClaimedTheActionDoesNotRun()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var servers = await AddServersAsync(database.Context, 1, "staging");
+        var action = AddProposedAction(database.Context, "restart_service", servers, "{\"unit\":\"nginx\"}");
+        var runner = new TestSshRunner();
+        var execution = CreateService(database.Context, runner);
+        // This circuit has the action tracked as Proposed...
+        Assert.Equal(ActionRecordStatus.Proposed, (await new ActionRecordRepository(database.Context).GetAsync(action.Id, CancellationToken.None))!.Status);
+
+        // ...while another circuit (separate DbContext) claims it first.
+        await using var otherContext = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(database.Connection).Options);
+        Assert.True(await new ActionRecordRepository(otherContext).TryTransitionFromProposedAsync(
+            action.Id, ActionRecordStatus.Running, "other", DateTimeOffset.UtcNow, CancellationToken.None));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            execution.ApproveAndRunAsync(action.Id, "admin", CancellationToken.None));
+        Assert.Empty(runner.Commands);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            execution.RejectAsync(action.Id, "admin", CancellationToken.None));
+        var stored = await otherContext.ActionRecords.AsNoTracking().SingleAsync();
+        Assert.Equal(ActionRecordStatus.Running, stored.Status);
+        Assert.Equal("other", stored.ApprovedBy);
+    }
+
+    [Fact]
+    public async Task RejectAfterApproveFailsAndClaimIsExclusive()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var servers = await AddServersAsync(database.Context, 1, "staging");
+        var action = AddProposedAction(database.Context, "restart_service", servers, "{\"unit\":\"nginx\"}");
+        var repository = new ActionRecordRepository(database.Context);
+
+        Assert.True(await repository.TryTransitionFromProposedAsync(action.Id, ActionRecordStatus.Running, "a", DateTimeOffset.UtcNow, CancellationToken.None));
+        Assert.False(await repository.TryTransitionFromProposedAsync(action.Id, ActionRecordStatus.Running, "b", DateTimeOffset.UtcNow, CancellationToken.None));
+        Assert.False(await repository.TryTransitionFromProposedAsync(action.Id, ActionRecordStatus.Rejected, "b", DateTimeOffset.UtcNow, CancellationToken.None));
+
+        var execution = CreateService(database.Context, new TestSshRunner());
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            execution.RejectAsync(action.Id, "b", CancellationToken.None));
+        var stored = await database.Context.ActionRecords.AsNoTracking().SingleAsync();
+        Assert.Equal(ActionRecordStatus.Running, stored.Status);
+        Assert.Equal("a", stored.ApprovedBy);
+    }
+
     private static ActionExecutionService CreateService(
         AppDbContext context,
         ISshRunner runner,
@@ -147,11 +209,12 @@ public sealed class ActionExecutionTests
     private sealed class SqliteTestDatabase(SqliteConnection connection, AppDbContext context) : IAsyncDisposable
     {
         public AppDbContext Context { get; } = context;
+        public SqliteConnection Connection { get; } = connection;
 
         public async ValueTask DisposeAsync()
         {
             await Context.DisposeAsync();
-            await connection.DisposeAsync();
+            await Connection.DisposeAsync();
         }
     }
 
