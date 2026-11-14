@@ -27,9 +27,12 @@ public static class ConnectionCollectorParser
         foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             var columns = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-            if (columns.Length < 5 || !string.Equals(columns[0], "ESTAB", StringComparison.OrdinalIgnoreCase)
-                || !TryParseEndpoint(columns[3], out var localAddress, out var localPort)
-                || !TryParseEndpoint(columns[4], out var peerAddress, out var peerPort))
+            var hasStateColumn = columns.Length >= 5;
+            var state = hasStateColumn ? columns[0] : "ESTAB";
+            var endpointOffset = hasStateColumn ? 3 : 2;
+            if (columns.Length < endpointOffset + 2 || !string.Equals(state, "ESTAB", StringComparison.OrdinalIgnoreCase)
+                || !TryParseEndpoint(columns[endpointOffset], out var localAddress, out var localPort)
+                || !TryParseEndpoint(columns[endpointOffset + 1], out var peerAddress, out var peerPort))
             {
                 continue;
             }
