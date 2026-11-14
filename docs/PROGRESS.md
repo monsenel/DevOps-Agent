@@ -6,13 +6,13 @@
 
 ## Current
 
-- **Task:** T6.2 Action log
-- **Status:** done
+- **Task:** T6.3 Agent chat with tools
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
-No active WIP. T6.2 is complete. T5.1 (and dependent M5 tasks T5.2–T5.5) remain deferred at the owner's direction.
+T5.1 (and dependent M5 tasks T5.2–T5.5) remain deferred at the owner's direction. T6.3 start: inspect current chat persistence/streaming and UI, then check Microsoft.Extensions.AI 11 native tool and assistant message APIs before integrating. Implement a tool loop with policy enforcement, structured fallback, context assembly from currently available server/graph evidence, and inline action proposals. Metrics/alerts context is unavailable while M5 is deferred; OpenRouter credentials remain absent, so those portions must be recorded as acceptance blockers if still unavailable. Exact next step: read `ChatService`, chat UI/contracts, provider client configuration, and existing chat tests; verify the current API docs before coding.
 
 ## Blockers
 
@@ -67,7 +67,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T5.5 | Overview with real data | todo | |
 | T6.1 | Tool registry and execution modes | done | `feat(T6.1): tool policies and approvals` |
 | T6.2 | Action log | done | `feat(T6.2): approved action execution and log` |
-| T6.3 | Agent chat with tools | todo | |
+| T6.3 | Agent chat with tools | in-progress | |
 | T6.4 | SSH attack detection and bans | todo | |
 | T6.5 | Updates | todo | |
 | T6.6 | MVP hardening pass | todo | |
@@ -139,3 +139,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T6.1 · typed tool registry and policy/approval matrix; migration applied, settings checked in both themes, build clean and 62/62 tests pass
 - 2026-11-14 · Codex / GPT-6 · resumed T6.2 · started approved-action execution and action log
 - 2026-11-14 · Codex / GPT-6 · T6.2 · per-server approved execution, persisted output and Action log verified in both themes; fresh migration, clean build and 66/66 tests pass
+- 2026-11-14 · Codex / GPT-6 · resumed T6.3 · started agent tool chat integration
