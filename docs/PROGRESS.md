@@ -6,13 +6,21 @@
 
 ## Current
 
-- **Task:** T2.1 Collector framework and snapshots
-- **Status:** done
+- **Task:** T2.2 Host collector (DSC-1)
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
-_None; T2.1 is complete._
+What is done so far:
+- T2.1 is complete and committed as `14a6a78`: discovery contracts, snapshot/collector-run migration and persistence, bounded parallelism, sequential per-server collection, progress reporting, and server failure isolation.
+- Build passes with zero warnings/errors; all 18 tests pass.
+What is next (exact next step):
+- Implement the host collector and deterministic parsers for `ip -j addr`, `ip -j route`, `hostname`, and `/etc/hosts`, then add fixture-backed tests for interfaces, IPv4/IPv6, CIDR subnets, and default routes.
+Files touched:
+- `docs/PROGRESS.md`
+Gotchas found:
+- T1.2 live direct/jump SSH verification remains deferred by owner direction; its status stays blocked.
 
 ## Blockers
 
@@ -42,7 +50,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T1.2 | SSH pool and runner | blocked | |
 | T1.3 | Import ssh config | done | `feat(T1.3): import ssh config` |
 | T2.1 | Collector framework and snapshots | done | `feat(T2.1): collector framework and snapshots` |
-| T2.2 | Host collector | todo | |
+| T2.2 | Host collector | in-progress | |
 | T2.3 | Listener collector | todo | |
 | T2.4 | Docker collector | todo | |
 | T2.5 | systemd collector | todo | |
@@ -101,3 +109,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · resumed T1.2 · build/test pass (15/15); real SSH and jump-host verification remains blocked by missing test targets and keys
 - 2026-11-14 · Codex / GPT-6 · resumed T2.1 · owner directed defer T1.2 live check and proceed with collector framework
 - 2026-11-14 · Codex / GPT-6 · T2.1 · snapshot/run persistence, bounded server parallelism, progress events, failure isolation; build/test pass (18/18)
+- 2026-11-14 · Codex / GPT-6 · T2.2 · started
