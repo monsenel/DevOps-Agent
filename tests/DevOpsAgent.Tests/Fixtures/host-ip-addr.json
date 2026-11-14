@@ -1,0 +1,29 @@
+[
+  {
+    "ifindex": 1,
+    "ifname": "lo",
+    "flags": ["LOOPBACK", "UP", "LOWER_UP"],
+    "mtu": 65536,
+    "qdisc": "noqueue",
+    "operstate": "UNKNOWN",
+    "address": "00:00:00:00:00:00",
+    "addr_info": [
+      { "family": "inet", "local": "127.0.0.1", "prefixlen": 8, "scope": "host" },
+      { "family": "inet6", "local": "::1", "prefixlen": 128, "scope": "host" }
+    ]
+  },
+  {
+    "ifindex": 2,
+    "ifname": "eth0",
+    "flags": ["BROADCAST", "MULTICAST", "UP", "LOWER_UP"],
+    "mtu": 1500,
+    "qdisc": "fq_codel",
+    "operstate": "UP",
+    "address": "52:54:00:ab:cd:ef",
+    "addr_info": [
+      { "family": "inet", "local": "192.0.2.10", "prefixlen": 24, "broadcast": "192.0.2.255", "scope": "global" },
+      { "family": "inet6", "local": "2001:db8:1::10", "prefixlen": 64, "scope": "global" },
+      { "family": "inet6", "local": "fe80::5054:ff:feab:cdef", "prefixlen": 64, "scope": "link" }
+    ]
+  }
+]

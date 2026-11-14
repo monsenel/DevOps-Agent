@@ -3,6 +3,7 @@ using DevOpsAgent.Application.Servers;
 using DevOpsAgent.Infrastructure.Security;
 using DevOpsAgent.Infrastructure.Llm;
 using DevOpsAgent.Infrastructure.Ssh;
+using DevOpsAgent.Infrastructure.Collectors;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -31,6 +32,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddScoped<IChatConversationRepository, ChatConversationRepository>();
         services.AddScoped<IServerRepository, ServerRepository>();
         services.AddScoped<ISnapshotRepository, SnapshotRepository>();
+        services.AddSingleton<ICollector, HostCollector>();
         services.AddSingleton<IServerKeyStore, ServerKeyStore>();
         services.AddSingleton<SshConnectionPool>();
         services.AddSingleton<ISshConnectionPool>(serviceProvider => serviceProvider.GetRequiredService<SshConnectionPool>());

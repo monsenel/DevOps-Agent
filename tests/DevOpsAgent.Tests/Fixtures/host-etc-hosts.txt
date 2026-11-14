@@ -1,0 +1,5 @@
+127.0.0.1 localhost localhost.localdomain
+::1       localhost ip6-localhost ip6-loopback
+192.0.2.20 api.internal api
+192.0.2.21 db.internal # database alias
+invalid entry-is-ignored
