@@ -13,7 +13,8 @@ public sealed class NginxCollector : ICollector
 
     public async Task<bool> IsApplicableAsync(ServerContext context, CancellationToken cancellationToken)
     {
-        var result = await context.SshRunner.RunAsync(context.Server.Id, "command -v nginx >/dev/null 2>&1",
+        var result = await context.SshRunner.RunAsync(context.Server.Id,
+            "command -v nginx >/dev/null 2>&1 || test -x /usr/sbin/nginx",
             new SshRunOptions(CommandTimeout), cancellationToken);
         return result.ExitCode == 0;
     }
@@ -21,7 +22,8 @@ public sealed class NginxCollector : ICollector
     public async Task<CollectorOutput> CollectAsync(ServerContext context, CancellationToken cancellationToken)
     {
         var useSudo = context.Server.SudoCapable == true;
-        var config = await context.SshRunner.RunAsync(context.Server.Id, "nginx -T",
+        var config = await context.SshRunner.RunAsync(context.Server.Id,
+            "if command -v nginx >/dev/null 2>&1; then nginx -T; else /usr/sbin/nginx -T; fi",
             new SshRunOptions(CommandTimeout, useSudo), cancellationToken);
         if (config.ExitCode is not 0)
         {

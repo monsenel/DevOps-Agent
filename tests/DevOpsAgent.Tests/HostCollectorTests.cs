@@ -50,7 +50,8 @@ public sealed class HostCollectorTests
         Assert.Equal(0, output.ExitCode);
         Assert.True(parsed.IsSuccess, parsed.Error);
         Assert.Equal(
-            ["command -v ip >/dev/null 2>&1", "ip -j addr", "ip -j route", "hostname", "cat /etc/hosts"],
+            ["command -v ip >/dev/null 2>&1", "ip -j addr", "ip -j route",
+                "hostname 2>/dev/null || cat /proc/sys/kernel/hostname", "cat /etc/hosts"],
             runner.Commands);
         Assert.DoesNotContain("sudo", string.Join(' ', runner.Commands), StringComparison.OrdinalIgnoreCase);
         Assert.True(parsed.Data.HasValue);
@@ -81,7 +82,7 @@ public sealed class HostCollectorTests
             {
                 "ip -j addr" => Fixture("host-ip-addr.json"),
                 "ip -j route" => Fixture("host-ip-route.json"),
-                "hostname" => Fixture("host-hostname.txt"),
+                "hostname 2>/dev/null || cat /proc/sys/kernel/hostname" => Fixture("host-hostname.txt"),
                 "cat /etc/hosts" => Fixture("host-etc-hosts.txt"),
                 _ => string.Empty
             };

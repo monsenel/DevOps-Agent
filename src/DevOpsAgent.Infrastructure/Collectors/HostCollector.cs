@@ -11,7 +11,7 @@ public sealed class HostCollector : ICollector
     [
         ("addresses", "ip -j addr"),
         ("routes", "ip -j route"),
-        ("hostname", "hostname"),
+        ("hostname", "hostname 2>/dev/null || cat /proc/sys/kernel/hostname"),
         ("hosts", "cat /etc/hosts")
     ];
 

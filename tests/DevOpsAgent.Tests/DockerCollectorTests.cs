@@ -44,7 +44,7 @@ public sealed class DockerCollectorTests
         var collector = new DockerCollector();
         var context = new ServerContext(server, runner);
 
-        Assert.True(await collector.IsApplicableAsync(context, CancellationToken.None));
+            Assert.True(await collector.IsApplicableAsync(context, CancellationToken.None));
         var output = await collector.CollectAsync(context, CancellationToken.None);
         var result = collector.Parse(output);
 
@@ -56,7 +56,7 @@ public sealed class DockerCollectorTests
             .Single(container => container.GetProperty("Name").GetString() == "api-svc");
         Assert.Contains(api.GetProperty("EnvironmentVariableNames").EnumerateArray(), value => value.GetString() == "DB_PASSWORD");
         Assert.Equal(
-            ["command -v docker >/dev/null 2>&1", "docker ps -q",
+            ["command -v docker >/dev/null 2>&1", "docker info >/dev/null 2>&1", "docker ps -q",
                 "docker inspect aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                 "docker network ls -q",
                 "docker network inspect cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"],
@@ -78,11 +78,23 @@ public sealed class DockerCollectorTests
         Assert.DoesNotContain("touch", string.Join(' ', runner.Calls.Select(call => call.Command)), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task IsApplicableAsync_SkipsDockerCliWhenNoDaemonIsAvailable()
+    {
+        var runner = new FixtureSshRunner { DaemonAvailable = false };
+        var server = new Server("docker-host", "docker.example.internal", 22, "deploy", "id_ed25519", "staging");
+
+        Assert.False(await new DockerCollector().IsApplicableAsync(new ServerContext(server, runner), CancellationToken.None));
+        Assert.Equal(["command -v docker >/dev/null 2>&1", "docker info >/dev/null 2>&1"],
+            runner.Calls.Select(call => call.Command));
+    }
+
     private static string Fixture(string name) => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", name));
 
     private sealed class FixtureSshRunner : ISshRunner
     {
         public string ContainerIds { get; init; } = Fixture("docker-ps.txt");
+        public bool DaemonAvailable { get; init; } = true;
         public List<(string Command, SshRunOptions Options)> Calls { get; } = [];
 
         public Task<RemoteCommandResult> RunAsync(Guid serverId, string command, SshRunOptions options,
@@ -91,13 +103,15 @@ public sealed class DockerCollectorTests
             Calls.Add((command, options));
             var output = command switch
             {
+                "docker info >/dev/null 2>&1" when !DaemonAvailable => string.Empty,
                 "docker ps -q" => ContainerIds,
                 "docker network ls -q" => Fixture("docker-network-ls.txt"),
                 var value when value.StartsWith("docker inspect ", StringComparison.Ordinal) => Fixture("docker-inspect.json"),
                 var value when value.StartsWith("docker network inspect ", StringComparison.Ordinal) => Fixture("docker-network-inspect.json"),
                 _ => string.Empty
             };
-            return Task.FromResult(new RemoteCommandResult(0, output, string.Empty, TimeSpan.FromMilliseconds(1)));
+            var exitCode = command == "docker info >/dev/null 2>&1" && !DaemonAvailable ? 1 : 0;
+            return Task.FromResult(new RemoteCommandResult(exitCode, output, string.Empty, TimeSpan.FromMilliseconds(1)));
         }
     }
 }

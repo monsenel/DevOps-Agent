@@ -1,3 +1,6 @@
+using DevOpsAgent.Application.Abstractions;
+using DevOpsAgent.Application.Discovery;
+using DevOpsAgent.Domain.Servers;
 using DevOpsAgent.Infrastructure.Collectors;
 
 namespace DevOpsAgent.Tests;
@@ -58,6 +61,35 @@ public sealed class NginxCollectorParserTests
 
         Assert.Empty(result.Servers);
         Assert.Empty(result.Upstreams);
+    }
+
+    [Fact]
+    public async Task CollectAsync_UsesSbinNginxWhenNonLoginPathOmitsSbin()
+    {
+        var server = new Server("edge", "edge.example.internal", 22, "deploy", "id_ed25519", "staging");
+        server.RecordCapabilities(true, "Debian 12", DateTimeOffset.UtcNow);
+        var runner = new FixtureSshRunner();
+        var collector = new NginxCollector();
+        var context = new ServerContext(server, runner);
+
+        Assert.True(await collector.IsApplicableAsync(context, CancellationToken.None));
+        var output = await collector.CollectAsync(context, CancellationToken.None);
+        Assert.Equal(0, output.ExitCode);
+        Assert.Contains(runner.Calls, call => call.Command.Contains("/usr/sbin/nginx", StringComparison.Ordinal));
+        Assert.True(runner.Calls.Single(call => call.Command.Contains("/usr/sbin/nginx -T", StringComparison.Ordinal)).Options.UseSudo);
+    }
+
+    private sealed class FixtureSshRunner : ISshRunner
+    {
+        public List<(string Command, SshRunOptions Options)> Calls { get; } = [];
+
+        public Task<RemoteCommandResult> RunAsync(Guid serverId, string command, SshRunOptions options,
+            CancellationToken cancellationToken)
+        {
+            Calls.Add((command, options));
+            var output = command.Contains("nginx -T", StringComparison.Ordinal) ? Fixture("nginx-T.txt") : string.Empty;
+            return Task.FromResult(new RemoteCommandResult(0, output, string.Empty, TimeSpan.FromMilliseconds(1)));
+        }
     }
 
     private static string Fixture(string name) => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", name));

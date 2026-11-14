@@ -15,9 +15,28 @@ public sealed class DockerCollector : ICollector
 
     public async Task<bool> IsApplicableAsync(ServerContext context, CancellationToken cancellationToken)
     {
-        var result = await context.SshRunner.RunAsync(context.Server.Id, "command -v docker >/dev/null 2>&1",
+        var executable = await context.SshRunner.RunAsync(context.Server.Id, "command -v docker >/dev/null 2>&1",
             new SshRunOptions(CommandTimeout), cancellationToken);
-        return result.ExitCode == 0;
+        if (executable.ExitCode != 0)
+        {
+            return false;
+        }
+
+        var userAccess = await context.SshRunner.RunAsync(context.Server.Id, "docker info >/dev/null 2>&1",
+            new SshRunOptions(CommandTimeout), cancellationToken);
+        if (userAccess.ExitCode == 0)
+        {
+            return true;
+        }
+
+        if (context.Server.SudoCapable != true)
+        {
+            return false;
+        }
+
+        var sudoAccess = await context.SshRunner.RunAsync(context.Server.Id, "docker info >/dev/null 2>&1",
+            new SshRunOptions(CommandTimeout, UseSudo: true), cancellationToken);
+        return sudoAccess.ExitCode == 0;
     }
 
     public async Task<CollectorOutput> CollectAsync(ServerContext context, CancellationToken cancellationToken)
