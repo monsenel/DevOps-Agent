@@ -9,7 +9,16 @@ public sealed class MetricRepository(AppDbContext dbContext) : IMetricRepository
     public async Task AddSamplesAsync(IReadOnlyCollection<MetricSample> samples, CancellationToken cancellationToken)
     {
         dbContext.MetricSamples.AddRange(samples);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            // Do not leave rejected rows tracked: they would make the next server's save in this scope fail as well.
+            foreach (var sample in samples) dbContext.Entry(sample).State = EntityState.Detached;
+            throw;
+        }
     }
 
     public async Task<IReadOnlyList<MetricSample>> GetRecentAsync(Guid serverId, DateTimeOffset sinceUtc, CancellationToken cancellationToken)

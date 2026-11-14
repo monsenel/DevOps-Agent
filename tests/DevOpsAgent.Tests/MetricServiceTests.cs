@@ -1,5 +1,6 @@
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Monitoring;
+using DevOpsAgent.Domain.Monitoring;
 using DevOpsAgent.Domain.Servers;
 using DevOpsAgent.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
@@ -56,6 +57,49 @@ public sealed class MetricServiceTests
         Assert.Equal(11, stored.Count);
         Assert.DoesNotContain(inventory[3].Id, stored);
         Assert.True(runner.MaximumConcurrent > 1);
+    }
+
+    [Fact]
+    public async Task PollIsolatesDatabaseFailuresPerServer()
+    {
+        await using var database = await SqliteTestDatabase.CreateAsync();
+        var inventory = Enumerable.Range(0, 4)
+            .Select(index => new Server($"db-{index}", $"db-{index}.internal", 22, "devops", "id_ed25519", "staging")).ToArray();
+        database.Context.Servers.AddRange(inventory);
+        await database.Context.SaveChangesAsync();
+        var metrics = new FlakyMetricRepository(new MetricRepository(database.Context),
+            readFailure: inventory[0].Id, writeFailure: inventory[2].Id);
+        var service = new MetricService(new ServerRepository(database.Context), metrics, new DelayedSshRunner(Guid.Empty),
+            new MutableTimeProvider(new DateTimeOffset(2026, 11, 14, 12, 0, 0, TimeSpan.Zero)));
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PollAsync(CancellationToken.None));
+
+        Assert.Contains("simulated", error.Message, StringComparison.Ordinal);
+        var stored = await database.Context.MetricSamples.Select(sample => sample.ServerId).Distinct().ToListAsync();
+        Assert.Equal(2, stored.Count);
+        Assert.Contains(inventory[1].Id, stored);
+        Assert.Contains(inventory[3].Id, stored);
+    }
+
+    private sealed class FlakyMetricRepository(IMetricRepository inner, Guid readFailure, Guid writeFailure) : IMetricRepository
+    {
+        public Task<IReadOnlyList<MetricSample>> GetLatestAsync(Guid serverId, CancellationToken cancellationToken) =>
+            serverId == readFailure ? throw new InvalidOperationException("simulated read failure") : inner.GetLatestAsync(serverId, cancellationToken);
+
+        public Task AddSamplesAsync(IReadOnlyCollection<MetricSample> samples, CancellationToken cancellationToken) =>
+            samples.Any(sample => sample.ServerId == writeFailure)
+                ? throw new InvalidOperationException("simulated write failure")
+                : inner.AddSamplesAsync(samples, cancellationToken);
+
+        public Task<IReadOnlyList<MetricSample>> GetRecentAsync(Guid serverId, DateTimeOffset sinceUtc, CancellationToken cancellationToken) =>
+            inner.GetRecentAsync(serverId, sinceUtc, cancellationToken);
+
+        public Task<IReadOnlyList<MetricSample>> GetUnrolledAsync(DateTimeOffset beforeUtc, CancellationToken cancellationToken) =>
+            inner.GetUnrolledAsync(beforeUtc, cancellationToken);
+
+        public Task SaveRollupsAsync(IReadOnlyCollection<MetricRollup> rollups, DateTimeOffset rawPruneBeforeUtc,
+            DateTimeOffset rollupPruneBeforeUtc, CancellationToken cancellationToken) =>
+            inner.SaveRollupsAsync(rollups, rawPruneBeforeUtc, rollupPruneBeforeUtc, cancellationToken);
     }
 
     private sealed class DelayedSshRunner(Guid failingServerId) : ISshRunner

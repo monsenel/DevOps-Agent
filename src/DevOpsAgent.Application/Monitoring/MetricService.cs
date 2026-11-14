@@ -15,14 +15,24 @@ public sealed class MetricService(
 
         // The repositories share one scoped DbContext, which is not thread-safe: only the SSH work runs in parallel,
         // and every database read and write happens sequentially before or after it.
+        // Each server is isolated: a database failure for one server is remembered (the first one is rethrown at the end)
+        // and the remaining servers are still polled and stored.
+        var failures = new List<Exception>();
         var previousByServer = new Dictionary<Guid, IReadOnlyList<MetricSample>>();
         foreach (var server in inventory)
         {
-            previousByServer[server.Id] = await metrics.GetLatestAsync(server.Id, cancellationToken);
+            try
+            {
+                previousByServer[server.Id] = await metrics.GetLatestAsync(server.Id, cancellationToken);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                failures.Add(exception);
+            }
         }
 
         using var semaphore = new SemaphoreSlim(8);
-        var collected = await Task.WhenAll(inventory.Select(async server =>
+        var collected = await Task.WhenAll(inventory.Where(server => previousByServer.ContainsKey(server.Id)).Select(async server =>
         {
             await semaphore.WaitAsync(cancellationToken);
             try
@@ -42,19 +52,26 @@ public sealed class MetricService(
         {
             if (result is null || result.ExitCode != 0) continue;
 
-            var now = timeProvider.GetUtcNow();
-            var latest = previousByServer[server.Id];
-            var previous = ToPrevious(latest);
-            TimeSpan? elapsed = latest.Count == 0 ? null : now - latest.Max(item => item.AtUtc);
-            var parsed = MetricsParser.Parse(result.StandardOutput, previous, elapsed);
-            var samples = parsed.Values.Select(item => new MetricSample(server.Id, item.Key, item.Value, now)).ToList();
-            samples.AddRange(parsed.CpuCounters.Select(item => new MetricSample(server.Id, $"_cpu_{item.Key}", item.Value, now)));
-            samples.AddRange(parsed.NetworkCounters.Select(item => new MetricSample(server.Id, $"_net_{Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(item.Key))}", item.Value, now)));
-            if (samples.Count > 0) await metrics.AddSamplesAsync(samples, cancellationToken);
+            try
+            {
+                var now = timeProvider.GetUtcNow();
+                var latest = previousByServer[server.Id];
+                var previous = ToPrevious(latest);
+                TimeSpan? elapsed = latest.Count == 0 ? null : now - latest.Max(item => item.AtUtc);
+                var parsed = MetricsParser.Parse(result.StandardOutput, previous, elapsed);
+                var samples = parsed.Values.Select(item => new MetricSample(server.Id, item.Key, item.Value, now)).ToList();
+                samples.AddRange(parsed.CpuCounters.Select(item => new MetricSample(server.Id, $"_cpu_{item.Key}", item.Value, now)));
+                samples.AddRange(parsed.NetworkCounters.Select(item => new MetricSample(server.Id, $"_net_{Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(item.Key))}", item.Value, now)));
+                if (samples.Count > 0) await metrics.AddSamplesAsync(samples, cancellationToken);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                failures.Add(exception);
+            }
         }
 
-        // A failing server must not stop the others from being stored; the first failure is still surfaced to the poller.
-        var firstError = collected.Select(item => item.Error).FirstOrDefault(error => error is not null);
+        // The first failure is still surfaced to the poller.
+        var firstError = collected.Select(item => item.Error).FirstOrDefault(error => error is not null) ?? failures.FirstOrDefault();
         if (firstError is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(firstError).Throw();
     }
 
