@@ -54,8 +54,20 @@ public sealed class ExecutionModeService(
         }
 
         var normalized = policy with { Group = policy.Group.Trim().ToLowerInvariant(), AllowedTools = allowedTools };
-        // Saving replaces an unreadable setting, which is the recovery path after corruption.
-        var (configured, _) = await ReadAsync(cancellationToken);
+        var (configured, corrupt) = await ReadAsync(cancellationToken);
+        if (corrupt)
+        {
+            // Rewriting an unreadable setting must not silently lift the fail-closed state of the other groups:
+            // pin every other known group to read-only explicitly so only the saved group changes.
+            foreach (var group in (await servers.ListAsync(cancellationToken)).Select(server => server.Group.Trim().ToLowerInvariant()).Distinct())
+            {
+                if (!string.Equals(group, normalized.Group, StringComparison.OrdinalIgnoreCase))
+                {
+                    configured[group] = new ExecutionModePolicy(group, ExecutionMode.ReadOnly, []);
+                }
+            }
+        }
+
         configured[normalized.Group] = normalized;
         await settings.SetAsync(SettingKey, JsonSerializer.Serialize(configured, JsonOptions), cancellationToken);
     }
@@ -67,6 +79,10 @@ public sealed class ExecutionModeService(
         return configured.TryGetValue(normalized, out var policy) ? policy : Default(normalized, corrupt);
     }
 
+    /// <summary>True when the stored policies cannot be read, in which case every group is treated as read-only.</summary>
+    public async Task<bool> IsStoredSettingUnreadableAsync(CancellationToken cancellationToken) =>
+        (await ReadAsync(cancellationToken)).Corrupt;
+
     // A stored setting that cannot be read fails closed: every group is treated as read-only until the policies are saved again.
     private async Task<(Dictionary<string, ExecutionModePolicy> Policies, bool Corrupt)> ReadAsync(CancellationToken cancellationToken)
     {
@@ -74,10 +90,21 @@ public sealed class ExecutionModeService(
         if (string.IsNullOrWhiteSpace(json)) return (new(StringComparer.OrdinalIgnoreCase), false);
         try
         {
-            var values = JsonSerializer.Deserialize<Dictionary<string, ExecutionModePolicy>>(json, JsonOptions) ?? [];
-            return (new(values, StringComparer.OrdinalIgnoreCase), false);
+            var values = JsonSerializer.Deserialize<Dictionary<string, ExecutionModePolicy>>(json, JsonOptions);
+            // A null document, a null entry or an undefined mode is as untrustworthy as invalid JSON.
+            if (values is null || values.Values.Any(policy => policy is null || !Enum.IsDefined(policy.Mode)))
+                return Unreadable();
+            var policies = new Dictionary<string, ExecutionModePolicy>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (group, policy) in values)
+                policies[group] = policy with { AllowedTools = policy.AllowedTools ?? [] };
+            return (policies, false);
         }
         catch (JsonException)
+        {
+            return Unreadable();
+        }
+
+        (Dictionary<string, ExecutionModePolicy>, bool) Unreadable()
         {
             // The setting content is intentionally not logged.
             logger?.LogError("Stored execution mode policies are unreadable; treating every group as read-only.");

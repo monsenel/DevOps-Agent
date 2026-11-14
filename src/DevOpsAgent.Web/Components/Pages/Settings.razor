@@ -26,6 +26,10 @@
         <section class="ui-card execution-modes-card" aria-labelledby="execution-modes-title">
             <header class="ui-card-header"><h2 id="execution-modes-title">Execution modes</h2></header>
             <p class="muted">Choose how tool calls are handled for each server group. Shell commands always wait for approval.</p>
+            @if (_executionUnreadable)
+            {
+                <div class="settings-message error" role="alert">The stored execution policies could not be read, so every group is treated as read-only. Saving a group rewrites the setting: that group gets your choice and all other groups stay read-only until you save them.</div>
+            }
             @if (!string.IsNullOrWhiteSpace(_executionError))
             {
                 <div class="settings-message error" role="alert">@_executionError</div>
@@ -333,6 +337,7 @@
     private IReadOnlyList<ToolDescriptor> AutomaticTools => Tools.Tools
         .Where(tool => tool.Access == ToolAccess.Mutating && tool.Name != "run_shell").ToArray();
     private bool _executionLoaded;
+    private bool _executionUnreadable;
     private bool _savingExecutionGroup;
     private string? _executionMessage;
     private string? _executionError;
@@ -435,7 +440,7 @@
         }
         if (section == "Execution modes" && !_executionLoaded)
         {
-            _executionPolicies.AddRange(await ExecutionModes.ListAsync(CancellationToken.None));
+            await LoadExecutionPoliciesAsync();
             _executionLoaded = true;
         }
         if (section == "Notifications" && !_notificationsLoaded)
@@ -525,6 +530,13 @@
         _executionError = null;
     }
 
+    private async Task LoadExecutionPoliciesAsync()
+    {
+        _executionPolicies.Clear();
+        _executionPolicies.AddRange(await ExecutionModes.ListAsync(CancellationToken.None));
+        _executionUnreadable = await ExecutionModes.IsStoredSettingUnreadableAsync(CancellationToken.None);
+    }
+
     private async Task SaveExecutionPolicyAsync(ExecutionModePolicy policy)
     {
         _savingExecutionGroup = true;
@@ -533,6 +545,8 @@
         try
         {
             await ExecutionModes.SaveAsync(policy, CancellationToken.None);
+            // Show what is actually stored now (other groups may have been pinned to read-only).
+            await LoadExecutionPoliciesAsync();
             _executionMessage = $"Policy saved for {policy.Group}.";
         }
         catch (ArgumentException exception)

@@ -336,6 +336,43 @@ public sealed class AgentToolPolicyTests
         Assert.Equal(ExecutionMode.Confirm, (await service.GetForGroupAsync("unknown-group", CancellationToken.None)).Mode);
     }
 
+    [Fact]
+    public async Task SavingOneGroupOfACorruptSettingKeepsEveryOtherKnownGroupReadOnly()
+    {
+        await using var database = await CreateDatabaseAsync();
+        await AddServerAsync(database.Context, "prod");
+        await AddServerAsync(database.Context, "staging");
+        var settings = new AppSettingRepository(database.Context);
+        await settings.SetAsync("agent.execution-modes", "{ not valid json", CancellationToken.None);
+        var service = new ExecutionModeService(settings, new ServerRepository(database.Context), new ToolRegistry());
+        Assert.True(await service.IsStoredSettingUnreadableAsync(CancellationToken.None));
+
+        await service.SaveAsync(new ExecutionModePolicy("staging", ExecutionMode.Auto, ["restart_service"]), CancellationToken.None);
+
+        Assert.False(await service.IsStoredSettingUnreadableAsync(CancellationToken.None));
+        Assert.Equal(ExecutionMode.Auto, (await service.GetForGroupAsync("staging", CancellationToken.None)).Mode);
+        // prod was read-only while the setting was unreadable and must not fall back to Confirm.
+        Assert.Equal(ExecutionMode.ReadOnly, (await service.GetForGroupAsync("prod", CancellationToken.None)).Mode);
+        Assert.Equal(new[] { ExecutionMode.ReadOnly, ExecutionMode.Auto },
+            (await service.ListAsync(CancellationToken.None)).OrderBy(item => item.Group).Select(item => item.Mode));
+    }
+
+    [Theory]
+    [InlineData("{\"prod\":null}")]
+    [InlineData("{\"prod\":{\"group\":\"prod\",\"mode\":99,\"allowedTools\":[]}}")]
+    [InlineData("null")]
+    public async Task NullEntriesAndUndefinedModesAreTreatedAsCorrupt(string stored)
+    {
+        await using var database = await CreateDatabaseAsync();
+        await AddServerAsync(database.Context, "prod");
+        var settings = new AppSettingRepository(database.Context);
+        await settings.SetAsync("agent.execution-modes", stored, CancellationToken.None);
+        var service = new ExecutionModeService(settings, new ServerRepository(database.Context), new ToolRegistry());
+
+        Assert.True(await service.IsStoredSettingUnreadableAsync(CancellationToken.None));
+        Assert.Equal(ExecutionMode.ReadOnly, (await service.GetForGroupAsync("prod", CancellationToken.None)).Mode);
+    }
+
     private static JsonElement Json(string value) => JsonDocument.Parse(value).RootElement.Clone();
 
     private static async Task<Server> AddServerAsync(AppDbContext context, string group)
