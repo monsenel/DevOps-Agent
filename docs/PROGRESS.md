@@ -11,12 +11,12 @@
 
 ## Current
 
-- **Task:** T2.7 Topology page
-- **Status:** done
+- **Task:** T3.3 Evidence panel and Trace
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
-- Clear for completed T2.7. Follow-up findings: nginx include-context parsing affects T3.3; J2 outbound app connection to srv-search does not yet appear as Unknown. Do not add srv-search. Never use a server tagged `prod`.
+- T3.3 real acceptance is next. Live nginx `nginx -T` output includes files expanded outside their original block context; parser currently returns no domains/upstreams despite HTTP 200 from `api.test.local`. Exact next step: make include-context parsing handle the real output shape, add fixture/fake coverage, rerun discovery, then trace `api.test.local` and verify its path and evidence panel. J2 follow-up: outbound app connection to srv-search does not yet appear as Unknown; do not add srv-search. Never use a server tagged `prod`.
 
 ## Blockers
 
@@ -54,7 +54,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T2.7 | Topology page | done | `feat(T2.7): verify live topology in disposable lab` |
 | T3.1 | nginx parser | done | `feat(T3.1): nginx parser` |
 | T3.2 | Edge resolution | done | `feat(T3.2): nginx edge resolution` |
-| T3.3 | Evidence panel and Trace | todo | `wip(T3.3): trace evidence UI` |
+| T3.3 | Evidence panel and Trace | in-progress | `wip(T3.3): trace evidence UI` |
 | T4.1 | Live connections | done | `feat(T4.1): observed connections` |
 | T4.2 | Unknown nodes | done | `feat(T4.2): unknown node expansion` |
 | T4.3 | Drift and scheduled discovery | done | `feat(T4.3): drift and scheduled discovery` |
@@ -188,3 +188,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · resumed T1.2 · owner supplied a disposable SSH lab; start live acceptance with only srv-edge, srv-app, and srv-db; preserve srv-search as Unknown
 - 2026-11-14 · Codex / GPT-6 · T1.2 · live direct and jump SSH capability probes passed for the three staging targets; build clean and 106/106 tests pass; srv-search not added
 - 2026-11-14 · Codex / GPT-6 · T2.7 · discovery 3/3 succeeded on the disposable lab, 17 nested nodes rendered; theme switching and api details/evidence passed; systemd skipped because the containers do not run it; collector compatibility fixes, build clean, 108/108 tests
+- 2026-11-14 · Codex / GPT-6 · started T3.3 · live trace acceptance found nginx include-context parsing gap; next add support for expanded nginx files and verify api.test.local trace/evidence
