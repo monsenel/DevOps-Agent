@@ -15,7 +15,7 @@ public sealed class AgentToolPolicyTests
     {
         var registry = new ToolRegistry();
 
-        Assert.Equal(17, registry.Tools.Count);
+        Assert.Equal(18, registry.Tools.Count);
         Assert.Equal(
             new[] { "apply_updates", "block_ip", "restart_container", "restart_service", "run_shell", "unblock_ip" },
             registry.Tools.Where(tool => tool.Access == ToolAccess.Mutating).Select(tool => tool.Name).Order().ToArray());
@@ -79,12 +79,15 @@ public sealed class AgentToolPolicyTests
         var registry = new ToolRegistry();
         var builder = new ToolCommandBuilder(registry);
         var disk = builder.BuildReadOnly("disk_usage", new DiskUsageArgs());
+        var dockerDisk = builder.BuildReadOnly("docker_disk_usage", new DockerDiskUsageArgs());
         var restart = builder.Build(new ActionRecord("restart_container", "staging", "[]",
             "{\"container\":\"web\"}", null, DateTimeOffset.UtcNow));
 
         Assert.True(disk.UseSudo);
         Assert.Contains("df -P", disk.Command, StringComparison.Ordinal);
         Assert.Contains("du -x -h --max-depth=1 /", disk.Command, StringComparison.Ordinal);
+        Assert.False(dockerDisk.UseSudo);
+        Assert.Equal("docker system df -v", dockerDisk.Command);
         Assert.False(restart.UseSudo);
         Assert.Equal("docker restart -- 'web'", restart.Command);
     }

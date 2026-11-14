@@ -37,6 +37,7 @@ public sealed class ToolRegistry
             Define<RestartServiceArgs>("restart_service", "Restart a systemd unit.", ToolAccess.Mutating),
             Define<RestartContainerArgs>("restart_container", "Restart a Docker container. Always requires explicit approval.", ToolAccess.Mutating),
             Define<DockerPsArgs>("docker_ps", "List Docker containers.", ToolAccess.ReadOnly),
+            Define<DockerDiskUsageArgs>("docker_disk_usage", "Read Docker image, container, and volume disk usage.", ToolAccess.ReadOnly),
             Define<DockerLogsArgs>("docker_logs", "Read recent Docker container logs.", ToolAccess.ReadOnly),
             Define<TailLogArgs>("tail_log", "Read the end of a log file.", ToolAccess.ReadOnly),
             Define<ReadFileArgs>("read_file", "Read a text file from a server.", ToolAccess.ReadOnly),
@@ -114,6 +115,7 @@ public sealed record RestartServiceArgs(
     [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 
 public sealed record DockerPsArgs([property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
+public sealed record DockerDiskUsageArgs([property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 
 public sealed record DockerLogsArgs(
     [property: Required, StringLength(128, MinimumLength = 1), RegularExpression("^[A-Za-z0-9][A-Za-z0-9_.-]*$")] string Container,
