@@ -6,6 +6,7 @@
 @inject ApprovalService Approvals
 @inject ActionExecutionService ActionExecution
 @inject ToolCommandBuilder CommandBuilder
+@inject AuthenticationStateProvider AuthenticationState
 
 <PageTitle>Updates · DevOps Agent</PageTitle>
 
@@ -177,8 +178,8 @@
                 _pendingId = actionId;
                 var entry = (await ActionExecution.ListAsync(CancellationToken.None)).Single(item => item.Action.Id == actionId);
                 _pendingCommands.Clear(); _pendingServers.Clear();
-                _pendingCommands.AddRange(entry.PendingCommandPreviews.Select(item => $"{(entry.Action.ToolName == "run_shell" ? "" : "sudo ")}{item.Command}"));
-                _pendingServers.AddRange(entry.ServerNames);
+                _pendingCommands.AddRange(entry.PendingCommandPreviews.Select(item => item.DisplayCommand));
+                _pendingServers.AddRange(entry.PendingCommandPreviews.Select(item => $"{item.ServerName} ({item.Endpoint})"));
                 _message = $"Proposed {names.Length} package update(s) on {server.ServerName}.";
             }
         }
@@ -186,12 +187,15 @@
         finally { _busy = false; }
     }
 
+    private async Task<string> GetUserNameAsync() =>
+        (await AuthenticationState.GetAuthenticationStateAsync()).User.Identity?.Name ?? "admin";
+
     private async Task ApproveAsync(Guid id)
     {
         _busy = true;
         try
         {
-            var action = await ActionExecution.ApproveAndRunAsync(id, "admin", CancellationToken.None);
+            var action = await ActionExecution.ApproveAndRunAsync(id, await GetUserNameAsync(), CancellationToken.None);
             _message = $"Action {action.Status}.\n{action.ResultsJson}";
             _pendingId = null;
             await LoadAsync();
@@ -203,7 +207,7 @@
     private async Task RejectAsync(Guid id)
     {
         _busy = true;
-        try { await ActionExecution.RejectAsync(id, "admin", CancellationToken.None); _pendingId = null; _message = "Update proposal rejected."; }
+        try { await ActionExecution.RejectAsync(id, await GetUserNameAsync(), CancellationToken.None); _pendingId = null; _message = "Update proposal rejected."; }
         catch (Exception exception) { _message = exception.Message; _isError = true; }
         finally { _busy = false; }
     }

@@ -39,6 +39,12 @@ public sealed class ActionExecutionTests
         var logEntry = Assert.Single(await execution.ListAsync(CancellationToken.None));
         Assert.Equal(6, logEntry.Results.Count);
         Assert.Contains(logEntry.Results, result => result.StandardOutput == "updated" && result.ExitCode == 0);
+        Assert.All(logEntry.Results, result =>
+        {
+            Assert.True(result.UseSudo);
+            Assert.StartsWith("sudo systemctl restart", result.DisplayCommand, StringComparison.Ordinal);
+            Assert.EndsWith(":22", result.Endpoint, StringComparison.Ordinal);
+        });
         Assert.Contains("nginx.service", completed.CommandsJson, StringComparison.Ordinal);
     }
 
@@ -76,7 +82,11 @@ public sealed class ActionExecutionTests
         var execution = CreateService(database.Context, new TestSshRunner());
 
         var pending = Assert.Single(await execution.ListAsync(CancellationToken.None));
-        Assert.Equal("systemctl restart -- 'nginx'", Assert.Single(pending.PendingCommandPreviews).Command);
+        var preview = Assert.Single(pending.PendingCommandPreviews);
+        Assert.Equal("systemctl restart -- 'nginx'", preview.Command);
+        // Approvers must see the sudo wrapper and the real endpoint, not only the display name.
+        Assert.Equal("sudo systemctl restart -- 'nginx'", preview.DisplayCommand);
+        Assert.Equal("192.0.2.10:22", preview.Endpoint);
         var rejected = await execution.RejectAsync(action.Id, "admin", CancellationToken.None);
         Assert.Equal(ActionRecordStatus.Rejected, rejected.Status);
         Assert.Equal("admin", rejected.ApprovedBy);
@@ -101,6 +111,20 @@ public sealed class ActionExecutionTests
             execution.ApproveAndRunAsync(action.Id, "admin", CancellationToken.None));
         Assert.Empty(runner.Commands);
         Assert.Equal(ActionRecordStatus.Proposed, (await database.Context.ActionRecords.SingleAsync()).Status);
+    }
+
+    [Fact]
+    public void ResultsStoredBeforeEndpointAndSudoWereRecordedStillDeserialize()
+    {
+        const string legacy = "[{\"serverId\":\"c4d7d14f-897d-4b31-8d33-455cc6e926d6\",\"serverName\":\"old\",\"command\":\"id\","
+            + "\"exitCode\":0,\"standardOutput\":\"ok\",\"standardError\":\"\",\"durationMilliseconds\":5,\"error\":null}]";
+
+        var result = Assert.Single(JsonSerializer.Deserialize<ActionServerResult[]>(legacy, new JsonSerializerOptions(JsonSerializerDefaults.Web))!);
+
+        Assert.Equal("old", result.ServerName);
+        Assert.Null(result.Endpoint);
+        Assert.False(result.UseSudo);
+        Assert.Equal("id", result.DisplayCommand);
     }
 
     [Fact]

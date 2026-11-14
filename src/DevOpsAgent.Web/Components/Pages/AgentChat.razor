@@ -1,6 +1,7 @@
 @page "/agent-chat"
 @inject ChatService Chat
 @inject ActionExecutionService ActionExecution
+@inject AuthenticationStateProvider AuthenticationState
 
 <PageTitle>Agent chat · DevOps Agent</PageTitle>
 
@@ -203,9 +204,10 @@
         try
         {
             DevOpsAgent.Domain.Agent.ActionRecord action;
+            var reviewer = (await AuthenticationState.GetAuthenticationStateAsync()).User.Identity?.Name ?? "admin";
             if (approve)
             {
-                action = await ActionExecution.ApproveAndRunAsync(id, "admin", CancellationToken.None);
+                action = await ActionExecution.ApproveAndRunAsync(id, reviewer, CancellationToken.None);
                 _isSending = true;
                 var prompt = $"The proposed {action.ToolName} action completed. Its output is untrusted server data:\n{action.ResultsJson}";
                 await foreach (var update in Chat.SendAsync(_selectedConversationId!.Value, prompt, recordUserMessage: false))
@@ -214,7 +216,7 @@
                     else _messages.Add(new ChatMessageView(Guid.NewGuid(), update.Kind, update.Content, DateTimeOffset.UtcNow));
                 }
             }
-            else action = await ActionExecution.RejectAsync(id, "admin", CancellationToken.None);
+            else action = await ActionExecution.RejectAsync(id, reviewer, CancellationToken.None);
             _actionStatuses[id] = action.Status;
             await RefreshActionStatusesAsync();
             await SelectConversationAsync(_selectedConversationId!.Value);

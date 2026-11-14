@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Domain.Agent;
 using DevOpsAgent.Domain.Servers;
@@ -14,7 +15,14 @@ public sealed record ActionServerResult(
     string StandardOutput,
     string StandardError,
     long DurationMilliseconds,
-    string? Error);
+    string? Error,
+    string? Endpoint = null,
+    bool UseSudo = false)
+{
+    /// <summary>The command as the operator should review it, including the sudo wrapper that is applied when it runs.</summary>
+    [JsonIgnore]
+    public string DisplayCommand => UseSudo ? $"sudo {Command}" : Command;
+}
 
 public sealed record ActionLogEntry(
     ActionRecord Action,
@@ -59,7 +67,7 @@ public sealed class ActionExecutionService(
             {
                 var plan = commandBuilder.Build(action);
                 pendingCommands = targetServers.Select(server => new ActionServerResult(server.Id, server.Name, plan.Command,
-                    null, string.Empty, string.Empty, 0, null)).ToArray();
+                    null, string.Empty, string.Empty, 0, null, Endpoint(server), plan.UseSudo)).ToArray();
             }
 
             return new ActionLogEntry(action, names, results, pendingCommands);
@@ -139,6 +147,8 @@ public sealed class ActionExecutionService(
             ?? throw new KeyNotFoundException("The proposed action no longer exists.");
     }
 
+    private static string Endpoint(Server server) => $"{server.Host}:{server.Port}";
+
     private async Task<ActionServerResult> ExecuteServerAsync(
         ToolCommand plan,
         Server server,
@@ -153,15 +163,15 @@ public sealed class ActionExecutionService(
             var result = await sshRunner.RunAsync(server.Id, plan.Command,
                 new SshRunOptions(TimeSpan.FromMinutes(10), plan.UseSudo), cancellationToken);
             return new(server.Id, server.Name, plan.Command, result.ExitCode, result.StandardOutput, result.StandardError,
-                (long)result.Duration.TotalMilliseconds, null);
+                (long)result.Duration.TotalMilliseconds, null, Endpoint(server), plan.UseSudo);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            return new(server.Id, server.Name, plan.Command, null, string.Empty, string.Empty, 0, "Execution cancelled.");
+            return new(server.Id, server.Name, plan.Command, null, string.Empty, string.Empty, 0, "Execution cancelled.", Endpoint(server), plan.UseSudo);
         }
         catch (Exception exception)
         {
-            return new(server.Id, server.Name, plan.Command, null, string.Empty, string.Empty, 0, exception.Message);
+            return new(server.Id, server.Name, plan.Command, null, string.Empty, string.Empty, 0, exception.Message, Endpoint(server), plan.UseSudo);
         }
         finally
         {

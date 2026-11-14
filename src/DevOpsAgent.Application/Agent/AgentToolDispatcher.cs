@@ -65,7 +65,7 @@ public sealed class AgentToolDispatcher(
         {
             var previews = await execution.ListAsync(cancellationToken);
             var pending = previews.Single(entry => entry.Action.Id == approval.ActionId);
-            var plan = string.Join("\n", pending.PendingCommandPreviews.Select(item => $"{item.ServerName}: {(commands.Build(pending.Action).UseSudo ? "sudo " : string.Empty)}{item.Command}"));
+            var plan = string.Join("\n", pending.PendingCommandPreviews.Select(item => $"{item.ServerName} ({item.Endpoint}): {item.DisplayCommand}"));
             return new(name, $"Proposed action awaits approval.\n{plan}", approval.ActionId, NeedsApproval: true);
         }
         if (descriptor.Access == ToolAccess.Mutating)

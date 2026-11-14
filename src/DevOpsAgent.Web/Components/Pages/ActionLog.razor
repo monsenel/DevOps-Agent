@@ -60,8 +60,8 @@
                                                 @foreach (var preview in entry.PendingCommandPreviews)
                                                 {
                                                     <section class="action-detail-section">
-                                                        <h3>@preview.ServerName</h3>
-                                                        <CodeBlock Content="@preview.Command" />
+                                                        <h3>@preview.ServerName <span class="mono muted">@preview.Endpoint</span></h3>
+                                                        <CodeBlock Content="@preview.DisplayCommand" />
                                                     </section>
                                                 }
                                                 <button class="ui-button primary" type="button" disabled="@_executing"
@@ -73,9 +73,9 @@
                                         @foreach (var result in entry.Results)
                                         {
                                             <section class="action-detail-section">
-                                                <h3>@result.ServerName · Exit @(result.ExitCode?.ToString() ?? "—")</h3>
+                                                <h3>@result.ServerName @if (!string.IsNullOrEmpty(result.Endpoint)) { <span class="mono muted">@result.Endpoint</span> } · Exit @(result.ExitCode?.ToString() ?? "—")</h3>
                                                 <label>Command</label>
-                                                <CodeBlock Content="@result.Command" />
+                                                <CodeBlock Content="@result.DisplayCommand" />
                                                 @if (!string.IsNullOrWhiteSpace(result.Error))
                                                 {
                                                     <p class="action-result-error">@result.Error</p>
