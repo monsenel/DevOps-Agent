@@ -552,7 +552,7 @@ public sealed class GraphBuilder
         }
 
         static string FormatEvidence(string? filePath, int line, string snippet) =>
-            $"{filePath ?? "nginx configuration"}:{line}: {snippet}";
+            $"{filePath ?? "nginx configuration"}:{line}: {UrlUserInfo.Strip(snippet)}";
     }
 
     private sealed record ServerGraphState(

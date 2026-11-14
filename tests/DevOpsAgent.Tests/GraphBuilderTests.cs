@@ -41,6 +41,31 @@ public sealed class GraphBuilderTests
     }
 
     [Fact]
+    public void Build_StripsCredentialsFromProxyTargetsInEvidenceAndNodes()
+    {
+        var data = ThreeServerFixtures()[0] with
+        {
+            Nginx = new NginxDiscoveryResult(
+                [
+                    new NginxServerInfo("http", [new NginxSourceValue("80", "/etc/nginx/nginx.conf", 3)],
+                        [new NginxSourceValue("app.example.test", "/etc/nginx/nginx.conf", 4)], [],
+                        [new NginxProxyInfo("proxy_pass", "http://svc:hunter2@10.9.9.9:8080/api", false, "/etc/nginx/nginx.conf", 5)],
+                        "/etc/nginx/nginx.conf", 2)
+                ], [])
+        };
+        var graph = new GraphBuilder().Build(Guid.NewGuid(), [data]);
+
+        Assert.Contains(graph.Evidence, item => item.Collector == "nginx" && item.Description.Contains("proxy_pass", StringComparison.Ordinal));
+        Assert.DoesNotContain(graph.Evidence, item => item.Description.Contains("hunter2", StringComparison.Ordinal));
+        Assert.DoesNotContain(graph.Nodes, node => node.Name.Contains("hunter2", StringComparison.Ordinal)
+            || node.AttributesJson.Contains("hunter2", StringComparison.Ordinal));
+        Assert.Equal("10.9.9.9", NginxEndpointParser.Parse("http://u:p@10.9.9.9/").Address);
+        Assert.DoesNotContain("secret", NginxEndpointParser.Parse("redis://:secret@$backend").Address, StringComparison.Ordinal);
+        Assert.Equal("http://[::1]:8080", UrlUserInfo.Strip("http://user:secret@[::1]:8080"));
+        Assert.Equal("mail me at a@b.c", UrlUserInfo.Strip("mail me at a@b.c"));
+    }
+
+    [Fact]
     public void IpIndexNormalizesAddressesAndPreservesMultipleOwners()
     {
         var index = new IpIndex();

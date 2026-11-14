@@ -217,7 +217,8 @@ public static class NginxEndpointParser
     public static NginxEndpoint Parse(string target)
     {
         if (string.IsNullOrWhiteSpace(target)) return new NginxEndpoint(target, null, "tcp", true);
-        var value = target.Trim();
+        // Credentials embedded in a proxy target must never reach node labels or evidence.
+        var value = UrlUserInfo.Strip(target.Trim());
         if (value.Contains('$')) return new NginxEndpoint(value, null, "tcp", true);
         if (value.StartsWith("unix:", StringComparison.OrdinalIgnoreCase)
             || value.Contains("://unix:", StringComparison.OrdinalIgnoreCase))
