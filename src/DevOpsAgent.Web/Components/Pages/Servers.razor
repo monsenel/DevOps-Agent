@@ -120,8 +120,10 @@
                         <label for="server-group">Group</label>
                         <InputSelect id="server-group" @bind-Value="_form.Group">
                             <option value="">Select a group</option>
-                            <option value="prod">Production</option>
-                            <option value="staging">Staging</option>
+                            @foreach (var option in ServerGroupOptions.Build(_servers.Select(server => server.Group), _form.Group))
+                            {
+                                <option value="@option.Value">@option.Label</option>
+                            }
                         </InputSelect>
                         <ValidationMessage For="() => _form.Group" />
                     </div>
