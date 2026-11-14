@@ -11,27 +11,26 @@ None. The owner confirmed an LLM provider is configured and its connection test 
 ## Current
 
 - **Task:** T6.6 MVP hardening pass
-- **Status:** in-progress
+- **Status:** done
 - **Last updated:** 2026-11-15 by Codex
 
 ## WIP notes
 
-T6.3 live J4 is complete in commit `2520ae1`. The final audit found broad-review context omitted all servers/graph unless named and omitted drift. Fixed broad review to include all inventory/graph and compare the two latest snapshots; regression test added. PRD J4 and decision D-024 now describe grounded, intent-scoped tool access. Build is clean with 0 warnings and tests pass 119/119. Exact next step: restart only the isolated app on `127.0.0.1:5155`, rerun J4a/J4b to verify the drift-rich answer and disk discrepancy answer; verify the existing J4c Action log and current `web` state without another mutation. Then audit every MVP row for done or an explicit blocker, run final build/tests and repository secret checks, update CHANGELOG/PROGRESS, commit the release result, retag and push `v0.1.0` at that commit, and verify the remote tag.
+None. T6.3 and T6.6 are complete; release checks are green.
 
 ### T6.3 acceptance result (2026-11-15)
 
-- Used a scrubbed temporary database and the confirmed default OpenRouter provider on the local app at `127.0.0.1:5155`; inventory contained only `srv-edge`, `srv-app`, and `srv-db`, all in `staging`. `srv-search` remained unregistered/Unknown. No `prod` inventory or server was contacted.
+- Used a scrubbed temporary database and the confirmed default OpenRouter provider on the local app at `127.0.0.1:5155`; inventory contained only `srv-edge`, `srv-app`, and `srv-db`, all in `staging`. `srv-search` remained unregistered/Unknown. No `prod` inventory or server was contacted. No local Ollama endpoint was available, so the live J4 run exercised the configured OpenRouter provider.
 - J4a “anything I should look at?” returned the real open `container-state` alerts for `worker-redis` and `worker-pg` on `srv-app`, plus current metrics/graph context. The staging `dva` user was allowlisted only in the temporary review-app process to exclude test SSH probes from the security findings; no repo or server configuration changed.
 - J4b “why is disk usage on srv-app what it is?” ran `disk_usage` and `docker_disk_usage`, both read-only and targeted only to `srv-app`. It reported the 957 GB backing filesystem at 71% use, `/lab` at 12 KB, `/var/lib/docker` at 345 MB, and Docker images at about 347 MB. The remaining filesystem use is outside paths visible inside the test container; the cause remains unidentified. No shell or mutating tool ran for J4a/J4b.
 - J4c proposed exactly `docker restart -- 'web'`, targeted only to staging `srv-app`. After approval, Action `1d8b7b02-2f01-49d4-8eb9-9fa19c638843` is `Succeeded`, exit 0, output `web`. Later the container exited and was automatically started by its existing `unless-stopped` policy; current read-only inspect shows `web` running. No second restart was issued.
-- Fixed T6.3 gaps found during acceptance: daily-review context now includes full inventory/graph, alerts and latest metrics; tool exposure is scoped to prompt intent; filesystem and Docker disk reports are read-only; container restart is a typed approval action. Fixed AuthLogScanner from alerting on its own probe command. Build is clean with 0 warnings and 119/119 tests pass.
-- Systemd remains deferred: verify on a real LXC/VM; it does not block release.
+- Fixed T6.3/T6.6 gaps found during acceptance: daily-review context now includes full inventory, graph, alerts, latest metrics, and drift between recent snapshots; tool exposure is scoped to prompt intent; filesystem and Docker disk reports are read-only; container restart is a typed approval action. Fixed AuthLogScanner from alerting on its own probe command. Journeys J1–J7 passed on staging (J4 through the configured OpenRouter provider; J4c action verified in the Action log). Fresh-clone Docker Compose build, login, and srv-edge discovery passed. Build has 0 warnings and 119/119 tests pass. Systemd live verification is deferred to a real LXC/VM and does not block release.
 
 ## Blockers
 
 The prior M5 deferral has been lifted by the owner's instruction to continue task by task. T5.1, T5.2, T5.3, and T5.4 are complete. T5.3 live acceptance passed on 2026-11-14: the selected container triggered an alert within 2 minutes, was restarted, and its alert auto-resolved. T5.4 live acceptance passed per the owner: ntfy test, open, and resolve messages were all received.
 
-T6.3 live J4 passed on the disposable staging lab with the configured default OpenRouter provider. T6.6 is ready to start. Systemd live verification is deferred: systemd: verify on a real LXC/VM; it does not block this release.
+No MVP task remains blocked. Systemd live verification is deferred to a real LXC/VM; it does not block this release.
 
 ---
 
@@ -75,7 +74,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T6.3 | Agent chat with tools | done | `feat(T6.3): verified J4 tool calling and approval on staging` |
 | T6.4 | SSH attack detection and bans | done | `feat(T6.4): verify SSH attack detection in disposable lab` |
 | T6.5 | Updates | done | `feat(T6.5): verify security update workflow and resilient scans` |
-| T6.6 | MVP hardening pass | in-progress | `chore(progress): start T6.6 release closeout` |
+| T6.6 | MVP hardening pass | done | `feat(T6.6): MVP hardening and release closeout` |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
 
@@ -84,6 +83,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 ## Session log
 
 One line per session: date · tool/model · tasks touched · result.
+
+- 2026-11-15 · Codex / GPT-6 · completed T6.6 · J1–J7 accepted on staging (J4 with configured OpenRouter); clean-clone Docker acceptance, 0-warning build, 119/119 tests, tracked-secret scan clean; systemd live verification deferred to real LXC/VM; release commit ready for v0.1.0 tag
 
 - 2026-11-15 · Codex / GPT-6 · started T6.6 release closeout · T6.3 J4 accepted on staging; final docs/task audit, build/tests, secret scan, commit and v0.1.0 tag remain
 
