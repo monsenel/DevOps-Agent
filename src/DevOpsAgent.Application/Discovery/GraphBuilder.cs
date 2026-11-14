@@ -291,6 +291,44 @@ public sealed class GraphBuilder
             }
         }
 
+        foreach (var state in serverStates.Where(state => state.Data.Connections is not null))
+        {
+            foreach (var note in state.Data.Connections!.Notes)
+            {
+                evidence.Add(new GraphEvidence(snapshotId, state.Host.Id, null, "connections", note));
+            }
+
+            foreach (var connection in state.Data.Connections!.Connections)
+            {
+                var localServerNode = FindLocalListenerNode(state.Data, connection.LocalAddress, connection.LocalPort);
+                var peerServerNode = FindPeerListenerNode(connection.PeerAddress, connection.PeerPort);
+                if ((localServerNode is null) == (peerServerNode is null)) continue;
+
+                GraphNode sourceNode;
+                GraphNode targetNode;
+                int serverPort;
+                if (localServerNode is not null)
+                {
+                    var peerOwner = FindUniqueOwnerNode(connection.PeerAddress);
+                    sourceNode = peerOwner ?? AddObservedUnknown(state.Data.Server.Id, connection.PeerAddress, connection.PeerPort);
+                    targetNode = localServerNode;
+                    serverPort = connection.LocalPort;
+                }
+                else
+                {
+                    sourceNode = FindConnectionSourceNode(state, connection);
+                    targetNode = peerServerNode!;
+                    serverPort = connection.PeerPort;
+                }
+
+                var seenAt = state.Data.Connections.CollectedAtUtc is { } collectedAt
+                    ? $"seen-at {collectedAt:O}; "
+                    : "seen during the discovery snapshot; ";
+                AddObservedEdge(sourceNode, targetNode, serverPort,
+                    $"{seenAt}tcp {connection.LocalAddress}:{connection.LocalPort} ↔ {connection.PeerAddress}:{connection.PeerPort}; collected in {connection.Namespace} network namespace{(connection.ContainerName is null ? string.Empty : $" ({connection.ContainerName})") }.");
+            }
+        }
+
         return new GraphBuildResult(nodes, edges, graphListeners, evidence);
 
         GraphNode AddNode(
@@ -338,6 +376,153 @@ public sealed class GraphBuilder
             ?? nodeByKey.Values.FirstOrDefault(node => node.ServerId == state.Data.Server.Id
                 && node.Kind == GraphNodeKind.Service && node.Name.Contains("nginx", StringComparison.OrdinalIgnoreCase))
             ?? state.Host;
+
+        GraphNode FindConnectionSourceNode(ServerGraphState state, EstablishedConnectionInfo connection)
+        {
+            if (connection.Namespace == "container" && connection.ContainerName is not null
+                && state.Data.Docker?.Containers.FirstOrDefault(container => container.Name == connection.ContainerName) is { } container)
+            {
+                return nodeByKey.GetValueOrDefault(GetComposeServiceNodeKey(state.Data, container))
+                    ?? nodeByKey.GetValueOrDefault(GetContainerNodeKey(state.Data, container)) ?? state.Host;
+            }
+
+            var localOwners = ipIndex.Find(connection.LocalAddress)
+                .Where(key => !key.StartsWith("subnet:", StringComparison.Ordinal)).ToArray();
+            return localOwners.Length == 1 && nodeByKey.TryGetValue(localOwners[0], out var localNode)
+                ? localNode
+                : state.Host;
+        }
+
+        GraphNode? FindLocalListenerNode(ServerDiscoveryData data, string address, int port) =>
+            data.Listeners?.Listeners.Where(listener => listener.Port == port && ListenerAddressMatches(listener.Address, address))
+                .Select(listener => FindListenerNode(data, listener)).FirstOrDefault()
+            ?? data.Docker?.Containers.Where(container => container.Networks.Any(network => network.IPv4Address == address || network.IPv6Address == address)
+                    && container.PublishedPorts.Any(published => published.ContainerPort == port && published.Protocol == "tcp"))
+                .Select(container => nodeByKey.GetValueOrDefault(GetComposeServiceNodeKey(data, container))
+                    ?? nodeByKey.GetValueOrDefault(GetContainerNodeKey(data, container))).OfType<GraphNode>().FirstOrDefault();
+
+        GraphNode? FindPeerListenerNode(string address, int port)
+        {
+            var owners = ipIndex.Find(address).Where(key => !key.StartsWith("subnet:", StringComparison.Ordinal)).ToArray();
+            var matchingServers = new List<GraphNode>();
+            foreach (var ownerKey in owners)
+            {
+                if (!TryGetOwnerServerId(ownerKey, out var ownerServerId)) continue;
+                var targetState = serverStates.FirstOrDefault(item => item.Data.Server.Id == ownerServerId);
+                if (targetState is null) continue;
+                var listener = targetState.Data.Listeners?.Listeners.FirstOrDefault(item => item.Port == port
+                    && ListenerAddressMatches(item.Address, address));
+                if (listener is not null)
+                {
+                    matchingServers.Add(FindListenerNode(targetState.Data, listener));
+                    continue;
+                }
+
+                if (ownerKey.StartsWith("host:", StringComparison.Ordinal))
+                {
+                    var published = targetState.Data.Docker?.Containers
+                        .Where(item => item.PublishedPorts.Any(value => value.HostPort == port && value.Protocol == "tcp"))
+                        .ToArray() ?? [];
+                    matchingServers.AddRange(published.Select(item => nodeByKey.GetValueOrDefault(GetComposeServiceNodeKey(targetState.Data, item))
+                        ?? nodeByKey.GetValueOrDefault(GetContainerNodeKey(targetState.Data, item))).OfType<GraphNode>());
+                }
+                else if (TryGetContainer(targetState.Data, ownerKey) is { } container
+                    && container.PublishedPorts.Any(value => value.ContainerPort == port && value.Protocol == "tcp"))
+                {
+                    var serviceNode = nodeByKey.GetValueOrDefault(GetComposeServiceNodeKey(targetState.Data, container))
+                        ?? nodeByKey.GetValueOrDefault(GetContainerNodeKey(targetState.Data, container));
+                    if (serviceNode is not null) matchingServers.Add(serviceNode);
+                }
+            }
+
+            return matchingServers.DistinctBy(node => node.Id).Count() == 1
+                ? matchingServers.DistinctBy(node => node.Id).Single()
+                : null;
+        }
+
+        GraphNode? FindUniqueOwnerNode(string address)
+        {
+            var owners = ipIndex.Find(address).Where(key => !key.StartsWith("subnet:", StringComparison.Ordinal))
+                .Select(key => nodeByKey.GetValueOrDefault(key)).Where(node => node is not null).DistinctBy(node => node!.Id).ToArray();
+            return owners.Length == 1 ? owners[0] : null;
+        }
+
+        GraphNode FindListenerNode(ServerDiscoveryData data, ListenerInfo listener)
+        {
+            if (listener.ProcessId is > 0)
+            {
+                var container = data.Docker?.Containers.FirstOrDefault(item => item.MainPid == listener.ProcessId.Value);
+                if (container is not null)
+                {
+                    return nodeByKey.GetValueOrDefault(GetComposeServiceNodeKey(data, container))
+                        ?? nodeByKey.GetValueOrDefault(GetContainerNodeKey(data, container))!;
+                }
+
+                var unit = data.Systemd?.Units.FirstOrDefault(item => item.MainPid == listener.ProcessId.Value);
+                if (unit is not null && nodeByKey.TryGetValue($"service:{data.Server.Id:N}:systemd:{unit.Name}", out var systemdNode))
+                {
+                    return systemdNode;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(listener.ProcessName)
+                && nodeByKey.TryGetValue($"service:{data.Server.Id:N}:process:{listener.ProcessName}", out var processNode))
+            {
+                return processNode;
+            }
+
+            return nodeByKey.GetValueOrDefault($"host:{data.Server.Id:N}")!;
+        }
+
+        void AddObservedEdge(GraphNode source, GraphNode target, int port, string description)
+        {
+            var declared = edges.FirstOrDefault(edge => edge.SourceNodeId == source.Id && edge.TargetNodeId == target.Id
+                && edge.Port == port && IsTcpProtocol(edge.Protocol) && edge.Kind == GraphEdgeKind.Declared);
+            if (declared is not null)
+            {
+                evidence.Add(new GraphEvidence(snapshotId, null, declared.Id, "connections", description));
+                return;
+            }
+
+            var existing = edges.FirstOrDefault(edge => edge.SourceNodeId == source.Id && edge.TargetNodeId == target.Id
+                && edge.Port == port && edge.Protocol == "tcp" && edge.Kind == GraphEdgeKind.Observed);
+            var observed = existing ?? new GraphEdge(snapshotId, source.Id, target.Id, GraphEdgeKind.Observed, port, "tcp");
+            if (existing is null) edges.Add(observed);
+            evidence.Add(new GraphEvidence(snapshotId, null, observed.Id, "connections", description));
+        }
+
+        GraphNode AddObservedUnknown(Guid serverId, string address, int port) =>
+            AddNode($"unknown:observed:{address}:{port}", GraphNodeKind.Unknown, "Unknown", null, serverId,
+                new { Address = address, Port = port, Reason = "Remote endpoint was observed but is not inventoried." });
+
+        static bool ListenerAddressMatches(string listenerAddress, string connectionAddress) =>
+            listenerAddress is "*" or "0.0.0.0" or "::" || string.Equals(listenerAddress.Trim('%'), connectionAddress.Trim('%'), StringComparison.OrdinalIgnoreCase);
+
+        bool TryGetOwnerServerId(string key, out Guid id)
+        {
+            id = Guid.Empty;
+            var separator = key.IndexOf(':');
+            return separator >= 0 && Guid.TryParseExact(key[(separator + 1)..].Split(':', 2)[0], "N", out id);
+        }
+
+        DockerContainerInfo? TryGetContainer(ServerDiscoveryData data, string ownerKey)
+        {
+            var separator = ownerKey.IndexOf(':');
+            if (separator < 0) return null;
+            var remainder = ownerKey[(separator + 1)..];
+            var parts = remainder.Split(':', 2);
+            return parts.Length == 2 ? data.Docker?.Containers.FirstOrDefault(item => item.Name == parts[1]) : null;
+        }
+
+        static string GetContainerNodeKey(ServerDiscoveryData data, DockerContainerInfo container) =>
+            $"container:{data.Server.Id:N}:{container.Name}";
+
+        static string GetComposeServiceNodeKey(ServerDiscoveryData data, DockerContainerInfo container) =>
+            string.IsNullOrWhiteSpace(container.ComposeService)
+                ? GetContainerNodeKey(data, container)
+                : $"service:{data.Server.Id:N}:compose:{(string.IsNullOrWhiteSpace(container.ComposeProject) ? "default" : container.ComposeProject)}/{container.ComposeService}";
+
+        static bool IsTcpProtocol(string? protocol) => protocol is "tcp" or "http" or "https" or "grpc" or "grpcs";
 
         static bool IsDomainName(string value) => !string.IsNullOrWhiteSpace(value)
             && value != "_" && !value.StartsWith('~') && !value.Contains('$');

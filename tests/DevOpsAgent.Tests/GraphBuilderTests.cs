@@ -78,6 +78,28 @@ public sealed class GraphBuilderTests
         Assert.Null(await repository.GetAsync(Guid.NewGuid(), GraphView.Service, CancellationToken.None));
     }
 
+    [Fact]
+    public async Task GraphRepositoryMarksDeclaredEdgeAsBothWhenObservedEvidenceExists()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var serverId = Guid.NewGuid();
+        var snapshot = new Snapshot([serverId], DateTimeOffset.UtcNow);
+        database.Context.Snapshots.Add(snapshot);
+        await database.Context.SaveChangesAsync();
+        var source = new GraphNode(snapshot.Id, "host:source", GraphNodeKind.Host, "source", null, serverId, "{}");
+        var target = new GraphNode(snapshot.Id, "service:target", GraphNodeKind.Service, "target", source.Id, serverId, "{}");
+        var declared = new GraphEdge(snapshot.Id, source.Id, target.Id, GraphEdgeKind.Declared, 5432, "tcp");
+        var evidence = new GraphEvidence(snapshot.Id, null, declared.Id, "connections", "Observed socket pair.");
+        var repository = new GraphRepository(database.Context);
+
+        await repository.SaveAsync(snapshot.Id, new GraphBuildResult([source, target], [declared], [], [evidence]), CancellationToken.None);
+        var graph = await repository.GetAsync(snapshot.Id, GraphView.Service, CancellationToken.None);
+
+        Assert.NotNull(graph);
+        Assert.Equal("Both", Assert.Single(graph!.Edges).Data.GetProperty("kind").GetString());
+        Assert.Equal("Observed socket pair.", Assert.Single(graph.Evidence).Description);
+    }
+
     private static IReadOnlyList<ServerDiscoveryData> ThreeServerFixtures()
     {
         var addresses = Fixture("host-ip-addr.json");

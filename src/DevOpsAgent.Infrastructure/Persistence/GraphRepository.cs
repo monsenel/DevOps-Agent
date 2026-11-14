@@ -54,6 +54,8 @@ public sealed class GraphRepository(AppDbContext dbContext) : IGraphRepository
                 ((item.NodeId != null && nodeIds.Contains(item.NodeId.Value)) ||
                  (item.EdgeId != null && edgeIds.Contains(item.EdgeId.Value))))
             .ToArrayAsync(cancellationToken);
+        var observedEdgeIds = evidenceRows.Where(item => item.EdgeId is not null && item.Collector == "connections")
+            .Select(item => item.EdgeId!.Value).ToHashSet();
 
         return new GraphSnapshotDto(
             snapshotId,
@@ -73,7 +75,7 @@ public sealed class GraphRepository(AppDbContext dbContext) : IGraphRepository
                 id = edge.Id.ToString("N"),
                 source = edge.SourceNodeId.ToString("N"),
                 target = edge.TargetNodeId.ToString("N"),
-                kind = edge.Kind.ToString(),
+                kind = edge.Kind == GraphEdgeKind.Declared && observedEdgeIds.Contains(edge.Id) ? "Both" : edge.Kind.ToString(),
                 port = edge.Port,
                 protocol = edge.Protocol
             }))).ToArray(),

@@ -8,7 +8,8 @@ public sealed record ServerDiscoveryData(
     ListenerDiscoveryResult? Listeners,
     DockerDiscoveryResult? Docker,
     SystemdDiscoveryResult? Systemd,
-    NginxDiscoveryResult? Nginx = null);
+    NginxDiscoveryResult? Nginx = null,
+    ConnectionDiscoveryResult? Connections = null);
 
 public sealed record GraphBuildResult(
     IReadOnlyList<DevOpsAgent.Domain.Graph.GraphNode> Nodes,

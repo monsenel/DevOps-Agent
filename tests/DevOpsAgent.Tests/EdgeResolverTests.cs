@@ -133,7 +133,7 @@ public sealed class EdgeResolverTests
                 Node("upstream-id", "Service", "upstream · api_pool"), Node("api-id", "Service", "api"),
                 Node("db-id", "Service", "postgres"), Node("other-id", "Domain", "other.example.test")],
             [Edge("domain-edge", "domain-id", "block-id", "Declared"), Edge("block-edge", "block-id", "upstream-id", "Declared"),
-                Edge("api-edge", "upstream-id", "api-id", "Declared"), Edge("db-edge", "api-id", "db-id", "Observed"),
+                Edge("api-edge", "upstream-id", "api-id", "Both"), Edge("db-edge", "api-id", "db-id", "Observed"),
                 Edge("other-edge", "other-id", "db-id", "Declared")], [], []);
 
         var result = GraphTraceResolver.Resolve(graph, "https://API.example.test/v1/items?active=true");
@@ -145,6 +145,55 @@ public sealed class EdgeResolverTests
         Assert.Equal(new[] { "domain-edge", "block-edge", "api-edge", "db-edge" }.OrderBy(value => value),
             result.EdgeIds.OrderBy(value => value));
         Assert.Null(GraphTraceResolver.Resolve(graph, "missing.example.test"));
+    }
+
+    [Fact]
+    public void GraphBuilder_DirectsObservedSocketTowardKnownListenerAndKeepsSocketEvidence()
+    {
+        var collectedAt = DateTimeOffset.Parse("2026-11-14T08:30:00Z");
+        var source = Data("client", host: Host("10.0.0.1")) with
+        {
+            Connections = new ConnectionDiscoveryResult(
+                [new EstablishedConnectionInfo("host", null, "tcp", "ESTAB", "10.0.0.1", 50123, "10.0.0.2", 5432)],
+                [], collectedAt)
+        };
+        var target = Data("database", host: Host("10.0.0.2"), listeners: new ListenerDiscoveryResult(
+            [new ListenerInfo("tcp", "LISTEN", "0.0.0.0", 5432, null, "postgres", 52)]));
+
+        var graph = new GraphBuilder().Build(Guid.NewGuid(), [source, target]);
+        var sourceNode = graph.Nodes.Single(node => node.Key == $"host:{source.Server.Id:N}");
+        var targetService = graph.Nodes.Single(node => node.Key == $"service:{target.Server.Id:N}:process:postgres");
+        var observed = Assert.Single(graph.Edges, edge => edge.Kind == GraphEdgeKind.Observed
+            && edge.SourceNodeId == sourceNode.Id && edge.TargetNodeId == targetService.Id);
+        var evidence = Assert.Single(graph.Evidence, item => item.EdgeId == observed.Id);
+
+        Assert.Equal(5432, observed.Port);
+        Assert.Equal("tcp", observed.Protocol);
+        Assert.Contains("seen-at 2026-11-14T08:30:00.0000000+00:00", evidence.Description);
+        Assert.Contains("10.0.0.1:50123 ↔ 10.0.0.2:5432", evidence.Description);
+    }
+
+    [Fact]
+    public void GraphBuilder_MapsContainerNamespaceClientAndShowsCapabilityNotesOnHost()
+    {
+        var client = Data("api-host", docker: Docker(Container("api", "sample/api", "prod", "api",
+            Endpoint("private", "172.18.0.4", "api")))) with
+        {
+            Connections = new ConnectionDiscoveryResult(
+                [new EstablishedConnectionInfo("container", "api", "tcp", "ESTAB", "172.18.0.4", 45000, "10.0.0.2", 5432)],
+                ["Container network connections were skipped because passwordless sudo is unavailable."])
+        };
+        var database = Data("database", host: Host("10.0.0.2"), listeners: new ListenerDiscoveryResult(
+            [new ListenerInfo("tcp", "LISTEN", "0.0.0.0", 5432, null, "postgres", 52)]));
+
+        var graph = new GraphBuilder().Build(Guid.NewGuid(), [client, database]);
+        var apiService = graph.Nodes.Single(node => node.Key == $"service:{client.Server.Id:N}:compose:prod/api");
+        var databaseService = graph.Nodes.Single(node => node.Key == $"service:{database.Server.Id:N}:process:postgres");
+
+        Assert.Contains(graph.Edges, edge => edge.Kind == GraphEdgeKind.Observed
+            && edge.SourceNodeId == apiService.Id && edge.TargetNodeId == databaseService.Id);
+        Assert.Contains(graph.Evidence, item => item.NodeId == graph.Nodes.Single(node => node.Key == $"host:{client.Server.Id:N}").Id
+            && item.Description.Contains("passwordless sudo is unavailable", StringComparison.Ordinal));
     }
 
     private static ServerDiscoveryData Data(string name, HostDiscoveryResult? host = null,

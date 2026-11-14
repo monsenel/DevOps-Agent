@@ -7,17 +7,31 @@
 ## Current
 
 - **Task:** T4.1 Live connections
-- **Status:** in-progress
+- **Status:** done
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
 What is done so far:
 - T3.3 implementation is committed as `wip(T3.3): trace evidence UI`; J3's real-server acceptance is blocked by missing authorized SSH targets and pinned host keys.
+- T4.1 adds `ss -tnH state established` collection on hosts and sudo-gated container network namespaces, deterministic fixture parsing, timestamped socket-pair evidence, listener-directed observed edges, and declared+observed edge classification. Without sudo, container namespace skips appear as host evidence. Build is clean; 45/45 tests pass.
 What is next (exact next step):
-- Read DSC-6 and DESIGN §7, inspect collector/graph integration, then implement the read-only host/container established-connection collector and observed-edge ownership mapping with fixture tests.
+- Read the T4.2 requirements and existing server add flow; implement Unknown node detail and the prefilled add-server/discover-and-merge flow.
 Files touched:
 - `docs/PROGRESS.md`
+- `src/DevOpsAgent.Application/Discovery/ConnectionDiscoveryResult.cs`
+- `src/DevOpsAgent.Application/Discovery/GraphBuildInput.cs`
+- `src/DevOpsAgent.Application/Discovery/DiscoveryService.cs`
+- `src/DevOpsAgent.Application/Discovery/GraphBuilder.cs`
+- `src/DevOpsAgent.Infrastructure/Collectors/ConnectionCollector.cs`
+- `src/DevOpsAgent.Infrastructure/Collectors/ConnectionCollectorParser.cs`
+- `src/DevOpsAgent.Infrastructure/Persistence/GraphRepository.cs`
+- `src/DevOpsAgent.Infrastructure/Persistence/PersistenceServiceCollectionExtensions.cs`
+- `src/DevOpsAgent.Web/wwwroot/js/graph.js`
+- `tests/DevOpsAgent.Tests/ConnectionCollectorTests.cs`
+- `tests/DevOpsAgent.Tests/Fixtures/ss-established.txt`
+- `tests/DevOpsAgent.Tests/EdgeResolverTests.cs`
+- `tests/DevOpsAgent.Tests/GraphBuilderTests.cs`
 Gotchas found:
 - T1.2 live direct/jump SSH verification remains deferred by owner direction; its status stays blocked.
 - T2.7's real two-server discovery criterion cannot be verified until authorized targets and pinned keys are configured; the browser check used a temporary synthetic persisted graph.
@@ -63,7 +77,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T3.1 | nginx parser | done | `feat(T3.1): nginx parser` |
 | T3.2 | Edge resolution | done | `feat(T3.2): nginx edge resolution` |
 | T3.3 | Evidence panel and Trace | blocked | `wip(T3.3): trace evidence UI` |
-| T4.1 | Live connections | in-progress | |
+| T4.1 | Live connections | done | `feat(T4.1): observed connections` |
 | T4.2 | Unknown nodes | todo | |
 | T4.3 | Drift and scheduled discovery | todo | |
 | T5.1 | Metric poller | todo | |
@@ -134,3 +148,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T3.3 · started
 - 2026-11-14 · Codex / GPT-6 · resumed T3.3 · edge evidence, trace graph and path highlighting implemented; build clean, 40/40 tests pass, light/dark UI checked; real-server J3 verification blocked
 - 2026-11-14 · Codex / GPT-6 · T4.1 · started after deferring T3.3's real-server acceptance
+- 2026-11-14 · Codex / GPT-6 · T4.1 · host/container connection parsing, observed-edge ownership and evidence; build clean, 45/45 tests pass

@@ -22,7 +22,7 @@ public static class GraphTraceResolver
         if (startId is null) return null;
 
         var outgoing = graph.Edges.Select(edge => edge.Data)
-            .Where(edge => ReadString(edge, "kind") is "Declared" or "Observed" or "Inferred")
+            .Where(edge => ReadString(edge, "kind") is "Declared" or "Observed" or "Both" or "Inferred")
             .Select(edge => (Data: edge, Source: ReadString(edge, "source"), Target: ReadString(edge, "target")))
             .Where(edge => edge.Source is not null && edge.Target is not null)
             .GroupBy(edge => edge.Source!, StringComparer.OrdinalIgnoreCase)

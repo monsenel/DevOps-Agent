@@ -52,7 +52,9 @@ function applyStyles() {
             "font-family": c.mono, "font-size": 10, "color": c.muted, "text-background-opacity": 0,
             "text-rotation": "autorotate"
         } },
+        { selector: "edge[kind = 'Declared']", style: { "line-style": "dashed", "line-dash-pattern": [2, 4], "opacity": 0.5 } },
         { selector: "edge[kind = 'Observed']", style: { "line-style": "dashed", "line-dash-pattern": [5, 4], "line-color": c.warn, "target-arrow-color": c.warn } },
+        { selector: "edge[kind = 'Both']", style: { "line-style": "solid", "opacity": 1 } },
         { selector: "edge:selected", style: { "width": 2.5, "line-color": c.accent, "target-arrow-color": c.accent, "color": c.ink } },
         { selector: "node:selected", style: { "border-width": 2, "border-color": c.accent } },
         { selector: "node.traced", style: { "border-width": 2, "border-color": c.accent } },

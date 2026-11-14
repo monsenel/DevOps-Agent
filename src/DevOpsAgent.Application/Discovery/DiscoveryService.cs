@@ -88,7 +88,8 @@ public sealed class DiscoveryService(
                 GetPreviousResult<ListenerDiscoveryResult>(context, "listeners"),
                 GetPreviousResult<DockerDiscoveryResult>(context, "docker"),
                 GetPreviousResult<SystemdDiscoveryResult>(context, "systemd"),
-                GetPreviousResult<NginxDiscoveryResult>(context, "nginx"))).ToArray());
+                GetPreviousResult<NginxDiscoveryResult>(context, "nginx"),
+                GetPreviousResult<ConnectionDiscoveryResult>(context, "connections"))).ToArray());
             await graphRepository.SaveAsync(snapshot.Id, graph, cancellationToken);
             await snapshotRepository.CompleteAsync(snapshot, runs.ToArray(), timeProvider.GetUtcNow(),
                 succeededServers, failedServers, cancelled: false, cancellationToken);
