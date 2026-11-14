@@ -12,7 +12,7 @@
 T5.2 is complete: health check CRUD and EF persistence; graph-based HTTPS and TCP suggestions; scheduled HTTP, HTTPS/TLS-expiry, and TCP probes; server detail status UI. Build clean with 0 warnings/errors and 87/87 tests pass. Migration applied in isolated SQLite; page verified with seeded status in both themes and at a 390px viewport.
 ## WIP notes
 
-
+T5.3 exact next step: inspect metric rollup, latest discovery graph, health-check, and alert page/sidebar contracts; implement rule evaluation with de-duplication, acknowledge/resolve transitions and automatic recovery; add isolated tests and UI; run build/tests. Live container-stop acceptance requires an authorized test server.
 
 ## Blockers
 
@@ -168,3 +168,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · refreshed Graphify after T6.5; 5,591 nodes, 19,025 edges, 291 communities; fixed one C# parser ambiguity and reverified build/tests
 
 - 2026-11-14 · Codex / GPT-6 · resumed T5.2 · health checks implemented; build clean, 87/87 tests pass, migration applied in isolated SQLite, detail UI verified in light/dark and 390px; started T5.3
+- 2026-11-14 · Codex / GPT-6 · started T5.3 · inspect metric/discovery/health contracts, then implement deduplicated alert lifecycle and UI; live container test needs an authorized host
