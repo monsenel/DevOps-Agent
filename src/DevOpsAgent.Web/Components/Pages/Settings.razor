@@ -641,6 +641,7 @@
         _message = null;
         try
         {
+            var hadStoredKey = _hasSavedApiKey && string.IsNullOrWhiteSpace(_form.ApiKey);
             var input = new LlmProviderInput(_form.Name, _form.Type, _form.BaseUrl, _form.Model,
                 _form.ContextWindow, _form.Temperature, _form.TimeoutSeconds, _form.IsDefault,
                 _form.NativeToolCallingEnabled, _form.StreamingEnabled, _form.RedactSecretsBeforeSending, _form.ApiKey);
@@ -657,7 +658,9 @@
             _hasSavedApiKey = saved.HasApiKey;
             _form.ApiKey = string.Empty;
             await LoadProvidersAsync();
-            _message = "Provider saved.";
+            _message = hadStoredKey && !saved.HasApiKey
+                ? "Provider saved. The stored API key was removed because the base URL changed; enter the key again."
+                : "Provider saved.";
             return saved;
         }
         catch (ArgumentException exception)

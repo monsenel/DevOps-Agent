@@ -39,6 +39,14 @@ public sealed class ProviderService(
         }
 
         var protectedKey = string.IsNullOrWhiteSpace(input.ApiKey) ? null : secretProtector.Protect(input.ApiKey);
+        // A stored key belongs to the URL it was saved for. Pointing the provider elsewhere without entering a new key
+        // would send the old credential to the new host, so the key is dropped and must be entered again.
+        if (protectedKey is null && !string.Equals(NormalizeBaseUrl(provider.BaseUrl), NormalizeBaseUrl(input.BaseUrl),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            provider.ClearApiKey();
+        }
+
         provider.Update(
             input.Name.Trim(), input.Type, NormalizeBaseUrl(input.BaseUrl), input.Model.Trim(), input.ContextWindow,
             input.Temperature, input.TimeoutSeconds, input.NativeToolCallingEnabled, input.StreamingEnabled,

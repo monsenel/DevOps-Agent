@@ -69,6 +69,8 @@ public sealed class LlmProvider
         }
     }
 
+    public void ClearApiKey() => ProtectedApiKey = null;
+
     public void MarkTested(ProviderTestResult result)
     {
         LastTestSucceeded = result.Reachable;

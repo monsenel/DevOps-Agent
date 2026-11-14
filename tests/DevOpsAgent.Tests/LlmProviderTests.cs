@@ -98,6 +98,32 @@ public sealed class LlmProviderTests
         Assert.Equal("typed-key", lister.Calls[2].ApiKey);
     }
 
+    [Fact]
+    public async Task UpdatingTheBaseUrlWithoutANewKeyDropsTheStoredKey()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var repository = new LlmProviderRepository(database.Context);
+        var secrets = new TestSecretProtector();
+        var service = new ProviderService(repository, secrets, new UnusedChatClientFactory(), new RecordingModelLister(), TimeProvider.System);
+        var saved = await service.CreateAsync(Input("Local", "secret-a", isDefault: true), CancellationToken.None);
+
+        // Same URL (modulo a trailing slash) and a blank key field keeps the key.
+        var same = await service.UpdateAsync(saved.Id, Input("Local", null, isDefault: true), CancellationToken.None);
+        Assert.True(same!.HasApiKey);
+
+        // A different URL with a blank key field must not carry the credential over to the new host.
+        var moved = await service.UpdateAsync(saved.Id, Input("Local", null, isDefault: true) with { BaseUrl = "https://attacker.example/v1" },
+            CancellationToken.None);
+        Assert.False(moved!.HasApiKey);
+        Assert.Null((await repository.GetAsync(saved.Id, CancellationToken.None))!.ProtectedApiKey);
+
+        // A newly typed key is stored for the new URL.
+        var rekeyed = await service.UpdateAsync(saved.Id, Input("Local", "secret-b", isDefault: true) with { BaseUrl = "https://other.example/v1" },
+            CancellationToken.None);
+        Assert.True(rekeyed!.HasApiKey);
+        Assert.Equal("secret-b", secrets.Unprotect((await repository.GetAsync(saved.Id, CancellationToken.None))!.ProtectedApiKey!));
+    }
+
     [Theory]
     [InlineData("http://localhost:11434/v1", true)]
     [InlineData("http://127.0.0.1:1234/v1", true)]
