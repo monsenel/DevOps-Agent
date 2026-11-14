@@ -38,6 +38,48 @@ public sealed class MetricServiceTests
         Assert.DoesNotContain(detail.Latest, item => item.Name.StartsWith('_'));
     }
 
+    [Fact]
+    public async Task PollPersistsEveryReachableServerEvenWhenAnotherFailsAndStillSurfacesTheFailure()
+    {
+        await using var database = await SqliteTestDatabase.CreateAsync();
+        var inventory = Enumerable.Range(0, 12)
+            .Select(index => new Server($"metrics-{index}", $"metrics-{index}.internal", 22, "devops", "id_ed25519", "staging")).ToArray();
+        database.Context.Servers.AddRange(inventory);
+        await database.Context.SaveChangesAsync();
+        var runner = new DelayedSshRunner(inventory[3].Id);
+        var service = new MetricService(new ServerRepository(database.Context), new MetricRepository(database.Context), runner,
+            new MutableTimeProvider(new DateTimeOffset(2026, 11, 14, 12, 0, 0, TimeSpan.Zero)));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.PollAsync(CancellationToken.None));
+
+        var stored = await database.Context.MetricSamples.Select(sample => sample.ServerId).Distinct().ToListAsync();
+        Assert.Equal(11, stored.Count);
+        Assert.DoesNotContain(inventory[3].Id, stored);
+        Assert.True(runner.MaximumConcurrent > 1);
+    }
+
+    private sealed class DelayedSshRunner(Guid failingServerId) : ISshRunner
+    {
+        private int _active;
+        private int _maximumConcurrent;
+        public int MaximumConcurrent => _maximumConcurrent;
+
+        public async Task<RemoteCommandResult> RunAsync(Guid serverId, string command, SshRunOptions options, CancellationToken cancellationToken)
+        {
+            var active = Interlocked.Increment(ref _active);
+            int observed;
+            while (active > (observed = _maximumConcurrent) && Interlocked.CompareExchange(ref _maximumConcurrent, active, observed) != observed) { }
+            try
+            {
+                await Task.Delay(20, cancellationToken);
+                if (serverId == failingServerId) throw new InvalidOperationException("unreachable");
+                var output = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", "metrics-sample-1.txt"), cancellationToken);
+                return new RemoteCommandResult(0, output, string.Empty, TimeSpan.FromMilliseconds(10));
+            }
+            finally { Interlocked.Decrement(ref _active); }
+        }
+    }
+
     private sealed class FixtureSshRunner(Guid expectedServerId) : ISshRunner
     {
         public List<string> Commands { get; } = [];

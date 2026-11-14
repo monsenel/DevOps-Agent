@@ -12,28 +12,50 @@ public sealed class MetricService(
     public async Task PollAsync(CancellationToken cancellationToken)
     {
         var inventory = await servers.ListAsync(cancellationToken);
+
+        // The repositories share one scoped DbContext, which is not thread-safe: only the SSH work runs in parallel,
+        // and every database read and write happens sequentially before or after it.
+        var previousByServer = new Dictionary<Guid, IReadOnlyList<MetricSample>>();
+        foreach (var server in inventory)
+        {
+            previousByServer[server.Id] = await metrics.GetLatestAsync(server.Id, cancellationToken);
+        }
+
         using var semaphore = new SemaphoreSlim(8);
-        await Task.WhenAll(inventory.Select(async server =>
+        var collected = await Task.WhenAll(inventory.Select(async server =>
         {
             await semaphore.WaitAsync(cancellationToken);
             try
             {
                 var result = await sshRunner.RunAsync(server.Id, MetricsParser.CollectionCommand,
                     new SshRunOptions(TimeSpan.FromSeconds(30)), cancellationToken);
-                if (result.ExitCode != 0) return;
-
-                var now = timeProvider.GetUtcNow();
-                var latest = await metrics.GetLatestAsync(server.Id, cancellationToken);
-                var previous = ToPrevious(latest);
-                TimeSpan? elapsed = latest.Count == 0 ? null : now - latest.Max(item => item.AtUtc);
-                var parsed = MetricsParser.Parse(result.StandardOutput, previous, elapsed);
-                var samples = parsed.Values.Select(item => new MetricSample(server.Id, item.Key, item.Value, now)).ToList();
-                samples.AddRange(parsed.CpuCounters.Select(item => new MetricSample(server.Id, $"_cpu_{item.Key}", item.Value, now)));
-                samples.AddRange(parsed.NetworkCounters.Select(item => new MetricSample(server.Id, $"_net_{Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(item.Key))}", item.Value, now)));
-                if (samples.Count > 0) await metrics.AddSamplesAsync(samples, cancellationToken);
+                return (Server: server, Result: (RemoteCommandResult?)result, Error: (Exception?)null);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                return (Server: server, Result: (RemoteCommandResult?)null, Error: (Exception?)exception);
             }
             finally { semaphore.Release(); }
         }));
+
+        foreach (var (server, result, _) in collected)
+        {
+            if (result is null || result.ExitCode != 0) continue;
+
+            var now = timeProvider.GetUtcNow();
+            var latest = previousByServer[server.Id];
+            var previous = ToPrevious(latest);
+            TimeSpan? elapsed = latest.Count == 0 ? null : now - latest.Max(item => item.AtUtc);
+            var parsed = MetricsParser.Parse(result.StandardOutput, previous, elapsed);
+            var samples = parsed.Values.Select(item => new MetricSample(server.Id, item.Key, item.Value, now)).ToList();
+            samples.AddRange(parsed.CpuCounters.Select(item => new MetricSample(server.Id, $"_cpu_{item.Key}", item.Value, now)));
+            samples.AddRange(parsed.NetworkCounters.Select(item => new MetricSample(server.Id, $"_net_{Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(item.Key))}", item.Value, now)));
+            if (samples.Count > 0) await metrics.AddSamplesAsync(samples, cancellationToken);
+        }
+
+        // A failing server must not stop the others from being stored; the first failure is still surfaced to the poller.
+        var firstError = collected.Select(item => item.Error).FirstOrDefault(error => error is not null);
+        if (firstError is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(firstError).Throw();
     }
 
     public async Task<ServerMetrics?> GetServerMetricsAsync(Guid serverId, CancellationToken cancellationToken)
