@@ -6,10 +6,10 @@
 
 ## Current
 
-- **Task:** T5.3 Alert engine and Alerts page
-- **Status:** done
+- **Task:** T5.4 Notifications
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
-T5.3 is complete. On the owner-selected test container, the alert opened within 2 minutes after stop, the container was restarted successfully, and the alert auto-resolved.
+T5.3 live acceptance passed and is committed. T5.4 start: inspect existing AppSetting, Data Protection, alert lifecycle, and Settings UI patterns. Next step: implement Telegram and ntfy notification settings, severity threshold, test-send action, and open/resolve delivery.
 ## WIP notes
 
 
@@ -64,7 +64,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T5.1 | Metric poller | done | `feat(T5.1): metric polling and server detail` |
 | T5.2 | Health checks | done | `feat(T5.2): scheduled health checks` |
 | T5.3 | Alert engine and Alerts page | done | `feat(T5.3): complete alert engine and live acceptance` |
-| T5.4 | Notifications | todo | |
+| T5.4 | Notifications | in-progress | |
 | T5.5 | Overview with real data | todo | |
 | T6.1 | Tool registry and execution modes | done | `feat(T6.1): tool policies and approvals` |
 | T6.2 | Action log | done | `feat(T6.2): approved action execution and log` |
@@ -180,3 +180,5 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T5.3 · confirmed owner-provided `id_rsa` is visible in server form; `known_hosts` not yet present; next add verified Docker host pin and save server
 
 - 2026-11-14 · Codex / GPT-6 · T5.3 · live acceptance passed: selected container alert opened within 2 minutes, container restarted successfully, alert auto-resolved; Add server key validation fixed; build clean, 90/90 tests
+
+- 2026-11-14 · Codex / GPT-6 · started T5.4 · inspect notification contracts, settings persistence, alert lifecycle, and UI conventions; then implement Telegram/ntfy configuration and test delivery
