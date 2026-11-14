@@ -50,10 +50,20 @@ public static partial class ChatContentRedactor
     // bare value. Every quantifier is bounded and the regexes carry a match timeout.
     [GeneratedRegex(
         "(?<name>[\"']?[A-Za-z][A-Za-z0-9_.\\-]{0,127})[\"']?[ \\t]{0,8}[:=][ \\t]{0,8}"
-        + "(?<scheme>(?:Bearer|Basic)[ \\t]{1,8})?"
+        + "(?<scheme>(?i:Bearer|Basic|Token|ApiKey)[ \\t]{1,8})?"
         + "(?:\"(?<dq>(?:[^\"\\\\\\r\\n]|\\\\.){0,4096})\"|'(?<sq>[^'\\r\\n]{0,4096})'|(?<bare>[^\\s,;\"']{1,4096})|(?<loose>[\"'][^\\r\\n]{0,4096}))",
         RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 2000)]
     private static partial Regex Assignment();
+
+    // Free-text bearer credentials (logs, curl output) are masked even without an Authorization name.
+    [GeneratedRegex("(?<scheme>\\bBearer)[ \\t]{1,8}[A-Za-z0-9._~+/=\\-]{16,4096}",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 2000)]
+    private static partial Regex BearerToken();
+
+    // Digest credentials are a list of quoted parameters, so the rest of the header line is masked.
+    [GeneratedRegex("(?<head>Authorization[ \\t]{0,8}[:=][ \\t]{0,8}\\\"?Digest)[ \\t]{1,8}[^\\r\\n]{1,4096}",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 2000)]
+    private static partial Regex DigestHeader();
 
     [GeneratedRegex("-----BEGIN [^-]{0,64}PRIVATE KEY-----[\\s\\S]{0,16384}?-----END [^-]{0,64}PRIVATE KEY-----",
         RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 2000)]
@@ -67,6 +77,8 @@ public static partial class ChatContentRedactor
         try
         {
             value = PrivateKey().Replace(value, "[REDACTED PRIVATE KEY]");
+            value = DigestHeader().Replace(value, "${head} [REDACTED]");
+            value = BearerToken().Replace(value, "${scheme} [REDACTED]");
             return Assignment().Replace(value, Mask);
         }
         catch (RegexMatchTimeoutException)
