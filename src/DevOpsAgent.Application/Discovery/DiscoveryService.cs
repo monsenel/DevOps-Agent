@@ -21,9 +21,38 @@ public sealed class DiscoveryService(
         IProgress<DiscoveryProgress>? progress,
         CancellationToken cancellationToken)
     {
-        var servers = await serverRepository.ListAsync(cancellationToken);
+        return await RunInternalAsync(null, null, progress, cancellationToken);
+    }
+
+    public async Task<Snapshot> RunServerAndMergeAsync(
+        Guid serverId,
+        IProgress<DiscoveryProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        var latestSnapshot = await snapshotRepository.GetLatestAsync(cancellationToken);
+        return await RunInternalAsync(serverId, latestSnapshot?.Id, progress, cancellationToken);
+    }
+
+    private async Task<Snapshot> RunInternalAsync(
+        Guid? onlyServerId,
+        Guid? mergeSnapshotId,
+        IProgress<DiscoveryProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        var allServers = await serverRepository.ListAsync(cancellationToken);
+        var servers = onlyServerId is Guid requestedServerId
+            ? allServers.Where(server => server.Id == requestedServerId).ToArray()
+            : allServers;
+        if (onlyServerId.HasValue && servers.Count == 0)
+        {
+            throw new ArgumentException("The requested server is not in the inventory.", nameof(onlyServerId));
+        }
+
+        var snapshotServerIds = mergeSnapshotId.HasValue
+            ? allServers.Select(server => server.Id).ToArray()
+            : servers.Select(server => server.Id).ToArray();
         var snapshot = await snapshotRepository.CreateAsync(
-            servers.Select(server => server.Id).ToArray(),
+            snapshotServerIds,
             timeProvider.GetUtcNow(),
             cancellationToken);
         progress?.Report(new DiscoveryProgress(snapshot.Id, DiscoveryProgressStage.Started,
@@ -90,7 +119,14 @@ public sealed class DiscoveryService(
                 GetPreviousResult<SystemdDiscoveryResult>(context, "systemd"),
                 GetPreviousResult<NginxDiscoveryResult>(context, "nginx"),
                 GetPreviousResult<ConnectionDiscoveryResult>(context, "connections"))).ToArray());
-            await graphRepository.SaveAsync(snapshot.Id, graph, cancellationToken);
+            if (mergeSnapshotId is Guid previousId)
+            {
+                await graphRepository.MergeAsync(snapshot.Id, previousId, graph, cancellationToken);
+            }
+            else
+            {
+                await graphRepository.SaveAsync(snapshot.Id, graph, cancellationToken);
+            }
             await snapshotRepository.CompleteAsync(snapshot, runs.ToArray(), timeProvider.GetUtcNow(),
                 succeededServers, failedServers, cancelled: false, cancellationToken);
         }

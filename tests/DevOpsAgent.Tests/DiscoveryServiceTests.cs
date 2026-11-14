@@ -70,6 +70,27 @@ public sealed class DiscoveryServiceTests
         Assert.All(runs, run => Assert.Equal(CollectorRunStatus.Succeeded, run.Status));
     }
 
+    [Fact]
+    public async Task RunServerAndMergeAsyncCollectsOnlyRequestedServerAndKeepsInventoryInSnapshot()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var existingServer = AddServer(database.Context, "existing");
+        var addedServer = AddServer(database.Context, "added");
+        var collector = new RecordingCollector();
+        var service = CreateService(database.Context, collector);
+        _ = await service.RunAsync(progress: null, CancellationToken.None);
+        collector.ServerIds.Clear();
+
+        var snapshot = await service.RunServerAndMergeAsync(addedServer.Id, progress: null, CancellationToken.None);
+        var snapshotServerIds = JsonSerializer.Deserialize<Guid[]>(snapshot.ServerIdsJson);
+
+        Assert.Equal([addedServer.Id], collector.ServerIds);
+        Assert.NotNull(snapshotServerIds);
+        Assert.Contains(existingServer.Id, snapshotServerIds!);
+        Assert.Contains(addedServer.Id, snapshotServerIds!);
+        Assert.Equal(SnapshotStatus.Completed, snapshot.Status);
+    }
+
     private static DiscoveryService CreateService(AppDbContext dbContext, params ICollector[] collectors) => new(
         new ServerRepository(dbContext),
         new SnapshotRepository(dbContext),
@@ -119,6 +140,22 @@ public sealed class DiscoveryServiceTests
 
         public CollectorResult Parse(CollectorOutput raw) =>
             new(JsonSerializer.SerializeToElement(new { text = raw.StandardOutput }));
+    }
+
+    private sealed class RecordingCollector : ICollector
+    {
+        public string Name => "recording";
+        public List<Guid> ServerIds { get; } = [];
+
+        public Task<bool> IsApplicableAsync(ServerContext context, CancellationToken cancellationToken) => Task.FromResult(true);
+
+        public Task<CollectorOutput> CollectAsync(ServerContext context, CancellationToken cancellationToken)
+        {
+            ServerIds.Add(context.Server.Id);
+            return Task.FromResult(new CollectorOutput("ok", string.Empty, 0, TimeSpan.Zero));
+        }
+
+        public CollectorResult Parse(CollectorOutput raw) => new();
     }
 
     private sealed class ServerSpecificCollector(Guid failingServerId) : ICollector

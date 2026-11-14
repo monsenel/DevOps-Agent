@@ -100,6 +100,52 @@ public sealed class GraphBuilderTests
         Assert.Equal("Observed socket pair.", Assert.Single(graph.Evidence).Description);
     }
 
+    [Fact]
+    public async Task GraphRepositoryMergeReplacesUnknownWithDiscoveredServiceAndRemapsEvidence()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var observerId = Guid.NewGuid();
+        var discoveredServerId = Guid.NewGuid();
+        var previousSnapshot = new Snapshot([observerId], DateTimeOffset.UtcNow);
+        var currentSnapshot = new Snapshot([observerId, discoveredServerId], DateTimeOffset.UtcNow);
+        database.Context.Snapshots.AddRange(previousSnapshot, currentSnapshot);
+        await database.Context.SaveChangesAsync();
+
+        var observer = new GraphNode(previousSnapshot.Id, "host:observer", GraphNodeKind.Host,
+            "observer", null, observerId, "{}");
+        var unknown = new GraphNode(previousSnapshot.Id, "unknown:10.0.0.2:5432", GraphNodeKind.Unknown,
+            "Unknown", null, observerId, "{\"Address\":\"10.0.0.2\",\"Port\":5432}");
+        var observed = new GraphEdge(previousSnapshot.Id, observer.Id, unknown.Id, GraphEdgeKind.Observed, 5432, "tcp");
+        var observedEvidence = new GraphEvidence(previousSnapshot.Id, null, observed.Id,
+            "connections", "10.0.0.1:48000 → 10.0.0.2:5432");
+        var repository = new GraphRepository(database.Context);
+        await repository.SaveAsync(previousSnapshot.Id,
+            new GraphBuildResult([observer, unknown], [observed], [], [observedEvidence]), CancellationToken.None);
+
+        var discoveredHost = new GraphNode(currentSnapshot.Id, "host:database", GraphNodeKind.Host,
+            "database", null, discoveredServerId, "{\"Addresses\":[\"10.0.0.2\"]}");
+        var discoveredService = new GraphNode(currentSnapshot.Id, "service:postgres", GraphNodeKind.Service,
+            "postgres", discoveredHost.Id, discoveredServerId, "{}");
+        var listener = new GraphListener(currentSnapshot.Id, discoveredService.Id, "0.0.0.0", 5432,
+            "tcp", "postgres", 430);
+        await repository.MergeAsync(currentSnapshot.Id, previousSnapshot.Id,
+            new GraphBuildResult([discoveredHost, discoveredService], [], [listener], []), CancellationToken.None);
+
+        var merged = await repository.GetAsync(currentSnapshot.Id, GraphView.Service, CancellationToken.None);
+
+        Assert.NotNull(merged);
+        Assert.DoesNotContain(merged!.Nodes, node => node.Data.GetProperty("kind").GetString() == nameof(GraphNodeKind.Unknown));
+        Assert.Contains(merged.Nodes, node => node.Data.GetProperty("label").GetString() == "observer");
+        Assert.Contains(merged.Nodes, node => node.Data.GetProperty("label").GetString() == "database");
+        var mergedEdge = Assert.Single(merged.Edges);
+        Assert.Equal(5432, mergedEdge.Data.GetProperty("port").GetInt32());
+        Assert.Equal("service:postgres", merged.Nodes.Single(node =>
+            node.Data.GetProperty("id").GetString() == mergedEdge.Data.GetProperty("target").GetString())
+            .Data.GetProperty("key").GetString());
+        Assert.Contains(merged.Evidence, item => item.Collector == "connections"
+            && item.Description == "10.0.0.1:48000 → 10.0.0.2:5432");
+    }
+
     private static IReadOnlyList<ServerDiscoveryData> ThreeServerFixtures()
     {
         var addresses = Fixture("host-ip-addr.json");

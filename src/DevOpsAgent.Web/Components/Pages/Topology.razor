@@ -5,6 +5,7 @@
 @inject ISnapshotRepository SnapshotRepository
 @inject DiscoveryService Discovery
 @inject ServerService ServersService
+@inject NavigationManager Navigation
 @using System.Text.Json
 @using DevOpsAgent.Domain.Discovery
 @using DevOpsAgent.Application.Servers
@@ -156,6 +157,32 @@
                     }
                 </ul>
             }
+            @if (ReadString(selected, "kind") == "Unknown")
+            {
+                <h3>Connections</h3>
+                @if (SelectedConnections.Count > 0)
+                {
+                    <ul class="topology-detail-items">
+                        @foreach (var connection in SelectedConnections)
+                        {
+                            <li>
+                                <span>@connection.Direction @connection.PeerName</span>
+                                <span class="mono">@(connection.Port is null ? "port unknown" : $":{connection.Port}")</span>
+                            </li>
+                        }
+                    </ul>
+                }
+                else
+                {
+                    <p class="muted">No connecting graph edges are recorded for this endpoint.</p>
+                }
+                @if (TryGetProperty(selected, "attributes", out var unknownAttributes)
+                    && ReadValue(unknownAttributes, "address") is not null
+                    && ReadString(selected, "serverId") is not null)
+                {
+                    <button class="ui-button primary" type="button" @onclick="() => AddUnknownServerAsync(selected)">Add this server</button>
+                }
+            }
             @if (_selectedEvidence.Count > 0)
             {
                 <h3>Evidence</h3>
@@ -204,6 +231,15 @@
     private IReadOnlyList<string> _projects = [];
     private IReadOnlyList<GraphListenerDto> _selectedListeners = [];
     private IReadOnlyList<GraphEvidenceDto> _selectedEvidence = [];
+    private IReadOnlyList<UnknownConnection> SelectedConnections => _graph is null || _selected is not JsonElement selected
+        || !IsUnknown(selected) || ReadString(selected, "id") is not string unknownId
+        ? []
+        : _graph.Edges.Select(edge => edge.Data)
+            .Where(edge => ReadString(edge, "source") == unknownId || ReadString(edge, "target") == unknownId)
+            .Select(edge => ReadString(edge, "source") == unknownId
+                ? new UnknownConnection("Connects to", FindNodeName(ReadString(edge, "target") ?? "") ?? "Unknown endpoint", ReadValue(edge, "port"))
+                : new UnknownConnection("Connected from", FindNodeName(ReadString(edge, "source") ?? "") ?? "Unknown endpoint", ReadValue(edge, "port")))
+            .ToArray();
     private IReadOnlyList<JsonElement> VisibleEdges => _graph is null ? [] : _graph.Edges
         .Select(edge => edge.Data)
         .Where(edge => ReadString(edge, "source") is string source && ReadString(edge, "target") is string target
@@ -474,6 +510,19 @@
         ? Task.CompletedTask
         : _graphModule.InvokeVoidAsync("highlightTrace", _tracedNodeIds.ToArray(), _tracedEdgeIds.ToArray()).AsTask();
 
+    private Task AddUnknownServerAsync(JsonElement unknown)
+    {
+        if (!TryGetProperty(unknown, "attributes", out var attributes)
+            || ReadValue(attributes, "address") is not string address
+            || !Guid.TryParseExact(ReadString(unknown, "serverId"), "N", out var observerId))
+        {
+            return Task.CompletedTask;
+        }
+
+        Navigation.NavigateTo($"/servers?unknownHost={Uri.EscapeDataString(address)}&suggestedJumpServerId={observerId:N}");
+        return Task.CompletedTask;
+    }
+
     private async Task SelectNodeAsync(JsonElement node)
     {
         await SelectEntityAsync(node);
@@ -560,6 +609,8 @@
     private static bool IsEdge(JsonElement element) => ReadString(element, "source") is not null
         && ReadString(element, "target") is not null;
 
+    private static bool IsUnknown(JsonElement element) => string.Equals(ReadString(element, "kind"), "Unknown", StringComparison.OrdinalIgnoreCase);
+
     private static string PortLabel(JsonElement edge) => ReadString(edge, "port") is string port ? $":{port}" : string.Empty;
 
     private static bool TryGetProperty(JsonElement element, string property, out JsonElement value)
@@ -580,6 +631,8 @@
     }
 
     private static string Humanize(string text) => System.Text.RegularExpressions.Regex.Replace(text, "([a-z])([A-Z])", "$1 $2");
+
+    private sealed record UnknownConnection(string Direction, string PeerName, string? Port);
 
     private string? FindNodeName(string id) => _graph?.Nodes
         .Select(element => element.Data)

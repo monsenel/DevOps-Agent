@@ -7,33 +7,12 @@
 ## Current
 
 - **Task:** T4.2 Unknown nodes
-- **Status:** in-progress
+- **Status:** done
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
-What is done so far:
-- T4.1 is complete and committed as `feat(T4.1): observed connections`; build is clean and 45/45 tests pass.
-What is next (exact next step):
-- Read J2 steps 3–6 and inspect the Unknown node detail and server add/discovery flows; implement the add-server prefill, suggested jump host, targeted discovery, and snapshot graph merge.
-Files touched:
-- `docs/PROGRESS.md`
-- `src/DevOpsAgent.Application/Discovery/ConnectionDiscoveryResult.cs`
-- `src/DevOpsAgent.Application/Discovery/GraphBuildInput.cs`
-- `src/DevOpsAgent.Application/Discovery/DiscoveryService.cs`
-- `src/DevOpsAgent.Application/Discovery/GraphBuilder.cs`
-- `src/DevOpsAgent.Infrastructure/Collectors/ConnectionCollector.cs`
-- `src/DevOpsAgent.Infrastructure/Collectors/ConnectionCollectorParser.cs`
-- `src/DevOpsAgent.Infrastructure/Persistence/GraphRepository.cs`
-- `src/DevOpsAgent.Infrastructure/Persistence/PersistenceServiceCollectionExtensions.cs`
-- `src/DevOpsAgent.Web/wwwroot/js/graph.js`
-- `tests/DevOpsAgent.Tests/ConnectionCollectorTests.cs`
-- `tests/DevOpsAgent.Tests/Fixtures/ss-established.txt`
-- `tests/DevOpsAgent.Tests/EdgeResolverTests.cs`
-- `tests/DevOpsAgent.Tests/GraphBuilderTests.cs`
-Gotchas found:
-- T1.2 live direct/jump SSH verification remains deferred by owner direction; its status stays blocked.
-- T2.7's real two-server discovery criterion cannot be verified until authorized targets and pinned keys are configured; the browser check used a temporary synthetic persisted graph.
+No active WIP. T4.2 is complete.
 
 ## Blockers
 
@@ -77,7 +56,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T3.2 | Edge resolution | done | `feat(T3.2): nginx edge resolution` |
 | T3.3 | Evidence panel and Trace | blocked | `wip(T3.3): trace evidence UI` |
 | T4.1 | Live connections | done | `feat(T4.1): observed connections` |
-| T4.2 | Unknown nodes | in-progress | |
+| T4.2 | Unknown nodes | done | `feat(T4.2): unknown node expansion` |
 | T4.3 | Drift and scheduled discovery | todo | |
 | T5.1 | Metric poller | todo | |
 | T5.2 | Health checks | todo | |
@@ -149,3 +128,5 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T4.1 · started after deferring T3.3's real-server acceptance
 - 2026-11-14 · Codex / GPT-6 · T4.1 · host/container connection parsing, observed-edge ownership and evidence; build clean, 45/45 tests pass
 - 2026-11-14 · Codex / GPT-6 · T4.2 · started
+- 2026-11-14 · Codex / GPT-6 · resumed T4.2 · Unknown detail, prefilled inventory flow, targeted discovery/merge; build clean, 47/47 tests pass and both themes checked
+- 2026-11-14 · Codex / GPT-6 · T4.2 · complete; synthetic J2 flow verified, live SSH unavailable

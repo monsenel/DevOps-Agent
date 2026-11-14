@@ -1,6 +1,9 @@
 @page "/servers"
 @inject ServerService ServersService
 @inject ServerCapabilityService CapabilityService
+@inject DiscoveryService Discovery
+@inject NavigationManager Navigation
+@using Microsoft.AspNetCore.Components
 <PageTitle>Servers · DevOps Agent</PageTitle>
 
 <div class="page-stack">
@@ -95,6 +98,16 @@
             {
                 <div class="alert-message error" role="alert">@_formError</div>
             }
+            @if (!string.IsNullOrWhiteSpace(_unknownHostSuggestion))
+            {
+                <div class="topology-trace-message" role="status">
+                    Adding unknown endpoint <span class="mono">@_unknownHostSuggestion</span>.
+                    @if (!string.IsNullOrWhiteSpace(_suggestedJumpName))
+                    {
+                        <span> Suggested jump server: @_suggestedJumpName.</span>
+                    }
+                </div>
+            }
             <EditForm Model="_form" OnValidSubmit="SaveAsync">
                 <DataAnnotationsValidator />
                 <div class="inventory-form-grid">
@@ -159,7 +172,16 @@
                 </div>
                 <div class="dialog-actions">
                     <button class="ui-button secondary" type="button" @onclick="CloseForm">Cancel</button>
-                    <button class="ui-button primary" type="submit" disabled="@_saving">@(_saving ? "Saving…" : "Save server")</button>
+                    @if (!string.IsNullOrWhiteSpace(_unknownHostSuggestion))
+                    {
+                        <button class="ui-button primary" type="submit" disabled="@_saving" @onclick="() => _discoverAfterSave = true">
+                            @(_saving ? "Saving and discovering…" : "Save and discover this server")
+                        </button>
+                    }
+                    else
+                    {
+                        <button class="ui-button primary" type="submit" disabled="@_saving" @onclick="() => _discoverAfterSave = false">@(_saving ? "Saving…" : "Save server")</button>
+                    }
                 </div>
             </EditForm>
         </section>
@@ -291,6 +313,7 @@
     private Guid? _deleteId;
     private bool _formOpen;
     private bool _saving;
+    private bool _discoverAfterSave;
     private bool _hasPassphrase;
     private bool _testDialogOpen;
     private Guid? _testingId;
@@ -304,8 +327,30 @@
     private int _skippedWildcardCount;
     private string? _pageError;
     private string? _formError;
+    private string? _unknownHostSuggestion;
+    private string? _suggestedJumpName;
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    [SupplyParameterFromQuery(Name = "unknownHost")]
+    public string? UnknownHost { get; set; }
+
+    [SupplyParameterFromQuery(Name = "suggestedJumpServerId")]
+    public Guid? SuggestedJumpServerId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        if (string.IsNullOrWhiteSpace(UnknownHost)) return;
+
+        OpenCreate();
+        _unknownHostSuggestion = UnknownHost.Trim();
+        _form.Host = _unknownHostSuggestion;
+        _form.Name = MakeSuggestedServerName(_unknownHostSuggestion);
+        if (SuggestedJumpServerId is Guid jumpId && _servers.FirstOrDefault(server => server.Id == jumpId) is { } jumpServer)
+        {
+            _form.JumpServerId = jumpId;
+            _suggestedJumpName = jumpServer.Name;
+        }
+    }
 
     private async Task LoadAsync()
     {
@@ -319,7 +364,16 @@
         _hasPassphrase = false;
         _formError = null;
         _form = new ServerForm();
+        _discoverAfterSave = false;
+        _unknownHostSuggestion = null;
+        _suggestedJumpName = null;
         _formOpen = true;
+    }
+
+    private static string MakeSuggestedServerName(string host)
+    {
+        var name = System.Text.RegularExpressions.Regex.Replace(host.Trim(), "[^a-zA-Z0-9_-]+", "-").Trim('-');
+        return name.Length == 0 ? "unknown-server" : name[..Math.Min(name.Length, 120)];
     }
 
     private void OpenEdit(Guid id)
@@ -537,6 +591,7 @@
 
     private async Task SaveAsync()
     {
+        var discoverServer = _discoverAfterSave && !string.IsNullOrWhiteSpace(_unknownHostSuggestion);
         _saving = true;
         _formError = null;
         try
@@ -550,7 +605,25 @@
             }
             else
             {
-                _ = await ServersService.CreateAsync(input, CancellationToken.None);
+                var created = await ServersService.CreateAsync(input, CancellationToken.None);
+                _formOpen = false;
+                await LoadAsync();
+                if (discoverServer)
+                {
+                    try
+                    {
+                        _ = await Discovery.RunServerAndMergeAsync(created.Id, null, CancellationToken.None);
+                        Navigation.NavigateTo("/topology");
+                        return;
+                    }
+                    catch (Exception)
+                    {
+                        _pageError = "The server was added, but its discovery could not complete. Check its SSH access, then run discovery again from Topology.";
+                    }
+                }
+
+                _discoverAfterSave = false;
+                return;
             }
 
             _formOpen = false;
