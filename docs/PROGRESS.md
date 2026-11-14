@@ -6,13 +6,13 @@
 
 ## Current
 
-- **Task:** T0.8 Basic chat (no tools)
-- **Status:** done
+- **Task:** T6.3 Agent chat with tools
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
-T0.8 is complete: the JsonDocument lifetime bug is fixed and covered by a regression test; qwen2.5:0.5b and OpenRouter's free route both streamed replies, and both conversations survived reload. The temporary app currently stores the provided OpenRouter key encrypted; remove the test DB and key ring during cleanup. Exact next step: start T6.3/J4, verify tool-call visibility and approval behavior with local and OpenRouter providers, then clean temporary app and Ollama state and update Graphify. T5.1 (and dependent M5 tasks T5.2–T5.5) remain deferred at the owner's direction. T6.3 implementation includes inventory/relevant graph context, native Microsoft.Extensions.AI tool calling, JSON fallback, validation, read-only SSH tools, policy-governed audited writes, inline proposals, action-result continuation, and remote-provider secret redaction. M5 metrics/alerts context remains unavailable. T6.4 depends on T6.3 and T5.3 (deferred M5). T6.5 is complete: live J6 steps 1–3 passed in an isolated Debian apt container using deterministic standard/security package fixtures. The UI classified both packages, showed the exact command, required approval, recorded a successful action (exit 0, no restarted services, reboot not required), and a follow-up scan showed zero pending updates. Temporary J6 app state, SSH key, container, and image were removed. Last build passed with 0 warnings/errors and 78/78 tests passed. Graphify code-only incremental update completed at 5,388 nodes, 18,826 edges, 325 communities; semantic extraction of 17 documentation files was skipped because no LLM key is configured. Installed Graphify (0.9.89) is older than the skill (0.9.108); generated cache churn was discarded, while refreshed graph/report artifacts were committed. T6.6 remains blocked by unresolved T6.3 and T6.4 acceptance, with T6.4 also depending on deferred T5.3.
+T0.8 is complete: the JsonDocument lifetime bug is fixed and covered by a regression test; qwen2.5:0.5b and OpenRouter's free route both streamed replies, and both conversations survived reload. The temporary app currently stores the provided OpenRouter key encrypted; remove the test DB and key ring during cleanup. T6.3 is now in progress. Both provider configurations are reachable, including an OpenRouter free model; exact next step: verify J4 native tool-call visibility and approval flow with both providers, then clean temporary app and Ollama state and update Graphify. T5.1 (and dependent M5 tasks T5.2–T5.5) remain deferred at the owner's direction. T6.3 implementation includes inventory/relevant graph context, native Microsoft.Extensions.AI tool calling, JSON fallback, validation, read-only SSH tools, policy-governed audited writes, inline proposals, action-result continuation, and remote-provider secret redaction. M5 metrics/alerts context remains unavailable. T6.4 depends on T6.3 and T5.3 (deferred M5). T6.5 is complete: live J6 steps 1–3 passed in an isolated Debian apt container using deterministic standard/security package fixtures. The UI classified both packages, showed the exact command, required approval, recorded a successful action (exit 0, no restarted services, reboot not required), and a follow-up scan showed zero pending updates. Temporary J6 app state, SSH key, container, and image were removed. Last build passed with 0 warnings/errors and 78/78 tests passed. Graphify code-only incremental update completed at 5,388 nodes, 18,826 edges, 325 communities; semantic extraction of 17 documentation files was skipped because no LLM key is configured. Installed Graphify (0.9.89) is older than the skill (0.9.108); generated cache churn was discarded, while refreshed graph/report artifacts were committed. T6.6 remains blocked by unresolved T6.3 and T6.4 acceptance, with T6.4 also depending on deferred T5.3.
 
 ## Blockers
 
@@ -71,7 +71,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T5.5 | Overview with real data | todo | |
 | T6.1 | Tool registry and execution modes | done | `feat(T6.1): tool policies and approvals` |
 | T6.2 | Action log | done | `feat(T6.2): approved action execution and log` |
-| T6.3 | Agent chat with tools | blocked | `wip(T6.3): add context and tool dispatch` |
+| T6.3 | Agent chat with tools | in-progress | `wip(T6.3): add context and tool dispatch` |
 | T6.4 | SSH attack detection and bans | blocked | |
 | T6.5 | Updates | done | `feat(T6.5): updates inventory and approval flow` |
 | T6.6 | MVP hardening pass | blocked | |
@@ -85,7 +85,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 One line per session: date · tool/model · tasks touched · result.
 
 - 2026-11-14 · Codex / GPT-6 · started T0.8 · owner supplied an OpenRouter key; checking local Ollama and resuming live basic-chat acceptance in temporary app storage
-- 2026-11-14 · Codex / GPT-6 · T0.8 · fixed native tool schema lifetime; build passed with 0 warnings/errors and 78/78 tests; qwen2.5:0.5b and OpenRouter free route streamed replies and survived reload; next start T6.3/J4
+- 2026-11-14 · Codex / GPT-6 · T0.8 · fixed native tool schema lifetime; build passed with 0 warnings/errors and 78/78 tests; qwen2.5:0.5b and OpenRouter free route streamed replies and survived reload
+- 2026-11-14 · Codex / GPT-6 · started T6.3 · local and OpenRouter providers available; verifying J4 tools and approvals
 
 - 2026-11-14 · Codex / GPT-6 · T6.5 · J6 steps 1–3 passed on disposable Debian apt target; security and standard updates classified, explicit approval executed both, report exit 0/no restarts/reboot false, follow-up scan showed 0 pending; temporary test environment removed
 
