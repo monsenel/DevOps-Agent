@@ -1,278 +1,179 @@
 # Graph Report - DevOps-Agent  (2026-11-14)
 
 ## Corpus Check
-- 52 files · ~151,478 words
+- 13 files · ~153,742 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 5894 nodes · 20083 edges · 306 communities (202 shown, 104 thin omitted)
-- Extraction: 88% EXTRACTED · 12% INFERRED · 0% AMBIGUOUS · INFERRED: 2352 edges (avg confidence: 0.84)
-- Token cost: 1,394 input · 2,870 output
+- 5990 nodes · 20300 edges · 203 communities (143 shown, 60 thin omitted)
+- Extraction: 88% EXTRACTED · 12% INFERRED · 0% AMBIGUOUS · INFERRED: 2342 edges (avg confidence: 0.84)
+- Token cost: 2,450 input · 730 output
 
 ## Community Hubs (Navigation)
 - ELK Layout Engine
-- Execution Policy
-- Discovery Service Tests
 - App Db Context
+- ELK Layout Engine
+- Execution Policy
 - ELK Layout Engine
 - ELK Layout Engine
 - Llm Provider
-- ELK Layout Engine
-- Tool Registry
-- Llm Components
-- Persistence Components
 - Ssh And Capability Tests
-- ELK Layout Engine
-- Servers Components
+- Discovery Service Tests
+- Execution Policy
 - ELK Layout Engine
 - Nginx Collector
-- ELK Layout Engine
-- ELK Layout Engine
-- 20261113191218 Initial Create Designer
-- ELK Layout Engine
-- Pages Components
-- Error Components
-- Cytoscape Graph Library
-- ELK Layout Engine
-- Update Package
-- ELK Layout Engine
-- Web UI Components
-- Cytoscape Graph Library
-- ELK Layout Engine
-- ELK Layout Engine
+- Persistence Components
+- Llm Components
 - Unit Test1
 - ELK Layout Engine
-- Agent Chat
+- ELK Layout Engine
+- ELK Layout Engine
+- ELK Layout Engine
+- Tool Registry
+- Servers Components
+- ELK Layout Engine
 - Pages Components
-- Imports Components
+- Tool Registry
+- Discovery Service Tests
+- ELK Layout Engine
+- Execution Policy
 - ELK Layout Engine
 - ELK Layout Engine
-- ELK Layout Engine
-- Ssh Connection Pool
-- Topology Components
-- Discovery Components
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- Pages Topology
-- Migrations Components
-- ELK Layout Engine
-- Discovery Components
-- ELK Layout Engine
-- ELK Layout Engine
-- Nginx Collector Parser
-- ELK Layout Engine
-- Web UI Components
 - ELK Layout Engine
 - Settings Components
-- Pages Settings
+- Imports Components
+- Update Package
+- ELK Layout Engine
+- Cytoscape Graph Library
+- ELK Layout Engine
+- Persistence Components
 - ELK Layout Engine
 - ELK Layout Engine
-- Data Protection Secret Protector
-- Servers Components
-- Pages Servers
-- ELK Layout Engine
-- ELK Layout Engine
+- Cytoscape Graph Library
 - Pages Components
-- Open Ai Compatible Chat Client Factory
+- ELK Layout Engine
+- Web UI Components
+- Discovery Components
+- ELK Layout Engine
+- Migrations Components
+- Pages Topology
+- Component Preview
+- Execution Policy
+- Agent Chat
+- ELK Layout Engine
+- Pages Settings
+- Discovery Components
+- Nginx Collector Parser
+- Web UI Components
+- ELK Layout Engine
+- ELK Layout Engine
+- Topology Components
+- ELK Layout Engine
+- ELK Layout Engine
+- Pages Servers
+- Pages Components
+- Ssh And Capability Tests
+- ELK Layout Engine
+- Open Ai Compatible Chat Client
 - ELK Layout Engine
 - Docker Compose Configuration
 - ELK Layout Engine
-- docker compose
-- ELK License Terms
+- ELK Layout Engine
+- Execution Policy
+- ELK Layout Engine
 - Drift Service
+- ELK Layout Engine
 - Edge Resolver Tests
-- Monitoring Components
-- ELK Layout Engine
-- ELK Layout Engine
 - Docs Components
-- Hosted Components
-- A R C H I T E C T U R E
-- Drift Components
-- Cytoscape Graph Library
-- Cytoscape Graph Library
-- Dev Ops Agent Tests Components
-- Docker Collector Parser
-- Collector Run
+- Layout Sidebar
+- Monitoring Components
 - ELK Layout Engine
-- Collectors Components
-- Dev Ops Agent Tests
+- Topology Components
+- 20261113191218 Initial Create Designer
+- A R C H I
+- Cytoscape Graph Library
+- ELK Layout Engine
+- Hosted Components
+- Cytoscape Graph Library
 - Chat Components
+- Dev Ops Agent Tests Components
+- Collector Run
+- Data Protection Secret Protector
+- ELK Layout Engine
+- Chat Components
+- Dev Ops Agent Tests
+- ELK Layout Engine
+- ELK Layout Engine
 - Component Preview
 - Monitoring Components
+- Collectors Components
 - Cytoscape ELK Layout
-- Component Preview
 - Host Collector Parser
 - ELK Layout Engine
 - ELK Layout Engine
-- Ssh Components
 - Cytoscape Graph Library
-- Chat Components
-- Layout Sidebar
+- ELK Layout Engine
+- ELK Layout Engine
+- Ssh Components
+- Docker Collector Parser
 - Ssh Config Parser
 - Chat Conversation
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- Docker Collector Parser
-- ELK Layout Engine
-- Chat Service
-- Graph Components
-- ELK Layout Engine
+- Agent Chat
 - ELK Layout Engine
 - ELK Layout Engine
 - Pages Alerts
-- Sidebar Components
-- Discovery Schedule Service
-- Edge Resolver
+- Docker Compose Configuration
+- Servers Components
 - Pages Home
 - Graph Trace Resolver
-- Graph Listener
 - Launch Settings
-- ELK Layout Engine
-- ELK Layout Engine
-- Json Tool Protocol
-- Home Components
-- Graph Trace Resolver
-- launch Settings
 - Graph Node Kind
+- ELK Layout Engine
+- Home Components
+- Graph Node Kind
+- Cytoscape Graph Library
 - Cytoscape Graph Library
 - ELK Layout Engine
 - ELK Layout Engine
+- ELK Layout Engine
+- Web UI Components
 - Top Bar
-- Approval Service
-- Execution Policy
 - Discovery Snapshot
-- Graph Node Kind
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
+- App Setting
 - Graph Edge Kind
-- I Collector
-- Approval Service
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
+- Json Tool Protocol
 - Nginx Configuration
 - Fixtures Components
-- Chat Service Tests
-- App Setting
+- Collector Run
+- And Ssh Authorized
 - Graph Edge Kind
-- Persistence Components
 - Nginx Collector Parser
 - ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- Nginx Configuration
-- Socket Listener Output
-- Chat Service Tests
-- Routes Components
-- Collector Run
+- App Setting
+- And T5.3 Alert
 - Components App
+- Persistence Components
 - Persistence Options
 - Js Theme
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- App Components
-- Alerts Components
-- Drift Contracts
-- ELK Layout Engine
-- App Setting
-- Persistence Options
-- Theme System
-- ELK Layout Engine
 - Main Layout
+- Configured Telegram Ntfy
 - Pages Login
 - Pages Logout
 - App Shell
 - Server Inventory Options
+- Pages Components
 - Page Placeholder
 - Main Layout
 - Login Components
 - Logout Components
+- Cytoscape Graph Library
 - App Shell
-- Page Placeholder
-- Proposed Action Card
-- Stat Tile
-- L I C E N S E Jet Brains Mono
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- docker entrypoint
-- Field Components
-- Select Components
-- Switch Row
-- ELK Layout Engine
 - Unit Test1
 - Docker Entrypoint
 - UI Field
 - UI Select
 - Switch Row
 - ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- ELK Layout Engine
-- apt upgradable
-- dnf check update
-- dnf security
-- host etc hosts
-- host hostname
-- ss established
-- systemd list units
-- systemd show postgresql
-- A G E N T S
-- ELK Layout Engine
-- ELK Layout Engine
-- Chat Conversation Repository
-- Chat Message Record
-- ELK Layout Engine
-- devopsagent application servers
-- devopsagent domain settings
-- devopsagent infrastructure llm
-- devopsagent infrastructure security
-- devopsagent infrastructure ssh
 - devopsagent web authentication
 - P L A N
 - Dnf Security
@@ -283,11 +184,8 @@
 - I Ssh Connection Pool
 - Llm Provider Repository
 - Docs PLAN
-- Open Ai Model Lister
-- Docs PROGRESS
+- T5.5 Overview With
 - Code Block
-- Empty State
-- Icon Components
 - Progress Bar
 - Segmented Components
 - favicon Components
@@ -321,13 +219,13 @@
 - `Collectors and Deterministic Parsing` --semantically_similar_to--> `Deterministic Collectors and Parsers`  [INFERRED] [semantically similar]
   docs/ARCHITECTURE.md → AGENTS.md
 - `SqliteTestDatabase` --references--> `AppDbContext`  [EXTRACTED]
-  tests/DevOpsAgent.Tests/ActionExecutionTests.cs → src/DevOpsAgent.Infrastructure/Persistence/AppDbContext.cs
-- `TestSshRunner` --references--> `SshRunOptions`  [EXTRACTED]
-  tests/DevOpsAgent.Tests/ActionExecutionTests.cs → src/DevOpsAgent.Application/Abstractions/ISshRunner.cs
-- `TestSshRunner` --references--> `Guid`  [EXTRACTED]
-  tests/DevOpsAgent.Tests/ActionExecutionTests.cs → src/DevOpsAgent.Web/Components/Pages/AgentChat.razor
+  tests/DevOpsAgent.Tests/GraphBuilderTests.cs → src/DevOpsAgent.Infrastructure/Persistence/AppDbContext.cs
+- `SqliteTestDatabase` --references--> `AppDbContext`  [EXTRACTED]
+  tests/DevOpsAgent.Tests/SshAndCapabilityTests.cs → src/DevOpsAgent.Infrastructure/Persistence/AppDbContext.cs
 - `TestSecretProtector` --implements--> `ISecretProtector`  [EXTRACTED]
   tests/DevOpsAgent.Tests/ServerInventoryTests.cs → src/DevOpsAgent.Application/Abstractions/ISecretProtector.cs
+- `FakeSshRunner` --implements--> `ISshRunner`  [EXTRACTED]
+  tests/DevOpsAgent.Tests/SshAndCapabilityTests.cs → src/DevOpsAgent.Application/Abstractions/ISshRunner.cs
 
 ## Import Cycles
 - None detected.
@@ -336,835 +234,599 @@
 - **Components of the DevOps Agent Solution** — docs_architecture_clean_architecture_dependency_rule, docs_architecture_ssh_connection_pool_and_jump_host, docs_architecture_collectors_and_deterministic_parsing, docs_architecture_graph_building_and_edge_resolution, docs_architecture_llm_tool_calling_and_approval, docs_architecture_sqlite_data_model, docs_architecture_background_services [EXTRACTED 1.00]
 - **Shared Server Metrics Format** — tests_devopsagent_tests_fixtures_metrics_sample_1_load_average, tests_devopsagent_tests_fixtures_metrics_sample_1_memory_metrics, tests_devopsagent_tests_fixtures_metrics_sample_1_cpu_statistics, tests_devopsagent_tests_fixtures_metrics_sample_1_disk_usage, tests_devopsagent_tests_fixtures_metrics_sample_1_network_statistics, tests_devopsagent_tests_fixtures_metrics_sample_1_cpu_cores, tests_devopsagent_tests_fixtures_metrics_sample_2_load_average, tests_devopsagent_tests_fixtures_metrics_sample_2_memory_metrics, tests_devopsagent_tests_fixtures_metrics_sample_2_cpu_statistics, tests_devopsagent_tests_fixtures_metrics_sample_2_disk_usage, tests_devopsagent_tests_fixtures_metrics_sample_2_network_statistics, tests_devopsagent_tests_fixtures_metrics_sample_2_cpu_cores [INFERRED 0.85]
 
-## Communities (306 total, 104 thin omitted)
+## Communities (203 total, 60 thin omitted)
 
 ### Community 0 - "ELK Layout Engine"
-Cohesion: 0.00
-Nodes (198): _5b(), A8c(), Aie(), Ake(), aSc(), Atc(), AXd(), aYb() (+190 more)
+Cohesion: 0.01
+Nodes (290): _9b(), aee(), Age(), Ahe(), aSc(), Atc(), aYb(), b5c() (+282 more)
 
-### Community 1 - "Execution Policy"
-Cohesion: 0.02
-Nodes (87): IAlertRepository, IChatConversationRepository, IHealthCheckRepository, IMetricRepository, AlertCondition, AlertDto, IAlertSignalSource, AlertService (+79 more)
-
-### Community 2 - "Discovery Service Tests"
+### Community 1 - "App Db Context"
 Cohesion: 0.03
-Nodes (167): _0b(), a0b(), a3c(), A8b(), A9b(), a$b(), Acc(), B0b() (+159 more)
+Nodes (68): CollectorOutput, CollectorResult, IsSuccess, ICollector, Name, ServerContext, Server, SshRunner (+60 more)
 
-### Community 3 - "App Db Context"
+### Community 2 - "ELK Layout Engine"
 Cohesion: 0.03
-Nodes (62): CollectorOutput, CollectorResult, IsSuccess, ICollector, Name, ServerContext, Server, SshRunner (+54 more)
+Nodes (155): _2d(), _3d(), _5c(), a5b(), a6c(), ACd(), Add(), awd() (+147 more)
+
+### Community 3 - "Execution Policy"
+Cohesion: 0.03
+Nodes (52): IHealthCheckRepository, AlertCondition, AlertDto, IAlertSignalSource, HealthCheckDto, HealthCheckInput, HealthCheckSuggestion, HealthProbeResult (+44 more)
 
 ### Community 4 - "ELK Layout Engine"
 Cohesion: 0.03
-Nodes (132): Zu(), Afb(), Afe(), azb(), aZd(), bld(), Bmb(), Bpb() (+124 more)
+Nodes (138): b(), c(), A8c(), aGd(), ahb(), ald(), ANd(), BDb() (+130 more)
 
 ### Community 5 - "ELK Layout Engine"
-Cohesion: 0.03
-Nodes (128): Amd(), asb(), atd(), Awc(), __b(), B$b(), Bmd(), btb() (+120 more)
+Cohesion: 0.02
+Nodes (125): _8b(), a7c(), ABb(), Aed(), ahc(), aQd(), Ard(), AUd() (+117 more)
 
 ### Community 6 - "Llm Provider"
+Cohesion: 0.04
+Nodes (54): IActionRecordRepository, IAppSettingRepository, IServerRepository, ActionExecutionService, ActionLogEntry, ActionServerResult, AgentToolDispatcher, ApprovalService (+46 more)
+
+### Community 7 - "Ssh And Capability Tests"
+Cohesion: 0.04
+Nodes (120): AAb(), aCb(), AOb(), B2c(), b4c(), $Bb(), Bgc(), cCb() (+112 more)
+
+### Community 8 - "Discovery Service Tests"
+Cohesion: 0.04
+Nodes (116): A2b(), a3c(), A8b(), a_c(), aIc(), Ayc(), B8b(), bXb() (+108 more)
+
+### Community 9 - "Execution Policy"
+Cohesion: 0.03
+Nodes (38): AlertService, IAlertNotificationService, INotifier, NotificationEndpoint, NotificationSettings, NotificationSettingsInput, NotificationService, StoredSettings (+30 more)
+
+### Community 10 - "ELK Layout Engine"
+Cohesion: 0.03
+Nodes (114): $2b(), a7b(), Anc(), Awc(), axc(), b6b(), bId(), Bmc() (+106 more)
+
+### Community 11 - "Nginx Collector"
+Cohesion: 0.03
+Nodes (107): _6d(), _7d(), a7d(), b7d(), b9d(), Bfe(), c0d(), c3d() (+99 more)
+
+### Community 12 - "Persistence Components"
+Cohesion: 0.04
+Nodes (43): DiscoveryScheduleService, AppDbContext, ActionRecords, AppSettings, ChatConversations, ChatMessages, CollectorRuns, GraphEdges (+35 more)
+
+### Community 13 - "Llm Components"
 Cohesion: 0.05
-Nodes (45): IActionRecordRepository, IAppSettingRepository, ISshRunner, ActionExecutionService, ActionLogEntry, ActionServerResult, AgentToolDispatcher, ApprovalService (+37 more)
+Nodes (43): IChatClientFactory, ILlmProviderRepository, IModelLister, ISecretProtector, LlmProviderInput, LlmProviderSummary, ProviderService, LlmProvider (+35 more)
 
-### Community 7 - "ELK Layout Engine"
-Cohesion: 0.07
-Nodes (110): a3b(), Aac(), aKc(), as(), axc(), bac(), bec(), Bjc() (+102 more)
-
-### Community 8 - "Tool Registry"
-Cohesion: 0.04
-Nodes (54): DiscoveryProgress, IGraphRepository, ISnapshotRepository, AgentContextBuilder, DiscoveryService, GraphBuildResult, GraphView, All (+46 more)
-
-### Community 9 - "Llm Components"
-Cohesion: 0.04
-Nodes (47): IChatClientFactory, ILlmProviderRepository, IModelLister, ISecretProtector, LlmProviderInput, LlmProviderSummary, ProviderService, LlmProvider (+39 more)
-
-### Community 10 - "Persistence Components"
-Cohesion: 0.04
-Nodes (48): MetricRollup, Average, BucketStartUtc, Id, Maximum, Metric, Minimum, SampleCount (+40 more)
-
-### Community 11 - "Ssh And Capability Tests"
-Cohesion: 0.06
-Nodes (88): Adc(), amc(), $Bb(), bic(), cc(), Crc(), DDb(), Dgc() (+80 more)
-
-### Community 12 - "ELK Layout Engine"
-Cohesion: 0.04
-Nodes (86): bD(), $$c(), Cdd(), cmd(), Cqc(), cYc(), Dcc(), Ddd() (+78 more)
-
-### Community 13 - "Servers Components"
-Cohesion: 0.06
-Nodes (32): IServerKeyStore, IServerRepository, ServerCapabilityService, ServerInput, ServerSummary, ServerService, Server, CreatedAtUtc (+24 more)
-
-### Community 14 - "ELK Layout Engine"
+### Community 14 - "Unit Test1"
 Cohesion: 0.05
-Nodes (80): b(), c(), A0d(), ahb(), ald(), BJd(), bzb(), bzd() (+72 more)
+Nodes (60): IUpdatePackageRepository, IUpdateScanRepository, IUpdatesCollector, AgentToolResult, ApplyUpdatesArgs, BlockIpArgs, DiskUsageArgs, DockerLogsArgs (+52 more)
 
-### Community 15 - "Nginx Collector"
-Cohesion: 0.06
-Nodes (79): _6d(), _7d(), A1d(), A_d(), AFd(), b7d(), Bdd(), BFd() (+71 more)
+### Community 15 - "ELK Layout Engine"
+Cohesion: 0.04
+Nodes (93): A1d(), a6d(), A9d(), A_d(), $ae(), AFd(), bBb(), BFd() (+85 more)
 
 ### Community 16 - "ELK Layout Engine"
 Cohesion: 0.04
-Nodes (78): _3d(), a6d(), A9d(), Aje(), Bje(), c3d(), CFd(), d4d() (+70 more)
+Nodes (90): Zu(), A0d(), Apb(), B5b(), bC(), dPb(), dqd(), Dvb() (+82 more)
 
 ### Community 17 - "ELK Layout Engine"
+Cohesion: 0.05
+Nodes (88): a0b(), Amd(), asb(), __b(), b9b(), B$b(), bhd(), Bmd() (+80 more)
+
+### Community 18 - "ELK Layout Engine"
+Cohesion: 0.09
+Nodes (86): a3b(), Aac(), as(), bac(), bec(), bic(), Bjc(), BUc() (+78 more)
+
+### Community 19 - "Tool Registry"
+Cohesion: 0.05
+Nodes (51): IGraphRepository, DockerDiscoveryResult, GraphBuilder, ServerGraphState, GraphBuildResult, ServerDiscoveryData, GraphView, All (+43 more)
+
+### Community 20 - "Servers Components"
+Cohesion: 0.06
+Nodes (32): IServerKeyStore, ServerCapabilityService, ServerInput, ServerSummary, ServerService, Server, CreatedAtUtc, Group (+24 more)
+
+### Community 21 - "ELK Layout Engine"
 Cohesion: 0.04
-Nodes (77): _2d(), a2d(), a3d(), a7d(), b3d(), Bfe(), Bqb(), CA() (+69 more)
+Nodes (82): AD(), aec(), ATb(), atd(), auc(), bD(), $$c(), cec() (+74 more)
 
-### Community 18 - "20261113191218 Initial Create Designer"
+### Community 22 - "Pages Components"
 Cohesion: 0.06
-Nodes (26): ISshCommandSession, IsConnected, ISshConnectionPool, AgentToolResult, ChatConversationSummary, ChatMessageView, SnapshotSummary, ServerCapabilityResult (+18 more)
+Nodes (14): DevOpsAgent.Infrastructure.Collectors, DevOpsAgent.Domain.Agent, DevOpsAgent.Application.Discovery, DevOpsAgent.Domain.Servers, DevOpsAgent.Domain.Graph, DevOpsAgent.Domain.Monitoring, DevOpsAgent.Application.Updates, DevOpsAgent.Infrastructure.Parsers (+6 more)
 
-### Community 19 - "ELK Layout Engine"
-Cohesion: 0.11
-Nodes (69): _1d(), ale(), Bh(), Ble(), Cle(), Dle(), ele(), Fle() (+61 more)
+### Community 23 - "Tool Registry"
+Cohesion: 0.06
+Nodes (25): DiscoveryProgress, ISnapshotRepository, AgentContextBuilder, ChatConversationSummary, ChatMessageView, DiscoveryService, SnapshotSummary, Snapshot (+17 more)
 
-### Community 20 - "Pages Components"
+### Community 24 - "Discovery Service Tests"
 Cohesion: 0.08
-Nodes (14): DevOpsAgent.Infrastructure.Collectors, DevOpsAgent.Domain.Agent, DevOpsAgent.Application.Discovery, DevOpsAgent.Domain.Servers, DevOpsAgent.Domain.Graph, DevOpsAgent.Tests, DevOpsAgent.Application.Updates, DevOpsAgent.Infrastructure.Parsers (+6 more)
-
-### Community 21 - "Error Components"
-Cohesion: 0.06
-Nodes (22): HealthCheckDto, HealthCheckInput, HealthCheckSuggestion, HealthProbeResult, IHealthProbe, HealthCheckService, HealthCheckType, Http (+14 more)
-
-### Community 22 - "Cytoscape Graph Library"
-Cohesion: 0.07
-Nodes (66): Anc(), ARb(), aRc(), Ayc(), bJb(), bRc(), BYc(), cJb() (+58 more)
-
-### Community 23 - "ELK Layout Engine"
-Cohesion: 0.06
-Nodes (63): aKb(), Awe(), aye(), bgb(), bKb(), Bwe(), bx(), bye() (+55 more)
-
-### Community 24 - "Update Package"
-Cohesion: 0.07
-Nodes (56): AHd(), aIc(), AJc(), CId(), did(), Eic(), eid(), EKc() (+48 more)
+Nodes (75): _0b(), A6b(), A9b(), a$b(), Acc(), B0b(), bsc(), CGc() (+67 more)
 
 ### Community 25 - "ELK Layout Engine"
-Cohesion: 0.06
-Nodes (56): aib(), aqb(), ase(), B_d(), cib(), dr(), Dy(), Egd() (+48 more)
+Cohesion: 0.04
+Nodes (75): a2d(), ABd(), Aie(), Aj(), bj(), bzd(), cj(), Coe() (+67 more)
 
-### Community 26 - "Web UI Components"
-Cohesion: 0.06
-Nodes (22): DevOpsAgent.Domain.Monitoring, DevOpsAgent.Domain.Updates, DevOpsAgent.Application.Monitoring, DevOpsAgent.Application.Abstractions, DevOpsAgent.Application.Chat, DevOpsAgent.Application.Discovery, DevOpsAgent.Application.Llm, DevOpsAgent.Domain.Discovery (+14 more)
-
-### Community 27 - "Cytoscape Graph Library"
+### Community 26 - "Execution Policy"
 Cohesion: 0.05
-Nodes (21): bh(), bs(), d(), fh(), Fn(), gh(), Jc(), ju() (+13 more)
+Nodes (28): IMetricRepository, MetricValue, ParsedMetrics, ServerMetrics, MetricService, RollupService, MetricRollup, Average (+20 more)
+
+### Community 27 - "ELK Layout Engine"
+Cohesion: 0.03
+Nodes (68): ate(), aue(), ave(), Bse(), Bte(), Bue(), Bve(), Cve() (+60 more)
 
 ### Community 28 - "ELK Layout Engine"
-Cohesion: 0.07
-Nodes (51): $2b(), aec(), aNb(), Bmc(), bsb(), bub(), cec(), cmc() (+43 more)
+Cohesion: 0.11
+Nodes (63): _1d(), ale(), b2d(), Bh(), Ble(), Bre(), Cle(), Dle() (+55 more)
 
 ### Community 29 - "ELK Layout Engine"
+Cohesion: 0.04
+Nodes (59): Aeb(), agb(), avd(), Be(), bEb(), Bvb(), cDb(), DIb() (+51 more)
+
+### Community 30 - "Settings Components"
+Cohesion: 0.09
+Nodes (56): Aje(), Bje(), Bke(), Cje(), Dje(), Eje(), eke(), Eoe() (+48 more)
+
+### Community 31 - "Imports Components"
+Cohesion: 0.13
+Nodes (6): DevOpsAgent.Application.Servers, DevOpsAgent.Infrastructure.Persistence, DevOpsAgent.Infrastructure.Migrations, DevOpsAgent.Tests, DevOpsAgent.Domain.Discovery, AppDbContextModelSnapshot
+
+### Community 32 - "Update Package"
 Cohesion: 0.05
-Nodes (50): A2b(), a7b(), a_c(), auc(), Clc(), D2b(), dic(), Djc() (+42 more)
+Nodes (55): aAe(), aId(), Bnd(), Bo(), bq(), bt(), CId(), Co() (+47 more)
 
-### Community 30 - "Unit Test1"
-Cohesion: 0.07
-Nodes (30): IUpdatePackageRepository, IUpdateScanRepository, IUpdatesCollector, CollectedUpdateResult, PackageManagerKind, Apt, Dnf, ServerUpdateStatus (+22 more)
+### Community 33 - "ELK Layout Engine"
+Cohesion: 0.05
+Nodes (51): axb(), Bed(), bQd(), Dmd(), fj(), fk(), FLc(), fmd() (+43 more)
 
-### Community 31 - "ELK Layout Engine"
-Cohesion: 0.04
-Nodes (47): Age(), Ahe(), cge(), che(), Coe(), cyd(), Dge(), Dhe() (+39 more)
-
-### Community 32 - "Agent Chat"
-Cohesion: 0.06
-Nodes (46): _1b(), $6b(), AJb(), Asd(), bOb(), Bsd(), C2b(), CMb() (+38 more)
-
-### Community 33 - "Pages Components"
-Cohesion: 0.04
-Nodes (37): ActionLogEntry, route:/action-log, route:/agent-chat, route:/updates, ApproveAsync, LoadAsync, OnInitializedAsync, CodeBlock (+29 more)
-
-### Community 34 - "Imports Components"
-Cohesion: 0.15
-Nodes (4): DevOpsAgent.Infrastructure.Persistence, DevOpsAgent.Infrastructure.Migrations, AddDiscoverySnapshots, AppDbContextModelSnapshot
+### Community 34 - "Cytoscape Graph Library"
+Cohesion: 0.05
+Nodes (22): a(), bh(), bs(), Eh(), fh(), fr(), gh(), Jc() (+14 more)
 
 ### Community 35 - "ELK Layout Engine"
 Cohesion: 0.05
-Nodes (43): _2c(), _3c(), aZc(), B3c(), BZc(), C3b(), C4b(), cZc() (+35 more)
-
-### Community 36 - "ELK Layout Engine"
-Cohesion: 0.08
-Nodes (43): APd(), Az(), BPd(), CPd(), cz(), deb(), EPd(), ez() (+35 more)
+Nodes (50): a3d(), b3d(), bgb(), CHd(), cJc(), cjd(), Cn(), d6b() (+42 more)
 
 ### Community 37 - "ELK Layout Engine"
 Cohesion: 0.05
-Nodes (43): ate(), aue(), ave(), Bse(), Bte(), Bue(), dte(), due() (+35 more)
+Nodes (49): aDb(), Afb(), azb(), CFb(), CNd(), cqd(), CYb(), dFb() (+41 more)
 
-### Community 38 - "Ssh Connection Pool"
-Cohesion: 0.11
-Nodes (28): ApplyUpdatesArgs, BlockIpArgs, DiskUsageArgs, DockerLogsArgs, DockerPsArgs, EmptyToolArgs, IServerTargetArgs, ServerIds (+20 more)
+### Community 38 - "ELK Layout Engine"
+Cohesion: 0.05
+Nodes (47): Afe(), AXd(), aZd(), Bk(), C5c(), cB(), d2d(), Di() (+39 more)
 
-### Community 39 - "Topology Components"
-Cohesion: 0.06
-Nodes (42): aLb(), apc(), BLb(), Boc(), BPc(), cpc(), dOc(), DPc() (+34 more)
+### Community 39 - "Cytoscape Graph Library"
+Cohesion: 0.10
+Nodes (46): aKc(), aNb(), aRc(), bib(), bJb(), Bkc(), bRc(), cJb() (+38 more)
 
-### Community 40 - "Discovery Components"
-Cohesion: 0.14
-Nodes (14): DockerContainerInfo, DockerDiscoveryResult, DockerNetworkContainer, DockerNetworkEndpoint, DockerNetworkInfo, DockerPublishedPort, EdgeResolution, EdgeResolver (+6 more)
+### Community 40 - "Pages Components"
+Cohesion: 0.04
+Nodes (37): ActionLogEntry, route:/action-log, route:/agent-chat, route:/updates, ApproveAsync, LoadAsync, OnInitializedAsync, CodeBlock (+29 more)
 
 ### Community 41 - "ELK Layout Engine"
+Cohesion: 0.06
+Nodes (44): Bmb(), C0b(), c1b(), C4b(), D3b(), Dwd(), E2b(), E3b() (+36 more)
+
+### Community 42 - "Web UI Components"
 Cohesion: 0.08
-Nodes (41): a5b(), aAe(), Bud(), Bwd(), Byd(), c5b(), cjd(), CUd() (+33 more)
+Nodes (22): DevOpsAgent.Application.Notifications, DevOpsAgent.Application.Monitoring, DevOpsAgent.Application.Abstractions, DevOpsAgent.Application.Chat, DevOpsAgent.Application.Llm, DevOpsAgent.Application.Servers, DevOpsAgent.Domain.Agent, DevOpsAgent.Domain.Llm (+14 more)
 
-### Community 42 - "ELK Layout Engine"
-Cohesion: 0.05
-Nodes (41): Ard(), B8c(), bBb(), dtc(), etd(), evc(), Flb(), fqd() (+33 more)
+### Community 43 - "Discovery Components"
+Cohesion: 0.13
+Nodes (12): ConnectionDiscoveryResult, EstablishedConnectionInfo, DockerContainerInfo, DockerNetworkEndpoint, DockerPublishedPort, EdgeResolution, EdgeResolver, NginxEndpoint (+4 more)
 
-### Community 43 - "ELK Layout Engine"
-Cohesion: 0.07
-Nodes (41): bhd(), bId(), bnb(), Bnc(), C0b(), C7b(), $cd(), CIc() (+33 more)
-
-### Community 44 - "Pages Topology"
-Cohesion: 0.05
-Nodes (39): DiscoveryProgress, GraphEvidenceDto, GraphListenerDto, IJSObjectReference, route:/topology, AddUnknownServerAsync, ChangeViewAsync, ClearTraceAsync (+31 more)
+### Community 44 - "ELK Layout Engine"
+Cohesion: 0.10
+Nodes (42): Awe(), aye(), bye(), Cye(), cze(), dq(), dye(), dze() (+34 more)
 
 ### Community 45 - "Migrations Components"
 Cohesion: 0.08
-Nodes (12): InitialCreate, AddLlmProviders, PersistProviderTestSummary, AddChatConversations, AddServerInventory, AddTopologyGraph, AddAgentActions, AddActionExecutionResults (+4 more)
+Nodes (13): InitialCreate, AddLlmProviders, PersistProviderTestSummary, AddChatConversations, AddServerInventory, AddDiscoverySnapshots, AddTopologyGraph, AddAgentActions (+5 more)
 
-### Community 46 - "ELK Layout Engine"
+### Community 46 - "Pages Topology"
 Cohesion: 0.05
-Nodes (39): Aed(), AUd(), B2c(), Bfc(), bQc(), BVc(), cvc(), Ded() (+31 more)
+Nodes (39): DiscoveryProgress, GraphEvidenceDto, GraphListenerDto, IJSObjectReference, route:/topology, AddUnknownServerAsync, ChangeViewAsync, ClearTraceAsync (+31 more)
 
-### Community 48 - "Discovery Components"
+### Community 47 - "Component Preview"
+Cohesion: 0.06
+Nodes (40): AB(), akd(), bKd(), bOb(), eud(), GBb(), hBb(), HKd() (+32 more)
+
+### Community 48 - "Execution Policy"
+Cohesion: 0.07
+Nodes (22): IAlertRepository, Alert, AcknowledgedAtUtc, Count, Details, FirstSeenAtUtc, Id, Key (+14 more)
+
+### Community 49 - "Agent Chat"
+Cohesion: 0.08
+Nodes (37): $6b(), amb(), Asd(), bsb(), Bsd(), C2b(), CMb(), D1b() (+29 more)
+
+### Community 50 - "ELK Layout Engine"
+Cohesion: 0.08
+Nodes (37): ARb(), CIc(), cuc(), dGb(), eed(), eGb(), er(), etb() (+29 more)
+
+### Community 51 - "Pages Settings"
+Cohesion: 0.06
+Nodes (32): ExecutionMode, ExecutionModePolicy, Field, LlmProviderSummary, PagePlaceholder, route:/settings, route:/settings/llm, AddProviderAsync (+24 more)
+
+### Community 52 - "Discovery Components"
 Cohesion: 0.12
 Nodes (17): DriftChange, DriftChangeType, Added, Changed, Removed, DriftEntityType, Edge, Listener (+9 more)
 
-### Community 49 - "ELK Layout Engine"
-Cohesion: 0.09
-Nodes (37): _5c(), a6c(), B5b(), b7c(), b9c(), c6c(), c8c(), c9c() (+29 more)
-
-### Community 50 - "ELK Layout Engine"
-Cohesion: 0.10
-Nodes (37): Add(), aGd(), d$d(), dj(), Dub(), ej(), Gie(), H6d() (+29 more)
-
-### Community 51 - "Nginx Collector Parser"
+### Community 53 - "Nginx Collector Parser"
 Cohesion: 0.11
 Nodes (19): NginxDiscoveryResult, NameResolutions, NginxLocationInfo, NginxProxyInfo, NginxServerInfo, NginxSourceValue, NginxUpstreamInfo, NginxUpstreamServerInfo (+11 more)
 
-### Community 52 - "ELK Layout Engine"
+### Community 54 - "Web UI Components"
+Cohesion: 0.08
+Nodes (9): DevOpsAgent.Web, DevOpsAgent.Application.Chat, DevOpsAgent.Infrastructure.Notifications, DevOpsAgent.Application.Llm, DevOpsAgent.Infrastructure.Llm, DevOpsAgent.Domain.Llm, DevOpsAgent.Application.Agent, System.Net.Http.Json (+1 more)
+
+### Community 55 - "ELK Layout Engine"
+Cohesion: 0.08
+Nodes (33): m(), w(), _7b(), amc(), b1b(), C8b(), Dl(), dNc() (+25 more)
+
+### Community 56 - "ELK Layout Engine"
 Cohesion: 0.07
-Nodes (36): aCb(), AOb(), cCb(), COb(), dob(), dPb(), EBb(), eob() (+28 more)
+Nodes (33): _2c(), _3c(), aZc(), B3c(), BZc(), cZc(), E2c(), F1c() (+25 more)
 
-### Community 53 - "Web UI Components"
-Cohesion: 0.07
-Nodes (8): DevOpsAgent.Web, DevOpsAgent.Application.Chat, DevOpsAgent.Application.Llm, DevOpsAgent.Infrastructure.Llm, DevOpsAgent.Domain.Llm, DevOpsAgent.Application.Agent, DevOpsAgent.Domain.Agent, DevOpsAgent.Domain.Llm
-
-### Community 54 - "ELK Layout Engine"
-Cohesion: 0.06
-Nodes (35): Bv(), c2d(), Cqb(), cqd(), en(), FBb(), Gc(), Gzb() (+27 more)
-
-### Community 55 - "Settings Components"
-Cohesion: 0.13
-Nodes (35): Dje(), Eje(), Eoe(), Foe(), Gje(), hje(), Hoe(), Iae() (+27 more)
-
-### Community 56 - "Pages Settings"
-Cohesion: 0.06
-Nodes (31): ExecutionModePolicy, route:/settings, route:/settings/llm, AddProviderAsync, From, LoadProvidersAsync, OnInitializedAsync, OnTypeChanged (+23 more)
-
-### Community 57 - "ELK Layout Engine"
-Cohesion: 0.06
-Nodes (34): AB(), AD(), akd(), ckd(), CNd(), ekd(), GNc(), hBb() (+26 more)
+### Community 57 - "Topology Components"
+Cohesion: 0.08
+Nodes (32): _5b(), Boc(), COc(), dOc(), ehd(), Eoc(), epc(), ESb() (+24 more)
 
 ### Community 58 - "ELK Layout Engine"
 Cohesion: 0.10
-Nodes (33): $4b(), Aoc(), avd(), B2b(), B7b(), Bfb(), c1b(), cwd() (+25 more)
+Nodes (32): AJc(), Aoc(), B7b(), Bfb(), EFb(), Ejd(), EKc(), Fid() (+24 more)
 
-### Community 59 - "Data Protection Secret Protector"
-Cohesion: 0.07
-Nodes (31): Ku(), Av(), ct(), dk(), dt(), Eie(), fs(), fx() (+23 more)
+### Community 59 - "ELK Layout Engine"
+Cohesion: 0.10
+Nodes (32): Al(), Alc(), ar(), b4b(), blc(), bld(), Clc(), dlc() (+24 more)
 
-### Community 60 - "Servers Components"
-Cohesion: 0.08
-Nodes (32): B3b(), bvd(), COc(), cVd(), DJd(), dvd(), ESb(), Fdc() (+24 more)
-
-### Community 61 - "Pages Servers"
+### Community 60 - "Pages Servers"
 Cohesion: 0.06
-Nodes (28): DataAnnotationsValidator, Microsoft.AspNetCore.Components, route:/servers, AskDelete, CancelDelete, CloseForm, CloseImport, CloseTestDialog (+20 more)
+Nodes (28): DataAnnotationsValidator, EditForm, InputNumber, InputSelect, InputText, Microsoft.AspNetCore.Components, route:/servers, ServerSummary (+20 more)
 
-### Community 62 - "ELK Layout Engine"
-Cohesion: 0.07
-Nodes (30): aee(), cde(), _ce(), cee(), $de(), Ede(), eee(), Fce() (+22 more)
-
-### Community 63 - "ELK Layout Engine"
+### Community 61 - "Pages Components"
 Cohesion: 0.08
-Nodes (30): Avc(), BWc(), bXc(), bz(), CWc(), Dz(), EWc(), fq() (+22 more)
-
-### Community 64 - "Pages Components"
-Cohesion: 0.09
 Nodes (14): DevOpsAgent.Web.Pages, DevOpsAgent.Web.Authentication, AdminAuthenticationOptions, Password, PasswordHash, User, AdminCredentialVerifier, IsConfigured (+6 more)
 
-### Community 65 - "Open Ai Compatible Chat Client Factory"
+### Community 62 - "Ssh And Capability Tests"
+Cohesion: 0.10
+Nodes (30): Adc(), AHd(), Ao(), cc(), ey(), GHd(), Gsb(), hg() (+22 more)
+
+### Community 63 - "ELK Layout Engine"
+Cohesion: 0.12
+Nodes (30): APd(), Az(), BPd(), CPd(), cz(), ggb(), mPd(), nb() (+22 more)
+
+### Community 64 - "Open Ai Compatible Chat Client"
 Cohesion: 0.07
 Nodes (24): InputCheckbox, route:/servers/{ServerId:guid}, AddSuggestionAsync, BackToServers, CloseHealthForm, DeleteHealthCheckAsync, EditHealthCheck, Format (+16 more)
 
-### Community 66 - "ELK Layout Engine"
-Cohesion: 0.13
-Nodes (28): A6b(), Al(), Alc(), ar(), b4b(), blc(), dlc(), Elc() (+20 more)
+### Community 65 - "ELK Layout Engine"
+Cohesion: 0.09
+Nodes (27): bz(), d3c(), dA(), Dz(), fq(), fUd(), Gud(), iDb() (+19 more)
 
-### Community 67 - "Docker Compose Configuration"
+### Community 66 - "Docker Compose Configuration"
 Cohesion: 0.08
 Nodes (25): build, env_file, environment, ports, restart, user, volumes, context (+17 more)
 
-### Community 68 - "ELK Layout Engine"
-Cohesion: 0.15
-Nodes (26): ABd(), BBd(), CBd(), DBd(), dcd(), Ecd(), FBd(), fcd() (+18 more)
-
-### Community 69 - "docker compose"
+### Community 67 - "ELK Layout Engine"
 Cohesion: 0.10
-Nodes (3): DevOpsAgent.Infrastructure.Security, DataProtectionSecretProtector, SecretProtectorTests
+Nodes (26): $4b(), B2b(), D5b(), Dyd(), E9c(), F9c(), FRb(), Goe() (+18 more)
 
-### Community 70 - "ELK License Terms"
-Cohesion: 0.31
-Nodes (24): ANd(), bwb(), D8c(), DRd(), fk(), gFd(), jec(), KGd() (+16 more)
+### Community 68 - "ELK Layout Engine"
+Cohesion: 0.08
+Nodes (25): AJb(), cKb(), ckd(), cld(), FRd(), grd(), Gvb(), HMb() (+17 more)
+
+### Community 69 - "Execution Policy"
+Cohesion: 0.13
+Nodes (15): IChatConversationRepository, ChatConversation, CreatedAtUtc, Id, Messages, Title, UpdatedAtUtc, ChatMessageRecord (+7 more)
+
+### Community 70 - "ELK Layout Engine"
+Cohesion: 0.17
+Nodes (24): aib(), cib(), Egd(), fib(), gyb(), Hyb(), Iob(), JOb() (+16 more)
 
 ### Community 71 - "Drift Service"
 Cohesion: 0.11
 Nodes (24): c_c(), D4c(), DPd(), f4c(), f5c(), g3c(), h4c(), h5c() (+16 more)
 
-### Community 72 - "Edge Resolver Tests"
+### Community 72 - "ELK Layout Engine"
+Cohesion: 0.11
+Nodes (24): dlb(), Efc(), Fgc(), g6b(), GFc(), gub(), Guc(), h6b() (+16 more)
+
+### Community 73 - "Edge Resolver Tests"
 Cohesion: 0.09
 Nodes (16): Decisions, Design system, Accessibility requirements, Bento dashboard design, Cytoscape graph styling and layouts, Light and dark themes with CSS tokens, 1. DEFINITIONS, 2. GRANT OF RIGHTS (+8 more)
 
-### Community 73 - "Monitoring Components"
-Cohesion: 0.17
-Nodes (4): ParsedMetrics, MetricsParser, CollectionCommand, MetricsParserTests
-
-### Community 74 - "ELK Layout Engine"
-Cohesion: 0.13
-Nodes (22): ACd(), BCd(), Ccd(), dTb(), gWd(), Icd(), lQd(), Ncd() (+14 more)
-
-### Community 75 - "ELK Layout Engine"
-Cohesion: 0.09
-Nodes (22): ace(), Bae(), ep(), gne(), Ine(), jne(), K2d(), Kne() (+14 more)
-
-### Community 76 - "Docs Components"
+### Community 74 - "Docs Components"
 Cohesion: 0.10
 Nodes (20): DevOps Agent, Background Services, Clean Architecture Dependency Rule, Collectors and Deterministic Parsing, DevOps Agent Architecture, Graph Building and Edge Resolution, LLM Tool Calling and Approval, SQLite Data Model (+12 more)
 
-### Community 77 - "Hosted Components"
-Cohesion: 0.15
-Nodes (7): DevOpsAgent.Web.Hosted, AlertEngineHostedService, AlertStatusState, OpenCount, HealthCheckHostedService, MetricPollerService, MetricRollupHostedService
+### Community 75 - "Layout Sidebar"
+Cohesion: 0.10
+Nodes (13): AntiforgeryToken, Authorized, AuthorizeView, IDisposable, NavLink, ConnectionEntry, Client, JumpConnection (+5 more)
 
-### Community 78 - "A R C H I T E C T U R E"
+### Community 76 - "Monitoring Components"
+Cohesion: 0.19
+Nodes (3): MetricsParser, CollectionCommand, MetricsParserTests
+
+### Community 77 - "ELK Layout Engine"
+Cohesion: 0.10
+Nodes (21): ace(), Bae(), ep(), gne(), Ine(), jne(), K2d(), Kne() (+13 more)
+
+### Community 78 - "Topology Components"
+Cohesion: 0.10
+Nodes (21): aLb(), apc(), BLb(), BPc(), cpc(), DPc(), eZb(), i7b() (+13 more)
+
+### Community 79 - "20261113191218 Initial Create Designer"
+Cohesion: 0.15
+Nodes (7): SshHostKeyMismatchException, Fingerprint, Host, Port, KnownHostEntry, KnownHostsVerifier, SshConnectionPool
+
+### Community 80 - "A R C H I"
 Cohesion: 0.10
 Nodes (18): MiniGraphEdge, MiniGraphNode, route:/drift, AddEdges, BuildMiniGraph, ChangeClass, CompareAsync, DisplayDescription (+10 more)
 
-### Community 79 - "Drift Components"
-Cohesion: 0.18
-Nodes (7): ConnectionDiscoveryResult, EstablishedConnectionInfo, GraphBuilder, ListenerDiscoveryResult, ListenerInfo, ConnectionCollectorParser, GraphBuilderTests
-
-### Community 80 - "Cytoscape Graph Library"
-Cohesion: 0.22
-Nodes (18): a(), fr(), n(), o(), od(), On(), a(), P() (+10 more)
-
 ### Community 81 - "Cytoscape Graph Library"
-Cohesion: 0.19
-Nodes (19): Be(), Ce(), De(), i(), Il(), ji(), t(), Li() (+11 more)
+Cohesion: 0.17
+Nodes (18): De(), Fi(), Gi(), go(), Hi(), ji(), Ki(), Li() (+10 more)
 
-### Community 82 - "Dev Ops Agent Tests Components"
+### Community 82 - "ELK Layout Engine"
+Cohesion: 0.14
+Nodes (20): Avc(), BWc(), bXc(), jWc(), Kwc(), Lwc(), MWc(), OWc() (+12 more)
+
+### Community 83 - "Hosted Components"
+Cohesion: 0.15
+Nodes (7): DevOpsAgent.Web.Hosted, AlertEngineHostedService, AlertStatusState, OpenCount, HealthCheckHostedService, MetricPollerService, MetricRollupHostedService
+
+### Community 84 - "Cytoscape Graph Library"
+Cohesion: 0.26
+Nodes (17): i(), n(), o(), od(), On(), a(), n(), pn() (+9 more)
+
+### Community 85 - "Chat Components"
+Cohesion: 0.12
+Nodes (4): ChatService, ChatServiceTests, ProbeArguments, ToolDescriptor
+
+### Community 86 - "Dev Ops Agent Tests Components"
 Cohesion: 0.18
 Nodes (17): coverlet.collector, Microsoft.EntityFrameworkCore.Sqlite, Microsoft.Extensions.AI.Abstractions, Microsoft.Extensions.AI.OpenAI, Microsoft.NET.Test.Sdk, SSH.NET, xunit, xunit.runner.visualstudio (+9 more)
 
-### Community 83 - "Docker Collector Parser"
-Cohesion: 0.11
-Nodes (18): Persistent De-duplicated Alert Lifecycle, Alerts Page, Authorized Docker-Capable SSH Server, Container Stop and Restart Acceptance, Disk Alert Rule, Scheduled Read-Only Docker Status Polling, Graph Severity Overlay, Health Check Alert Rule (+10 more)
-
-### Community 84 - "Collector Run"
+### Community 87 - "Collector Run"
 Cohesion: 0.12
 Nodes (17): CollectorRun, CollectorName, CreatedAtUtc, Duration, Error, ExitCode, Id, RawOutput (+9 more)
 
-### Community 85 - "ELK Layout Engine"
-Cohesion: 0.11
-Nodes (18): agb(), Be(), Bvb(), du(), h$d(), HB(), lbe(), LYc() (+10 more)
+### Community 88 - "Data Protection Secret Protector"
+Cohesion: 0.14
+Nodes (17): Ku(), Av(), dk(), Ir(), Jr(), Lx(), mq(), Mx() (+9 more)
 
-### Community 86 - "Collectors Components"
-Cohesion: 0.26
-Nodes (6): EtcHostsEntry, HostAddress, HostDiscoveryResult, HostInterface, HostRoute, HostCollectorParser
+### Community 89 - "ELK Layout Engine"
+Cohesion: 0.13
+Nodes (18): ase(), B_d(), Bwe(), exd(), h0d(), Ive(), j$d(), Ove() (+10 more)
 
-### Community 87 - "Dev Ops Agent Tests"
+### Community 90 - "Chat Components"
+Cohesion: 0.16
+Nodes (4): ChatStreamEvent, ChatContentRedactor, JsonToolProtocol, JsonToolProtocolTests
+
+### Community 91 - "Dev Ops Agent Tests"
 Cohesion: 0.21
 Nodes (14): _arrayLikeToArray(), _arrayWithHoles(), _classCallCheck(), _createClass(), _defineProperties(), _defineProperty(), _iterableToArrayLimit(), Layout() (+6 more)
 
-### Community 88 - "Chat Components"
-Cohesion: 0.17
-Nodes (4): ChatStreamEvent, ChatContentRedactor, JsonToolProtocol, JsonToolProtocolTests
+### Community 92 - "ELK Layout Engine"
+Cohesion: 0.13
+Nodes (17): Bqb(), Cqb(), dr(), eib(), en(), Fpb(), GPb(), knd() (+9 more)
 
-### Community 89 - "Component Preview"
+### Community 93 - "ELK Layout Engine"
+Cohesion: 0.13
+Nodes (17): cAb(), dAb(), fEb(), FHb(), gAb(), Ghb(), hAb(), iAb() (+9 more)
+
+### Community 94 - "Component Preview"
 Cohesion: 0.12
 Nodes (15): AlertRow, ProgressBar, ProposedActionCard, route:/dev/components, Badge, Card, CodeBlock, EmptyState (+7 more)
 
-### Community 90 - "Monitoring Components"
+### Community 95 - "Monitoring Components"
 Cohesion: 0.17
 Nodes (5): DevOpsAgent.Infrastructure.Monitoring, RemoteContainerStatus, RemoteServiceStatus, RemoteServiceStatusParser, RemoteServiceStatusParserTests
 
-### Community 91 - "Cytoscape ELK Layout"
+### Community 96 - "Collectors Components"
+Cohesion: 0.27
+Nodes (6): EtcHostsEntry, HostAddress, HostDiscoveryResult, HostInterface, HostRoute, HostCollectorParser
+
+### Community 97 - "Cytoscape ELK Layout"
 Cohesion: 0.14
 Nodes (14): _assertThisInitialized(), _callSuper(), _classCallCheck(), _createClass(), _defineProperties(), ELK(), ELKNode(), _getPrototypeOf() (+6 more)
 
-### Community 92 - "Component Preview"
-Cohesion: 0.14
-Nodes (16): bKd(), eud(), hs(), i3b(), Iud(), Jud(), Kud(), LNd() (+8 more)
+### Community 98 - "Host Collector Parser"
+Cohesion: 0.18
+Nodes (16): $A(), Ehb(), Fed(), ged(), IA(), jA(), KA(), ked() (+8 more)
 
-### Community 93 - "Host Collector Parser"
-Cohesion: 0.19
-Nodes (15): $A(), Ehb(), Fed(), ged(), IA(), jA(), KA(), ked() (+7 more)
-
-### Community 94 - "ELK Layout Engine"
+### Community 99 - "ELK Layout Engine"
 Cohesion: 0.13
-Nodes (15): Apb(), d6b(), gn(), hh(), hvd(), iVd(), Kvd(), lVd() (+7 more)
+Nodes (16): c2d(), FBb(), Gc(), gIb(), _hc(), kib(), LBb(), le() (+8 more)
 
-### Community 95 - "ELK Layout Engine"
-Cohesion: 0.16
-Nodes (15): awd(), Ayd(), dld(), e7d(), FDd(), gid(), hRd(), Jae() (+7 more)
-
-### Community 96 - "Ssh Components"
+### Community 100 - "ELK Layout Engine"
 Cohesion: 0.14
-Nodes (6): DevOpsAgent.Application.Servers, DevOpsAgent.Infrastructure.Ssh, SshConnectionOptions, ConnectionTimeoutSeconds, KeepAliveSeconds, KnownHostsFile
+Nodes (16): CLb(), GLb(), gNb(), lmd(), lUd(), pwd(), Sy(), tmb() (+8 more)
 
-### Community 97 - "Cytoscape Graph Library"
-Cohesion: 0.23
-Nodes (13): Fi(), Gi(), go(), Hi(), Ki(), Pe(), Ps(), e() (+5 more)
+### Community 101 - "Cytoscape Graph Library"
+Cohesion: 0.19
+Nodes (15): Be(), Ce(), e(), h(), Il(), t(), ms(), Oi() (+7 more)
 
-### Community 99 - "Layout Sidebar"
-Cohesion: 0.15
-Nodes (9): AntiforgeryToken, Authorized, AuthorizeView, NavLink, Dispose, ModelStatus, OnAlertStatusChanged, OnInitializedAsync (+1 more)
+### Community 102 - "ELK Layout Engine"
+Cohesion: 0.14
+Nodes (15): aA(), bA(), CA(), eA(), fA(), GA(), GFb(), hA() (+7 more)
 
-### Community 100 - "Ssh Config Parser"
+### Community 103 - "ELK Layout Engine"
+Cohesion: 0.17
+Nodes (15): aKb(), bKb(), ekb(), Fmb(), gMb(), hLb(), Ikb(), jkb() (+7 more)
+
+### Community 104 - "Ssh Components"
+Cohesion: 0.14
+Nodes (5): DevOpsAgent.Infrastructure.Ssh, SshConnectionOptions, ConnectionTimeoutSeconds, KeepAliveSeconds, KnownHostsFile
+
+### Community 105 - "Docker Collector Parser"
+Cohesion: 0.38
+Nodes (4): DockerNetworkContainer, DockerNetworkInfo, DockerCollectorParser, JsonElement
+
+### Community 106 - "Ssh Config Parser"
 Cohesion: 0.23
 Nodes (6): HostOptions, Values, SshConfigEntry, SshConfigParser, SshConfigParseResult, SshConfigParserTests
 
-### Community 101 - "Chat Conversation"
+### Community 107 - "Chat Conversation"
 Cohesion: 0.23
 Nodes (8): applyStyles(), clearTrace(), highlightTrace(), init(), runLayout(), setData(), setTheme(), tokens()
 
-### Community 102 - "ELK Layout Engine"
+### Community 108 - "Agent Chat"
+Cohesion: 0.23
+Nodes (13): _1b(), e9b(), _ec(), EJb(), F1b(), h1b(), Jac(), MJb() (+5 more)
+
+### Community 109 - "ELK Layout Engine"
 Cohesion: 0.17
 Nodes (13): ape(), Bne(), bpe(), Cne(), jze(), mxe(), Mze(), nxe() (+5 more)
 
-### Community 103 - "ELK Layout Engine"
-Cohesion: 0.21
-Nodes (13): b2d(), Dmd(), Emd(), FLc(), gmd(), MOd(), NOd(), OOd() (+5 more)
-
-### Community 104 - "ELK Layout Engine"
-Cohesion: 0.15
-Nodes (13): bgd(), cSb(), HNd(), ind(), jnd(), Kad(), MBc(), mnd() (+5 more)
-
-### Community 106 - "ELK Layout Engine"
-Cohesion: 0.20
-Nodes (12): a7c(), c7c(), d7c(), e7c(), g7c(), H7c(), I7c(), k7c() (+4 more)
-
-### Community 107 - "Chat Service"
-Cohesion: 0.20
-Nodes (12): aDb(), eDb(), JEb(), Kvb(), MDb(), nDb(), ODb(), OVb() (+4 more)
-
-### Community 108 - "Graph Components"
-Cohesion: 0.18
-Nodes (12): $ae(), f6d(), iFd(), Ire(), l9d(), lFd(), Lqe(), mFd() (+4 more)
-
-### Community 109 - "ELK Layout Engine"
-Cohesion: 0.27
-Nodes (12): Bo(), bq(), Co(), Cq(), Do(), Eo(), Fy(), ip() (+4 more)
-
 ### Community 110 - "ELK Layout Engine"
 Cohesion: 0.18
-Nodes (12): Ese(), fse(), gse(), Hqe(), Hse(), ise(), ize(), jse() (+4 more)
+Nodes (13): K5c(), k6c(), k7c(), l6c(), M6c(), m7c(), n6c(), n7c() (+5 more)
 
-### Community 111 - "ELK Layout Engine"
-Cohesion: 0.24
-Nodes (12): Iqd(), jQd(), Lj(), MMd(), Nj(), QOd(), QQd(), ROd() (+4 more)
-
-### Community 112 - "Pages Alerts"
+### Community 111 - "Pages Alerts"
 Cohesion: 0.18
 Nodes (9): route:/alerts, ChangeStateAsync, LoadAsync, OnInitializedAsync, AlertDto, EmptyState, PageTitle, SetFilter (+1 more)
 
-### Community 113 - "Sidebar Components"
-Cohesion: 0.22
-Nodes (11): Al(), Dl(), e(), h(), l(), m(), w(), x() (+3 more)
+### Community 112 - "Docker Compose Configuration"
+Cohesion: 0.25
+Nodes (3): DevOpsAgent.Infrastructure.Security, DataProtectionSecretProtector, SecretProtectorTests
 
-### Community 114 - "Discovery Schedule Service"
-Cohesion: 0.18
-Nodes (11): Aeb(), Ceb(), Eeb(), fEb(), GEb(), Heb(), IEb(), Udb() (+3 more)
+### Community 113 - "Servers Components"
+Cohesion: 0.31
+Nodes (11): B3b(), bvd(), cVd(), dvd(), fgb(), Fvd(), Svd(), Xnb() (+3 more)
 
-### Community 115 - "Edge Resolver"
-Cohesion: 0.18
-Nodes (11): ahc(), ehc(), gDb(), ghc(), NGc(), sCb(), SRb(), URb() (+3 more)
-
-### Community 116 - "Pages Home"
+### Community 114 - "Pages Home"
 Cohesion: 0.20
 Nodes (9): route:/, OpenServers, OpenSettings, Badge, Card, EmptyState, PageTitle, Segmented (+1 more)
 
-### Community 117 - "Graph Trace Resolver"
+### Community 115 - "Graph Trace Resolver"
 Cohesion: 0.29
 Nodes (3): GraphTracePath, GraphTraceResolver, GraphElementDto
 
-### Community 118 - "Graph Listener"
-Cohesion: 0.20
-Nodes (9): GraphListener, Address, Id, NodeId, Port, ProcessId, ProcessName, Protocol (+1 more)
-
-### Community 119 - "Launch Settings"
+### Community 116 - "Launch Settings"
 Cohesion: 0.20
 Nodes (9): ASPNETCORE_ENVIRONMENT, applicationUrl, commandName, dotnetRunMessages, environmentVariables, launchBrowser, profiles, http (+1 more)
 
-### Community 120 - "ELK Layout Engine"
+### Community 117 - "Graph Node Kind"
 Cohesion: 0.20
-Nodes (10): aA(), bA(), eA(), fA(), GA(), hA(), jz(), QA() (+2 more)
+Nodes (10): Al(), Dl(), l(), _ac(), cbc(), fbc(), ibc(), oac() (+2 more)
 
-### Community 121 - "ELK Layout Engine"
-Cohesion: 0.27
-Nodes (10): d3c(), dA(), iDb(), JDb(), NCb(), pDb(), sDb(), uEb() (+2 more)
-
-### Community 122 - "Json Tool Protocol"
+### Community 118 - "ELK Layout Engine"
 Cohesion: 0.20
-Nodes (10): HIc(), NIc(), Rpc(), Tpc(), tuc(), UHc(), Vpc(), wpc() (+2 more)
+Nodes (10): eQb(), FOb(), fQb(), hPb(), kPb(), sob(), tPb(), uOb() (+2 more)
 
-### Community 123 - "Home Components"
+### Community 119 - "Home Components"
 Cohesion: 0.22
 Nodes (6): Dispose, OnAfterRenderAsync, OnInitialized, OnLocationChanged, Icon, ToggleTheme
 
-### Community 124 - "Graph Trace Resolver"
-Cohesion: 0.25
-Nodes (9): bQd(), LOd(), mqd(), nqd(), oQd(), pqd(), tRd(), uSd() (+1 more)
-
-### Community 125 - "launch Settings"
-Cohesion: 0.25
-Nodes (4): IDisposable, ConnectionEntry, Client, JumpConnection
-
-### Community 126 - "Graph Node Kind"
+### Community 120 - "Graph Node Kind"
 Cohesion: 0.25
 Nodes (7): GraphNodeKind, Container, Domain, Host, Service, Subnet, Unknown
 
-### Community 127 - "Cytoscape Graph Library"
+### Community 121 - "Cytoscape Graph Library"
 Cohesion: 0.25
 Nodes (8): au(), cu(), a(), iu(), lu(), ou(), su(), uu()
 
-### Community 128 - "ELK Layout Engine"
+### Community 122 - "Cytoscape Graph Library"
 Cohesion: 0.25
-Nodes (8): b1b(), Ee(), jLc(), jMc(), MOc(), oMc(), TMc(), ylc()
+Nodes (6): d(), kc(), nf(), pl(), rf(), yc()
 
-### Community 129 - "ELK Layout Engine"
+### Community 123 - "ELK Layout Engine"
+Cohesion: 0.29
+Nodes (8): Ake(), Kme(), Lle(), Nme(), ole(), Tke(), Uke(), zke()
+
+### Community 124 - "ELK Layout Engine"
+Cohesion: 0.29
+Nodes (8): aqb(), bx(), Dy(), hj(), hx(), Ix(), Pm(), zm()
+
+### Community 125 - "ELK Layout Engine"
 Cohesion: 0.29
 Nodes (8): Qz(), Rz(), Sz(), Tz(), Uz(), Wz(), $z(), Zz()
 
-### Community 130 - "Top Bar"
+### Community 127 - "Top Bar"
 Cohesion: 0.29
 Nodes (7): DiscoveryProgressStage, CollectorCompleted, CollectorStarted, Completed, ServerCompleted, ServerStarted, Started
 
-### Community 131 - "Approval Service"
-Cohesion: 0.33
-Nodes (6): ToolApprovalResult, ToolApprovalState, Denied, ExecuteAutomatically, ExecuteReadOnly, PendingApproval
-
-### Community 132 - "Execution Policy"
-Cohesion: 0.29
-Nodes (7): ActionRecordStatus, Approved, Failed, Proposed, Rejected, Running, Succeeded
-
-### Community 133 - "Discovery Snapshot"
+### Community 128 - "Discovery Snapshot"
 Cohesion: 0.29
 Nodes (6): SnapshotStatus, Cancelled, Completed, Failed, Partial, Running
 
-### Community 134 - "Graph Node Kind"
-Cohesion: 0.29
-Nodes (7): _ac(), cbc(), fbc(), ibc(), oac(), Sac(), Vac()
-
-### Community 135 - "ELK Layout Engine"
-Cohesion: 0.29
-Nodes (7): Aj(), cj(), Dn(), _i(), RMd(), Sv(), vmd()
-
-### Community 136 - "ELK Layout Engine"
-Cohesion: 0.29
-Nodes (7): b9d(), E8d(), k8d(), Q8d(), Tme(), U8d(), Z8d()
-
-### Community 137 - "ELK Layout Engine"
-Cohesion: 0.29
-Nodes (7): C1d(), d6d(), Eae(), g1d(), Hfd(), K3d(), qfd()
-
-### Community 138 - "ELK Layout Engine"
-Cohesion: 0.29
-Nodes (7): cAb(), dAb(), gAb(), hAb(), iAb(), nAb(), xzb()
-
-### Community 139 - "ELK Layout Engine"
-Cohesion: 0.29
-Nodes (7): dse(), uve(), vve(), Wre(), wve(), xve(), yve()
-
-### Community 140 - "ELK Layout Engine"
+### Community 129 - "App Setting"
 Cohesion: 0.33
-Nodes (7): k6c(), l6c(), M6c(), n6c(), O6c(), o8c(), Q6c()
+Nodes (4): DevOpsAgent.Domain.Settings, AppSetting, Key, Value
 
-### Community 141 - "Graph Edge Kind"
+### Community 130 - "Graph Edge Kind"
 Cohesion: 0.33
 Nodes (5): GraphEdgeKind, Declared, Inferred, NetworkAttachment, Observed
 
-### Community 142 - "I Collector"
-Cohesion: 0.40
-Nodes (6): Eh(), mh(), Nh(), sh(), xh(), zh()
-
-### Community 143 - "Approval Service"
+### Community 131 - "Json Tool Protocol"
 Cohesion: 0.33
-Nodes (6): bEb(), bib(), cB(), cDb(), Lxb(), qob()
+Nodes (6): Rpc(), Tpc(), UHc(), Vpc(), wpc(), YHc()
 
-### Community 144 - "ELK Layout Engine"
-Cohesion: 0.33
-Nodes (6): eh(), HQb(), kf(), xbd(), Xj(), yqb()
-
-### Community 145 - "ELK Layout Engine"
-Cohesion: 0.33
-Nodes (6): GWc(), $q(), ur(), wuc(), XWc(), zuc()
-
-### Community 146 - "ELK Layout Engine"
-Cohesion: 0.33
-Nodes (6): hSd(), iSd(), JSd(), lsd(), qSd(), SSd()
-
-### Community 147 - "ELK Layout Engine"
-Cohesion: 0.40
-Nodes (6): mrd(), nrd(), ord(), Prd(), rrd(), SHd()
-
-### Community 148 - "Nginx Configuration"
+### Community 132 - "Nginx Configuration"
 Cohesion: 0.33
 Nodes (6): nginx configuration dump fixture, nginx upstream app_backend, nginx upstream target /run/app/backend.sock, nginx upstream target 10.20.0.11:8080, nginx upstream postgres_cluster, nginx PostgreSQL targets 10.30.0.21:5432 and 10.30.0.22:5432
 
-### Community 149 - "Fixtures Components"
+### Community 133 - "Fixtures Components"
 Cohesion: 0.33
 Nodes (6): Listening socket fixture, Socket fixture: sshd on 22, nginx on 80, PostgreSQL on 5432, systemd nginx details fixture, systemd nginx MainPID 220, systemd sshd details fixture, systemd sshd MainPID 1000
 
-### Community 151 - "App Setting"
+### Community 135 - "And Ssh Authorized"
 Cohesion: 0.40
-Nodes (4): DevOpsAgent.Domain.Settings, AppSetting, Key, Value
+Nodes (5): Authorized SSH Targets and Pinned Host Keys, T1.2 SSH Pool and Runner, T2.7 Topology Page, T3.3 Evidence Panel and Trace, T6.5 Updates
 
-### Community 152 - "Graph Edge Kind"
+### Community 136 - "Graph Edge Kind"
 Cohesion: 0.40
 Nodes (4): FocusOnNavigate, Found, Router, RouteView
 
-### Community 154 - "Nginx Collector Parser"
+### Community 137 - "Nginx Collector Parser"
 Cohesion: 0.40
 Nodes (5): TokenKind, CloseBrace, OpenBrace, Semicolon, Word
 
-### Community 155 - "ELK Layout Engine"
-Cohesion: 0.50
-Nodes (5): _8b(), I8b(), W8b(), Y8b(), Z8b()
-
-### Community 156 - "ELK Layout Engine"
+### Community 138 - "ELK Layout Engine"
 Cohesion: 0.40
-Nodes (5): aId(), Bnd(), Lg(), Og(), Pg()
+Nodes (5): CXc(), FXc(), gXc(), Iid(), lXc()
 
-### Community 157 - "ELK Layout Engine"
+### Community 139 - "App Setting"
 Cohesion: 0.40
-Nodes (5): btd(), ey(), _Td(), Tx(), ZSd()
+Nodes (5): gob(), ipb(), jxb(), qpb(), Rob()
 
-### Community 158 - "ELK Layout Engine"
-Cohesion: 0.40
-Nodes (5): Dhb(), kxe(), oxe(), pxe(), Zhb()
+### Community 140 - "And T5.3 Alert"
+Cohesion: 0.67
+Nodes (4): T5.3 Alert Engine and Alerts Page, T6.3 Agent Chat with Tools, T6.4 SSH Attack Detection and Bans, T6.6 MVP Hardening Pass
 
-### Community 159 - "ELK Layout Engine"
-Cohesion: 0.40
-Nodes (5): E9c(), F9c(), H9c(), I9c(), k9c()
-
-### Community 160 - "Nginx Configuration"
-Cohesion: 0.50
-Nodes (5): FRb(), GRb(), hRb(), iRb(), KRb()
-
-### Community 161 - "Socket Listener Output"
-Cohesion: 0.40
-Nodes (5): FXd(), GXd(), iXd(), _Xd(), ZXd()
-
-### Community 162 - "Chat Service Tests"
-Cohesion: 0.50
-Nodes (5): mad(), nad(), oad(), pad(), rad()
-
-### Community 163 - "Routes Components"
-Cohesion: 0.50
-Nodes (5): TA(), VA(), WA(), XA(), YA()
-
-### Community 165 - "Components App"
+### Community 141 - "Components App"
 Cohesion: 0.50
 Nodes (3): HeadOutlet, ImportMap, Routes
 
-### Community 166 - "Persistence Options"
+### Community 143 - "Persistence Options"
 Cohesion: 0.50
 Nodes (3): PersistenceOptions, ConnectionString, DataProtectionKeysDirectory
 
-### Community 167 - "Js Theme"
+### Community 144 - "Js Theme"
 Cohesion: 0.83
 Nodes (3): apply(), current(), toggle()
 
-### Community 168 - "ELK Layout Engine"
-Cohesion: 0.50
-Nodes (4): _9b(), fac(), iac(), lac()
+### Community 146 - "Configured Telegram Ntfy"
+Cohesion: 0.67
+Nodes (3): Configured Telegram or ntfy Destination, Progress Handoff, T5.4 Notifications
 
-### Community 169 - "ELK Layout Engine"
-Cohesion: 0.50
-Nodes (4): AWb(), cWb(), xWb(), yWb()
-
-### Community 170 - "ELK Layout Engine"
-Cohesion: 0.50
-Nodes (4): B6c(), d6c(), J6c(), l7c()
-
-### Community 171 - "ELK Layout Engine"
-Cohesion: 0.50
-Nodes (4): BHb(), jhb(), pHb(), rhb()
-
-### Community 172 - "ELK Layout Engine"
-Cohesion: 0.50
-Nodes (4): bxd(), dRb(), fo(), Tqb()
-
-### Community 173 - "App Components"
-Cohesion: 0.50
-Nodes (4): Crd(), wRd(), yrd(), Zrd()
-
-### Community 174 - "Alerts Components"
-Cohesion: 0.50
-Nodes (4): e$d(), k$d(), Yed(), zed()
-
-### Community 175 - "Drift Contracts"
-Cohesion: 0.50
-Nodes (4): Fmc(), umc(), wmc(), Xmc()
-
-### Community 176 - "ELK Layout Engine"
-Cohesion: 0.50
-Nodes (4): GBb(), iCb(), kCb(), mCb()
-
-### Community 177 - "App Setting"
-Cohesion: 0.50
-Nodes (4): gob(), ipb(), jxb(), Rob()
-
-### Community 178 - "Persistence Options"
-Cohesion: 0.50
-Nodes (4): MZb(), pZb(), QZb(), RZb()
-
-### Community 179 - "Theme System"
-Cohesion: 0.50
-Nodes (4): O5b(), U5b(), W5b(), y2b()
-
-### Community 180 - "ELK Layout Engine"
-Cohesion: 0.50
-Nodes (4): UGc(), wGc(), xgc(), zgc()
-
-### Community 189 - "Logout Components"
+### Community 155 - "Logout Components"
 Cohesion: 0.67
 Nodes (3): JetBrains Mono SIL Open Font License, Plus Jakarta Sans SIL Open Font License, Font Licenses Index
 
-### Community 191 - "Page Placeholder"
-Cohesion: 0.67
-Nodes (3): ABb(), DBb(), nBb()
-
-### Community 192 - "Proposed Action Card"
-Cohesion: 0.67
-Nodes (3): amb(), NKb(), VMb()
-
-### Community 193 - "Stat Tile"
-Cohesion: 0.67
-Nodes (3): Ao(), GHd(), kp()
-
-### Community 194 - "L I C E N S E Jet Brains Mono"
-Cohesion: 0.67
-Nodes (3): axb(), Bed(), fmd()
-
-### Community 195 - "ELK Layout Engine"
-Cohesion: 0.67
-Nodes (3): bj(), fn(), Zj()
-
-### Community 196 - "ELK Layout Engine"
-Cohesion: 0.67
-Nodes (3): Bu(), Cu(), ut()
-
-### Community 197 - "ELK Layout Engine"
-Cohesion: 0.67
-Nodes (3): Bve(), Cve(), dve()
-
-### Community 198 - "ELK Layout Engine"
-Cohesion: 0.67
-Nodes (3): C5c(), H8c(), R8c()
-
-### Community 199 - "ELK Layout Engine"
-Cohesion: 0.67
-Nodes (3): cgb(), VGb(), xGb()
-
-### Community 200 - "ELK Layout Engine"
-Cohesion: 0.67
-Nodes (3): cRb(), Erb(), Jrb()
-
-### Community 201 - "ELK Layout Engine"
-Cohesion: 0.67
-Nodes (3): D7b(), O7b(), S7b()
-
-### Community 202 - "ELK Layout Engine"
-Cohesion: 0.67
-Nodes (3): fj(), sj(), XNd()
-
-### Community 203 - "ELK Layout Engine"
-Cohesion: 0.67
-Nodes (3): FPc(), Npc(), PPc()
-
-### Community 204 - "ELK Layout Engine"
-Cohesion: 0.67
-Nodes (3): GFb(), hFb(), Iz()
-
-### Community 205 - "ELK Layout Engine"
-Cohesion: 0.67
-Nodes (3): Gjd(), Hjd(), xJd()
-
-### Community 206 - "ELK Layout Engine"
-Cohesion: 0.67
-Nodes (3): HVc(), Kvc(), tVc()
-
-### Community 207 - "ELK Layout Engine"
-Cohesion: 0.67
-Nodes (3): Iu(), vr(), xt()
-
-### Community 208 - "ELK Layout Engine"
-Cohesion: 0.67
-Nodes (3): J9b(), k9b(), p9b()
-
-### Community 209 - "ELK Layout Engine"
-Cohesion: 0.67
-Nodes (3): JMb(), kMb(), mMb()
-
-### Community 210 - "ELK Layout Engine"
-Cohesion: 0.67
-Nodes (3): Jqe(), sse(), Wse()
-
-### Community 211 - "ELK Layout Engine"
-Cohesion: 0.67
-Nodes (3): Lub(), svb(), Zub()
-
-### Community 212 - "docker entrypoint"
-Cohesion: 0.67
-Nodes (3): Lyb(), Meb(), Ve()
-
-### Community 213 - "Field Components"
-Cohesion: 0.67
-Nodes (3): Qcc(), Ucc(), Wcc()
-
-### Community 214 - "Select Components"
-Cohesion: 0.67
-Nodes (3): Qeb(), reb(), Seb()
-
-### Community 215 - "Switch Row"
-Cohesion: 0.67
-Nodes (3): tKd(), vKd(), Xid()
-
-### Community 216 - "ELK Layout Engine"
-Cohesion: 0.67
-Nodes (3): Tsb(), vsb(), WSb()
-
 ## Knowledge Gaps
-- **531 isolated node(s):** `Mutating`, `ReadOnly`, `RequiresApproval`, `Tools`, `ApprovedAtUtc` (+526 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1129 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **104 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **533 isolated node(s):** `CreatedAtUtc`, `Id`, `Messages`, `Title`, `UpdatedAtUtc` (+528 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1151 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **60 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Guid` connect `20261113191218 Initial Create Designer` to `Execution Policy`, `Pages Components`, `App Db Context`, `Approval Service`, `Llm Provider`, `Ssh Connection Pool`, `Tool Registry`, `Llm Components`, `Discovery Components`, `Servers Components`, `Migrations Components`, `Discovery Components`, `Collector Run`, `Graph Listener`, `Unit Test1`?**
-  _High betweenness centrality (0.022) - this node is a cross-community bridge._
-- **What connects `Mutating`, `ReadOnly`, `RequiresApproval` to the rest of the system?**
-  _531 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Why does `Guid` connect `Unit Test1` to `App Db Context`, `Execution Policy`, `Llm Provider`, `Pages Components`, `Llm Components`, `Migrations Components`, `20261113191218 Initial Create Designer`, `Tool Registry`, `Servers Components`, `Discovery Components`, `Collector Run`, `Tool Registry`?**
+  _High betweenness centrality (0.021) - this node is a cross-community bridge._
+- **What connects `CreatedAtUtc`, `Id`, `Messages` to the rest of the system?**
+  _533 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `ELK Layout Engine` be split into smaller, more focused modules?**
-  _Cohesion score 0.004784688995215311 - nodes in this community are weakly interconnected._
-- **Why does `AppDbContext` connect `Persistence Components` to `Execution Policy`, `Llm Provider`, `Tool Registry`, `Llm Components`, `Servers Components`, `Persistence Components`, `Web UI Components`, `Persistence Components`, `Unit Test1`?**
-  _High betweenness centrality (0.012) - this node is a cross-community bridge._
-- **Should `Execution Policy` be split into smaller, more focused modules?**
-  _Cohesion score 0.02344149459193707 - nodes in this community are weakly interconnected._
-- **Why does `ChatService` connect `Chat Components` to `Execution Policy`, `Persistence Components`, `Error Components`, `Web UI Components`, `Chat Components`?**
-  _High betweenness centrality (0.011) - this node is a cross-community bridge._
-- **Should `Discovery Service Tests` be split into smaller, more focused modules?**
-  _Cohesion score 0.03491811557607676 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.005200508494163873 - nodes in this community are weakly interconnected._
+- **Why does `xh()` connect `Cytoscape Graph Library` to `ELK Layout Engine`?**
+  _High betweenness centrality (0.007) - this node is a cross-community bridge._
+- **Should `App Db Context` be split into smaller, more focused modules?**
+  _Cohesion score 0.033515881708652794 - nodes in this community are weakly interconnected._
+- **Why does `ChatService` connect `Chat Components` to `Execution Policy`, `Persistence Components`, `Unit Test1`, `Web UI Components`, `Tool Registry`, `Chat Components`?**
+  _High betweenness centrality (0.007) - this node is a cross-community bridge._
+- **Should `ELK Layout Engine` be split into smaller, more focused modules?**
+  _Cohesion score 0.030414746543778803 - nodes in this community are weakly interconnected._
