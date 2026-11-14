@@ -40,7 +40,7 @@ public sealed class AlertSignalSource(
                 var latest = await metrics.GetLatestAsync(server.Id, cancellationToken);
                 if (latest.Count > 0)
                 {
-                var recent = await metrics.GetRecentAsync(server.Id, now.AddMinutes(-5), cancellationToken);
+                var recent = await metrics.GetRecentAsync(server.Id, now - TimeSpan.FromMinutes(5) - SustainedThreshold.LookbackSlack, cancellationToken);
                 AddThreshold(recent, "disk_percent", "disk", 90, TimeSpan.Zero, AlertSeverity.High, "Disk usage is at least 90%", result, server.Id, server.Name);
                 AddThreshold(recent, "memory_percent", "memory", 90, TimeSpan.FromMinutes(5), AlertSeverity.High, "Memory usage has stayed at least 90% for 5 minutes", result, server.Id, server.Name);
                 var cpuCores = latest.FirstOrDefault(item => item.Metric == "cpu_cores")?.Value;
@@ -96,12 +96,9 @@ public sealed class AlertSignalSource(
     private static void AddThreshold(IReadOnlyList<MetricSample> samples, string metric, string key, double threshold,
         TimeSpan requiredDuration, AlertSeverity severity, string title, ICollection<AlertCondition> result, Guid serverId, string serverName, bool strict = false)
     {
-        var values = samples.Where(item => item.Metric == metric).OrderBy(item => item.AtUtc).ToArray();
-        bool Below(double value) => strict ? value <= threshold : value < threshold;
-        if (values.Length == 0 || Below(values[^1].Value)) return;
-        if (requiredDuration > TimeSpan.Zero && (values[0].AtUtc > values[^1].AtUtc - requiredDuration || values.Any(item => Below(item.Value)))) return;
+        if (!SustainedThreshold.IsBreached(samples, metric, threshold, requiredDuration, strict, out var latestValue)) return;
         result.Add(Condition($"threshold-{key}", serverId.ToString("N"), severity, serverId, serverName,
-            $"{serverName}: {title}", $"Latest {metric} value is {values[^1].Value:0.0}."));
+            $"{serverName}: {title}", $"Latest {metric} value is {latestValue:0.0}."));
     }
 
     private static AlertCondition Condition(string rule, string targetKey, AlertSeverity severity, Guid? serverId,
