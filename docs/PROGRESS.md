@@ -7,12 +7,11 @@
 ## Current
 
 - **Task:** T5.3 Alert engine and Alerts page
-- **Status:** blocked
+- **Status:** done
 - **Last updated:** 2026-11-14 by Codex
-T5.3 implementation is complete; only live container stop/restart acceptance remains. Exact next step: add the independently verified Docker host entry to `src/DevOpsAgent.Web/data/ssh-keys/known_hosts`, then save that host in the open server form with the detected `id_rsa`; after it is configured, run PLAN.md container stop/restart acceptance and confirm alert open/resolution timing.
+T5.3 is complete. On the owner-selected test container, the alert opened within 2 minutes after stop, the container was restarted successfully, and the alert auto-resolved.
 ## WIP notes
 
-T5.3 implementation is complete: persistent de-duplicated alert lifecycle; scheduled read-only SSH status polling for Docker and failed systemd units; disk, sustained memory/load, SSH reachability, health-check, TLS expiry, and new-listener rules; Alerts page, sidebar count, and graph severity overlay. Build is clean with 0 warnings/errors, 90/90 tests pass, AddAlerts migration applied in isolated SQLite, and the seeded Alerts page was verified in light/dark. Exact next step: run the PLAN.md container-stop/restart acceptance against an authorized Docker-capable SSH server with a pinned host key; confirm alert opens within 2 minutes and resolves after restart. No such target/key is configured. The owner also reported that Add server does not appear to save. Reproduction showed the required private key field silently blocked submission because it had no validation message. Added a clear “Select a private key file.” validation message beneath the selector. The local app now uses a separate `data/ssh-keys` directory and `known_hosts` path so Data Protection keys are not offered as SSH identities. Build is clean and all 90 tests pass; browser verification confirms the missing-key message appears while the form stays open and no server is saved. The owner placed `id_rsa` in the configured directory and it now appears in the form. `known_hosts` is still absent and the inventory has no test server.
 
 ## Blockers
 
@@ -24,7 +23,7 @@ T2.7 live acceptance is blocked by the same missing authorized SSH targets and p
 
 T3.3's implementation and synthetic trace tests are complete, but PLAN requires J3 to work on real servers. Verification is blocked by the missing authorized SSH targets and pinned host keys recorded under T1.2/T2.7. Resume real trace/evidence verification when those are available; do not treat the synthetic UI check as satisfying J3.
 
-The prior M5 deferral has been lifted by the owner's instruction to continue task by task. T5.1 and T5.2 are complete. T5.3 implementation is complete, but live acceptance is blocked: no authorized Docker-capable SSH target and pinned host key are configured. Continue when those are available; do not run container-stop tests against owner servers without authorization. The owner authorized the live acceptance attempt on 2026-11-14; inspection found `/keys` empty and the local app database contained zero server records, so no remote command was run. The app is running locally with a dedicated SSH-key directory; `id_rsa` is present and appears in the selector. `known_hosts` and an authorized Docker test server are still missing, so no remote command has been run.
+The prior M5 deferral has been lifted by the owner's instruction to continue task by task. T5.1, T5.2, and T5.3 are complete. T5.3 live acceptance passed on 2026-11-14: the selected Docker container triggered an alert within 2 minutes, was restarted, and its alert auto-resolved. No other blocked SSH acceptance was changed.
 
 T6.4 is deferred because it depends on incomplete T6.3 and blocked T5.3. Resume after those dependencies are completed.
 
@@ -64,7 +63,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T4.3 | Drift and scheduled discovery | done | `feat(T4.3): drift and scheduled discovery` |
 | T5.1 | Metric poller | done | `feat(T5.1): metric polling and server detail` |
 | T5.2 | Health checks | done | `feat(T5.2): scheduled health checks` |
-| T5.3 | Alert engine and Alerts page | blocked | `wip(T5.3): alert engine and monitoring UI` |
+| T5.3 | Alert engine and Alerts page | done | `feat(T5.3): complete alert engine and live acceptance` |
 | T5.4 | Notifications | todo | |
 | T5.5 | Overview with real data | todo | |
 | T6.1 | Tool registry and execution modes | done | `feat(T6.1): tool policies and approvals` |
@@ -179,3 +178,5 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T5.3 · fixed missing private-key validation feedback in server form; clean build, 90/90 tests; verified in browser; local app running on loopback with temporary admin password and isolated SSH key directory
 
 - 2026-11-14 · Codex / GPT-6 · T5.3 · confirmed owner-provided `id_rsa` is visible in server form; `known_hosts` not yet present; next add verified Docker host pin and save server
+
+- 2026-11-14 · Codex / GPT-6 · T5.3 · live acceptance passed: selected container alert opened within 2 minutes, container restarted successfully, alert auto-resolved; Add server key validation fixed; build clean, 90/90 tests
