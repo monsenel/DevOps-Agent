@@ -6,18 +6,18 @@
 
 ## Current
 
-- **Task:** T3.1 nginx parser
-- **Status:** done
+- **Task:** T3.2 Edge resolution
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
 What is done so far:
 - T2.7 is implemented and committed as `4d053ee`; synthetic two-host browser verification passed, but its real SSH acceptance remains blocked until authorized hosts and pinned keys are available.
-- T3.1 is complete and committed as `feat(T3.1): nginx parser`; fixture tests cover multiple files, file/line metadata, weighted and Unix-socket upstreams, variable targets, HTTP and stream blocks, and all planned proxy directives.
-- Build passes with zero warnings/errors and all 33 tests pass.
+- T3.1 is complete and committed as `f1dd838`; all 33 tests pass.
+- T3.2's plan, PRD resolution order, graph builder, discovery records, and nginx parse result are reviewed.
 What is next (exact next step):
-- Read T3.2's resolution order and inspect the current graph, discovery, Docker, hosts, and listener records; then implement the first EdgeResolver pass and fixture tests.
+- Define the resolver input and output, then add domain nodes, declared edges, and source evidence to the graph build with tests for each resolution path.
 Files touched:
 - `docs/PROGRESS.md`
 Gotchas found:
@@ -61,7 +61,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T2.6 | Graph builder | done | `feat(T2.6): graph builder` |
 | T2.7 | Topology page | blocked | `wip(T2.7): topology page and graph interop` |
 | T3.1 | nginx parser | done | `feat(T3.1): nginx parser` |
-| T3.2 | Edge resolution | todo | |
+| T3.2 | Edge resolution | in-progress | |
 | T3.3 | Evidence panel and Trace | todo | |
 | T4.1 | Live connections | todo | |
 | T4.2 | Unknown nodes | todo | |
@@ -128,3 +128,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T2.7 · topology UI and graph interop implemented; synthetic two-host browser check passed, real SSH acceptance blocked by missing targets/keys; build/test pass (31/31)
 - 2026-11-14 · Codex / GPT-6 · T3.1 · started
 - 2026-11-14 · Codex / GPT-6 · T3.1 · deterministic nginx tokenizer/block parser and fixture coverage complete; build/test pass (33/33)
+- 2026-11-14 · Codex / GPT-6 · T3.2 · started
