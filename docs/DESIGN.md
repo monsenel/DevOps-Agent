@@ -88,10 +88,10 @@ Inside cards: 12px gap between blocks; 16px between form fields; 10–14px insid
 
 ### App shell
 - Page: `display:flex; flex-wrap:wrap; gap:20px; padding:20px; background:var(--dva-bg)`.
-- **Sidebar card** (`flex:1 1 220px; max-width:248px`): logo row (32px accent square with graph icon + "DevOps Agent" 16/700), nav list, "Groups" section with counts, spacer, **Model card** (inverted) at the bottom: micro label "Model", provider name, status line, button "LLM settings" → Settings › LLM.
+- **Sidebar card** (desktop: fixed to the left edge, 248px wide, full viewport height): logo row (32px accent square with graph icon + "DevOps Agent" 16/700), nav list, "Groups" section with counts, spacer, **Model card** (inverted) at the bottom: micro label "Model", provider name, status line, button "LLM settings" → Settings › LLM. The sidebar scrolls vertically if its contents exceed the viewport; the main column offsets by the sidebar width.
 - **Main** (`flex:999 1 560px; min-width:0`): column with 20px gap.
 - **Top bar** (no card, inline in main): h1 page title, spacer, search field (inset-free: card background, 280px), theme toggle, primary action of the page (Overview: "Run discovery").
-- Under ~800px the sidebar wraps above the content; card rows wrap. Never `position:sticky` or `100vh` on the sidebar.
+- Under ~800px the sidebar returns to normal document flow and wraps above the content; card rows wrap. The desktop sidebar stays fixed at full viewport height.
 
 Nav items (order): Overview, Topology, Servers, Alerts (badge = open count, warn-soft), Updates, Agent chat, Action log, Settings. Active item: accent background, on-accent text, 600. Inactive: transparent, muted, 500.
 

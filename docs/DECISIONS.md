@@ -86,3 +86,8 @@ Format: `D-<number> · <date> · <title>` then Decision / Why / Consequences.
 - **Decision:** Vendor Cytoscape.js 3.35.0 (MIT), cytoscape-elk 2.4.0 (MIT), and elkjs 0.12.1 (EPL-2.0 OR GPL-3.0-or-later) under `src/DevOpsAgent.Web/wwwroot/lib`.
 - **Why:** T2.7 requires an offline-capable compound graph with ELK layered layout; the versions were checked against the package manifests and adapter README.
 - **Consequences:** Keep each package's license text beside its browser bundle. The app does not add a runtime npm install or package manifest.
+
+### D-021 · 2026-11-14 · Fixed full-height desktop sidebar
+- **Decision:** Supersede the desktop sidebar layout rule in `DESIGN.md` with a fixed, 248px-wide sidebar spanning the viewport height; keep it in normal flow and stacked above content below 800px.
+- **Why:** The owner requested a fixed sidebar whose height matches the screen.
+- **Consequences:** Offset desktop main content by the sidebar width. Allow the sidebar itself to scroll when its contents exceed the viewport.
