@@ -102,40 +102,52 @@ public interface IServerTargetArgs
 
 public sealed record QueryGraphArgs(
     [property: StringLength(300)] string? Query = null,
-    [property: RegularExpression("^(service|network)$", ErrorMessage = "View must be service or network.")] string? View = null);
+    [property: RegularExpression("\\A(service|network)\\z", ErrorMessage = "View must be service or network.")] string? View = null);
 
 public sealed record RunDiscoveryArgs(IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 
 public sealed record ServiceStatusArgs(
-    [property: Required, StringLength(200, MinimumLength = 1), RegularExpression("^[A-Za-z0-9][A-Za-z0-9@_.:-]*$")] string Unit,
+    [property: Required, StringLength(200, MinimumLength = 1), RegularExpression("\\A[A-Za-z0-9][A-Za-z0-9@_.:-]*\\z")] string Unit,
     [property: MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 
 public sealed record RestartServiceArgs(
-    [property: Required, StringLength(200, MinimumLength = 1), RegularExpression("^[A-Za-z0-9][A-Za-z0-9@_.:-]*$")] string Unit,
+    [property: Required, StringLength(200, MinimumLength = 1), RegularExpression("\\A[A-Za-z0-9][A-Za-z0-9@_.:-]*\\z")] string Unit,
     [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 
 public sealed record DockerPsArgs([property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 public sealed record DockerDiskUsageArgs([property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 
 public sealed record DockerLogsArgs(
-    [property: Required, StringLength(128, MinimumLength = 1), RegularExpression("^[A-Za-z0-9][A-Za-z0-9_.-]*$")] string Container,
+    [property: Required, StringLength(128, MinimumLength = 1), RegularExpression("\\A[A-Za-z0-9][A-Za-z0-9_.-]*\\z")] string Container,
     [property: Range(1, 2000)] int Tail = 200,
     [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 
 public sealed record TailLogArgs(
     [property: Required, StringLength(1024, MinimumLength = 1)] string Path,
     [property: Range(1, 2000)] int Lines = 100,
-    [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
+    [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IValidatableObject, IServerTargetArgs
+{
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (SensitivePathPolicy.Check(Path) is { } error) yield return new ValidationResult(error, [nameof(Path)]);
+    }
+}
 
 public sealed record ReadFileArgs(
     [property: Required, StringLength(1024, MinimumLength = 1)] string Path,
     [property: Range(1, 1048576)] int MaxBytes = 65536,
-    [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
+    [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IValidatableObject, IServerTargetArgs
+{
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (SensitivePathPolicy.Check(Path) is { } error) yield return new ValidationResult(error, [nameof(Path)]);
+    }
+}
 
 public sealed record DiskUsageArgs([property: StringLength(1024)] string? Path = null,
     [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 public sealed record RestartContainerArgs(
-    [property: Required, StringLength(128, MinimumLength = 1), RegularExpression("^[A-Za-z0-9][A-Za-z0-9_.-]*$")] string Container,
+    [property: Required, StringLength(128, MinimumLength = 1), RegularExpression("\\A[A-Za-z0-9][A-Za-z0-9_.-]*\\z")] string Container,
     [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 public sealed record ListUpdatesArgs([property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 

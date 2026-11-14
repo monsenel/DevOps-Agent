@@ -35,8 +35,8 @@ public sealed class ToolCommandBuilder(ToolRegistry tools)
                 "docker ps --no-trunc --format '{{.ID}} {{.Names}} {{.Image}} {{.Status}} {{.Ports}}'", false),
             ("docker_disk_usage", DockerDiskUsageArgs) => new("docker system df -v", false),
             ("docker_logs", DockerLogsArgs value) => new($"docker logs --tail {value.Tail} {Quote(value.Container)} 2>&1", false),
-            ("tail_log", TailLogArgs value) => new($"tail -n {value.Lines} -- {Quote(value.Path)}", false),
-            ("read_file", ReadFileArgs value) => new($"head -c {value.MaxBytes} -- {Quote(value.Path)}", false),
+            ("tail_log", TailLogArgs value) when AllowPath(value.Path) => new($"tail -n {value.Lines} -- {Quote(value.Path)}", false),
+            ("read_file", ReadFileArgs value) when AllowPath(value.Path) => new($"head -c {value.MaxBytes} -- {Quote(value.Path)}", false),
             ("disk_usage", DiskUsageArgs { Path: not null } value) => new(
                 $"df -P -- {Quote(value.Path)} 2>&1; printf '%s\\n' 'Top-level disk usage:'; timeout 90s du -x -h --max-depth=1 -- {Quote(value.Path)} 2>/dev/null | sort -hr | head -20", true),
             ("disk_usage", DiskUsageArgs) => new(
@@ -103,6 +103,13 @@ public sealed class ToolCommandBuilder(ToolRegistry tools)
     {
         var set = address.Contains(':') ? "blocked_ipv6" : "blocked_ipv4";
         return "nft delete element inet dva " + set + " { " + Quote(address) + " }";
+    }
+
+    // Defence in depth: the registry already rejects these paths, but a command must never be built for one.
+    private static bool AllowPath(string path)
+    {
+        SensitivePathPolicy.EnsureAllowed(path);
+        return true;
     }
 
     private static string Quote(string value) => $"'{value.Replace("'", "'\\''", StringComparison.Ordinal)}'";

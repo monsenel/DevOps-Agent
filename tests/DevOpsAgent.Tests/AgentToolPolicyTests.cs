@@ -39,6 +39,59 @@ public sealed class AgentToolPolicyTests
             "service_status", Json("{\"unit\":\"nginx\"}"))).Unit);
     }
 
+    [Theory]
+    [InlineData("read_file", "/home/deploy/.ssh/id_rsa")]
+    [InlineData("read_file", "/root/.ssh/authorized_keys")]
+    [InlineData("read_file", "/home/deploy/x/../.ssh/config")]
+    [InlineData("read_file", "/srv/app/.env")]
+    [InlineData("read_file", "/srv/app/.env.production")]
+    [InlineData("tail_log", "/proc/1234/environ")]
+    [InlineData("tail_log", "/proc/self/environ")]
+    [InlineData("read_file", "/etc/ssl/private/site.pem")]
+    [InlineData("read_file", "/etc/ssl/private/site.key")]
+    [InlineData("read_file", "/opt/keys/id_ed25519")]
+    [InlineData("read_file", "/opt/keys/id_ecdsa.bak")]
+    [InlineData("read_file", "/etc/shadow")]
+    [InlineData("read_file", "/etc//gshadow")]
+    [InlineData("read_file", "/var/log/../../etc/shadow")]
+    public void FileToolsRejectSensitivePaths(string tool, string path)
+    {
+        var registry = new ToolRegistry();
+        var args = Json(JsonSerializer.Serialize(new { path, serverIds = new[] { Guid.NewGuid() } }));
+
+        Assert.Throws<ArgumentException>(() => registry.ValidateArguments(tool, args));
+    }
+
+    [Theory]
+    [InlineData("read_file", "/etc/nginx/nginx.conf")]
+    [InlineData("tail_log", "/var/log/nginx/error.log")]
+    [InlineData("tail_log", "/var/log/auth.log")]
+    [InlineData("read_file", "/srv/app/environment.md")]
+    [InlineData("read_file", "/home/deploy/ssh-notes.txt")]
+    public void FileToolsStillAllowOrdinaryPaths(string tool, string path)
+    {
+        var registry = new ToolRegistry();
+        var args = Json(JsonSerializer.Serialize(new { path, serverIds = new[] { Guid.NewGuid() } }));
+        var typed = registry.ValidateArguments(tool, args);
+
+        var command = new ToolCommandBuilder(registry).BuildReadOnly(tool, typed);
+
+        Assert.Contains(path, command.Command, StringComparison.Ordinal);
+        Assert.Throws<ArgumentException>(() => new ToolCommandBuilder(registry).BuildReadOnly(
+            "read_file", new ReadFileArgs("/etc/shadow")));
+    }
+
+    [Theory]
+    [InlineData("service_status", "{\"unit\":\"nginx\\n\"}")]
+    [InlineData("restart_service", "{\"unit\":\"nginx\\n\",\"serverIds\":[\"c4d7d14f-897d-4b31-8d33-455cc6e926d6\"]}")]
+    [InlineData("restart_container", "{\"container\":\"web\\n\",\"serverIds\":[\"c4d7d14f-897d-4b31-8d33-455cc6e926d6\"]}")]
+    [InlineData("docker_logs", "{\"container\":\"web\\n\"}")]
+    [InlineData("query_graph", "{\"view\":\"service\\n\"}")]
+    public void RegexValidatedArgumentsRejectTrailingNewlines(string tool, string json)
+    {
+        Assert.Throws<ArgumentException>(() => new ToolRegistry().ValidateArguments(tool, Json(json)));
+    }
+
     [Fact]
     public void BanToolsPreferFail2banThenUfwThenDedicatedNftablesSets()
     {
