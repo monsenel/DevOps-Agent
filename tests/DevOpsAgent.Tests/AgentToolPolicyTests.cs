@@ -85,7 +85,8 @@ public sealed class AgentToolPolicyTests
 
         Assert.True(disk.UseSudo);
         Assert.Contains("df -P", disk.Command, StringComparison.Ordinal);
-        Assert.Contains("du -x -h --max-depth=1 /", disk.Command, StringComparison.Ordinal);
+        Assert.Contains("df -P -- / /lab /var/lib/docker", disk.Command, StringComparison.Ordinal);
+        Assert.Contains("du -x -h --max-depth=1 -- \"$path\"", disk.Command, StringComparison.Ordinal);
         Assert.False(dockerDisk.UseSudo);
         Assert.Equal("docker system df -v", dockerDisk.Command);
         Assert.False(restart.UseSudo);
