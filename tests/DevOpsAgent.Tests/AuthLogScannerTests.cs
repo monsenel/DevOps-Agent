@@ -89,6 +89,35 @@ public sealed class AuthLogScannerTests
     }
 
     [Fact]
+    public async Task Scan_RepeatedSudoByTheSameUserKeepsOneStableAlertAndDropsArguments()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var time = new MutableTimeProvider(now);
+        var first = now.AddSeconds(-90).ToString("yyyy-MM-dd'T'HH:mm:sszzz");
+        var second = now.AddSeconds(-30).ToString("yyyy-MM-dd'T'HH:mm:sszzz");
+        var settings = new MemorySettings();
+        var output = $"{first} host sudo[1]: rogue : TTY=pts/0 ; PWD=/tmp ; USER=root ; COMMAND=/usr/bin/mysql --password=hunter2 -e 'select 1'"
+            + $"\n{second} host sudo[2]: rogue : TTY=pts/0 ; PWD=/tmp ; USER=root ; COMMAND=/bin/cat /etc/app/token=abc123"
+            + "\n__DVA_BAN_TOOLS__\n__DVA_BAN_STATE__\n";
+        var scanner = new AuthLogScanner(new FixtureSshRunner(output), settings,
+            Options.Create(new SecurityMonitoringOptions()), time);
+        var server = new Server("edge", "edge.example", 22, "deploy", "id_ed25519", "staging");
+
+        var firstScan = Assert.Single(await scanner.ScanAsync(server, CancellationToken.None));
+        time.Advance(TimeSpan.FromSeconds(20));
+        var secondScan = Assert.Single(await scanner.ScanAsync(server, CancellationToken.None));
+
+        Assert.Equal(firstScan.Key, secondScan.Key);
+        Assert.Contains("sudo commands in 5 minutes: 2", firstScan.Details, StringComparison.Ordinal);
+        Assert.Contains("last command: /bin/cat;", firstScan.Details, StringComparison.Ordinal);
+        Assert.DoesNotContain("hunter2", firstScan.Details, StringComparison.Ordinal);
+        Assert.DoesNotContain("abc123", firstScan.Details, StringComparison.Ordinal);
+        var stored = await settings.GetAsync($"security.auth-log.{server.Id:N}", CancellationToken.None);
+        Assert.DoesNotContain("hunter2", stored, StringComparison.Ordinal);
+        Assert.DoesNotContain("abc123", stored, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Scan_DoesNotAlertOnItsOwnSudoWrappedLogAndBanStateProbe()
     {
         var now = DateTimeOffset.UtcNow;

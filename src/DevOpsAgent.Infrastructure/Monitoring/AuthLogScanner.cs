@@ -43,6 +43,8 @@ public sealed class AuthLogScanner(ISshRunner sshRunner, IAppSettingRepository s
             // entries written in the same second as the previous cursor.
             .Where(item => item.Timestamp > state.CursorUtc.AddSeconds(-2) && item.Timestamp <= now)
             .Where(item => !IsOwnScanCommand(item))
+            // Strip sudo arguments before the events are persisted in the scan state.
+            .Select(item => item.Kind == AuthLogEventKind.SudoCommand ? item with { Command = SanitizeCommand(item.Command) } : item)
             .ToArray();
         var recent = state.RecentEvents
             .Where(item => item.Timestamp >= now - Window)
@@ -88,15 +90,28 @@ public sealed class AuthLogScanner(ISshRunner sshRunner, IAppSettingRepository s
                 $"IP: {item.IpAddress}; username: {item.Username}; successful login: yes; {banSummary}"));
         }
 
-        foreach (var item in recent.Where(item => item.Kind == AuthLogEventKind.SudoCommand && !allowlist.Contains(item.Username)))
+        // One alert per server and user (MON-4): the window may hold many sudo events, which are summarised in the details.
+        foreach (var group in recent.Where(item => item.Kind == AuthLogEventKind.SudoCommand && !allowlist.Contains(item.Username))
+                     .GroupBy(item => item.Username, StringComparer.OrdinalIgnoreCase))
         {
-            var id = $"ssh-unusual-sudo:{server.Id:N}:{item.Timestamp.UtcTicks}:{item.Username}:{item.EventKey[..Math.Min(12, item.EventKey.Length)]}";
-            result.Add(new AlertCondition(id, "ssh-unusual-sudo", AlertSeverity.High, server.Id, item.Username,
-                $"Sudo command by non-allowlisted user {item.Username}",
-                $"IP: unavailable from sudo log; username: {item.Username}; successful login: {successfulText}; command: {item.Command}; {banSummary}"));
+            var latest = group.MaxBy(item => item.Timestamp)!;
+            var id = $"ssh-unusual-sudo:{server.Id:N}:{group.Key.ToLowerInvariant()}";
+            result.Add(new AlertCondition(id, "ssh-unusual-sudo", AlertSeverity.High, server.Id, latest.Username,
+                $"Sudo command by non-allowlisted user {latest.Username}",
+                $"IP: unavailable from sudo log; username: {latest.Username}; successful login: {successfulText}; "
+                + $"sudo commands in 5 minutes: {group.Count()}; last seen: {latest.Timestamp.UtcDateTime:yyyy-MM-dd HH:mm:ss}Z; "
+                + $"last command: {SanitizeCommand(latest.Command)}; {banSummary}"));
         }
 
         return result;
+    }
+
+    // Sudo arguments routinely carry passwords, tokens and connection strings, so only the executable is kept.
+    private static string? SanitizeCommand(string? command)
+    {
+        if (string.IsNullOrWhiteSpace(command)) return null;
+        var executable = command.Trim().Split((char[]?)null, 2, StringSplitOptions.RemoveEmptyEntries)[0];
+        return executable.Length > 120 ? executable[..120] + "…" : executable;
     }
 
     private static IReadOnlyList<AuthLogEvent> ActiveWindow(IEnumerable<AuthLogEvent> events, DateTimeOffset now) =>
