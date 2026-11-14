@@ -25,7 +25,17 @@ public sealed class AlertSignalSource(
         {
             result.AddRange(await authLogScanner.ScanAsync(server, cancellationToken));
             var (remoteStatus, hostKeyMismatch) = await TryGetRemoteStatusAsync(server.Id, cancellationToken);
-            if (hostKeyMismatch is not null)
+            // The exception names the host whose key mismatched. Behind a jump chain that can be the jump host, in which
+            // case this server is merely unreachable (the jump host raises its own mismatch alert).
+            var mismatchIsOwn = hostKeyMismatch is not null && hostKeyMismatch.Port == server.Port
+                && string.Equals(hostKeyMismatch.Host, server.Host, StringComparison.OrdinalIgnoreCase);
+            if (hostKeyMismatch is not null && !mismatchIsOwn)
+            {
+                result.Add(Condition("server-unreachable", server.Id.ToString("N"), AlertSeverity.High, server.Id, server.Host,
+                    $"{server.Name} is unreachable",
+                    $"The route to this server goes through {hostKeyMismatch.Host}:{hostKeyMismatch.Port}, which presented an unexpected SSH host key and was refused."));
+            }
+            else if (hostKeyMismatch is not null)
             {
                 // A changed host key is a possible impersonation, not an outage: report it distinctly from "unreachable".
                 result.Add(Condition("ssh-host-key-mismatch", server.Id.ToString("N"), AlertSeverity.High, server.Id, server.Host,

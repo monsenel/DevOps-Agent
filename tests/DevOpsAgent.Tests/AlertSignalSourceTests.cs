@@ -47,10 +47,31 @@ public sealed class AlertSignalSourceTests
         Assert.DoesNotContain(conditions, condition => condition.Rule == "server-unreachable");
     }
 
-    private sealed class MismatchSshRunner : ISshRunner
+    [Fact]
+    public async Task JumpHostKeyMismatchIsOnlyReportedForTheJumpHostItself()
+    {
+        var gateway = new Server("gateway", "gateway.test", 22, "dva", "test_key", "staging");
+        var behind1 = new Server("app-1", "app-1.test", 22, "dva", "test_key", "staging");
+        var behind2 = new Server("app-2", "app-2.test", 22, "dva", "test_key", "staging");
+        // Every connection attempt fails on the gateway's key, exactly as it does for servers routed through it.
+        var ssh = new MismatchSshRunner("gateway.test");
+        var scanner = new AuthLogScanner(ssh, new FakeSettings(), Options.Create(new SecurityMonitoringOptions()), TimeProvider.System);
+        var source = new AlertSignalSource(new FakeServers(gateway, behind1, behind2), new FakeMetrics(), new FakeHealthChecks(),
+            new FakeSnapshots(), ssh, scanner, new DriftService(new FakeSnapshots(), null!), TimeProvider.System);
+
+        var conditions = await source.GetActiveConditionsAsync(CancellationToken.None);
+
+        var mismatch = Assert.Single(conditions, condition => condition.Rule == "ssh-host-key-mismatch");
+        Assert.Equal(gateway.Id, mismatch.ServerId);
+        var unreachable = conditions.Where(condition => condition.Rule == "server-unreachable").ToArray();
+        Assert.Equal(new[] { behind1.Id, behind2.Id }.Order(), unreachable.Select(condition => condition.ServerId!.Value).Order());
+        Assert.All(unreachable, condition => Assert.Contains("gateway.test:22", condition.Details, StringComparison.Ordinal));
+    }
+
+    private sealed class MismatchSshRunner(string mismatchedHost = "edge.test") : ISshRunner
     {
         public Task<RemoteCommandResult> RunAsync(Guid serverId, string command, SshRunOptions options, CancellationToken cancellationToken) =>
-            throw new SshHostKeyMismatchException("edge.test", 22, "SHA256:abc123");
+            throw new SshHostKeyMismatchException(mismatchedHost, 22, "SHA256:abc123");
     }
 
     private sealed class FakeServers(params Server[] items) : IServerRepository
