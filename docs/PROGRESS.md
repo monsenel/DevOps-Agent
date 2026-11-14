@@ -66,7 +66,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T5.5 | Overview with real data | done | `feat(T5.5): live Overview data and discovery state` |
 | T6.1 | Tool registry and execution modes | done | `feat(T6.1): tool policies and approvals` |
 | T6.2 | Action log | done | `feat(T6.2): approved action execution and log` |
-| T6.3 | Agent chat with tools | done | `feat(T6.3): complete J4 tool and approval flow` |
+| T6.3 | Agent chat with tools | in-progress | `feat(T6.3): complete J4 tool and approval flow` |
 | T6.4 | SSH attack detection and bans | todo | `wip(T6.4): implement SSH attack detection` |
 | T6.5 | Updates | done | `feat(T6.5): updates inventory and approval flow` |
 | T6.6 | MVP hardening pass | blocked | |
