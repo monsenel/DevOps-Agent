@@ -6,13 +6,13 @@
 
 ## Current
 
-- **Task:** T6.6 MVP hardening pass
-- **Status:** blocked
+- **Task:** T0.8 Basic chat (no tools)
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
-T5.1 (and dependent M5 tasks T5.2–T5.5) remain deferred at the owner's direction. T6.3 implementation includes inventory/relevant graph context, native Microsoft.Extensions.AI tool calling, JSON fallback, validation, read-only SSH tools, policy-governed audited writes, inline proposals, action-result continuation, and remote-provider secret redaction. Protocol/redaction tests pass; J4 live verification remains blocked because local Ollama is unavailable and OpenRouter credentials are absent, and M5 context is deferred. T6.4 is dependency-blocked by T6.3 and T5.3 (deferred M5). T6.5 is complete: live J6 steps 1–3 passed in an isolated Debian apt container using deterministic standard/security package fixtures. The UI classified both packages, showed the exact command, required approval, recorded a successful action (exit 0, no restarted services, reboot not required), and a follow-up scan showed zero pending updates. Temporary app state, SSH key, container, and image were removed. Last build passed with 0 warnings/errors and 77/77 tests passed. Graphify code-only incremental update completed at 5,388 nodes, 18,826 edges, 325 communities; semantic extraction of 17 documentation files was skipped because no LLM key is configured. Installed Graphify (0.9.89) is older than the skill (0.9.108); generated cache churn was discarded, while refreshed graph/report artifacts were committed. T6.6 remains blocked by T6.3 and T6.4 (with T6.4 also depending on deferred T5.3). Exact next step: resolve T6.3's J4 provider acceptance and T6.4's J5 test-server acceptance, restoring M5/T5.3 when the owner authorizes that deferred phase; then resume T6.6 hardening.
+T5.1 (and dependent M5 tasks T5.2–T5.5) remain deferred at the owner's direction. T0.8's OpenRouter live check is now being resumed using the key supplied by the owner; keep it in temporary encrypted app storage and remove that storage after testing. First check for an available local Ollama service/model; then configure OpenRouter and verify streaming plus conversation persistence. T6.3 implementation includes inventory/relevant graph context, native Microsoft.Extensions.AI tool calling, JSON fallback, validation, read-only SSH tools, policy-governed audited writes, inline proposals, action-result continuation, and remote-provider secret redaction. Protocol/redaction tests pass; J4 live verification still needs both local-model and OpenRouter runs, and M5 context remains deferred. T6.4 depends on T6.3 and T5.3 (deferred M5). T6.5 is complete: live J6 steps 1–3 passed in an isolated Debian apt container using deterministic standard/security package fixtures. The UI classified both packages, showed the exact command, required approval, recorded a successful action (exit 0, no restarted services, reboot not required), and a follow-up scan showed zero pending updates. Temporary J6 app state, SSH key, container, and image were removed. Last build passed with 0 warnings/errors and 77/77 tests passed. Graphify code-only incremental update completed at 5,388 nodes, 18,826 edges, 325 communities; semantic extraction of 17 documentation files was skipped because no LLM key is configured. Installed Graphify (0.9.89) is older than the skill (0.9.108); generated cache churn was discarded, while refreshed graph/report artifacts were committed. After T0.8, continue T6.3/J4; T6.6 remains blocked by unresolved T6.3 and T6.4 acceptance, with T6.4 also depending on deferred T5.3.
 
 ## Blockers
 
@@ -49,7 +49,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T0.5 | Design system and app shell | done | `feat(T0.5): design system and app shell` |
 | T0.6 | LLM providers — domain, storage, client | done | `feat(T0.6): llm providers backend` |
 | T0.7 | Settings › LLM connection page | done | `feat(T0.7): llm connection settings` |
-| T0.8 | Basic chat (no tools) | blocked | |
+| T0.8 | Basic chat (no tools) | in-progress | |
 | T1.1 | Server inventory | done | `feat(T1.1): server inventory` |
 | T1.2 | SSH pool and runner | blocked | |
 | T1.3 | Import ssh config | done | `feat(T1.3): import ssh config` |
@@ -85,6 +85,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 ## Session log
 
 One line per session: date · tool/model · tasks touched · result.
+
+- 2026-11-14 · Codex / GPT-6 · started T0.8 · owner supplied an OpenRouter key; checking local Ollama and resuming live basic-chat acceptance in temporary app storage
 
 - 2026-11-14 · Codex / GPT-6 · T6.5 · J6 steps 1–3 passed on disposable Debian apt target; security and standard updates classified, explicit approval executed both, report exit 0/no restarts/reboot false, follow-up scan showed 0 pending; temporary test environment removed
 
