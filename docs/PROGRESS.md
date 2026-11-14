@@ -29,6 +29,8 @@ T3.3's implementation and synthetic trace tests are complete, but PLAN requires 
 
 The prior M5 deferral has been lifted by the owner's instruction to continue task by task. T5.1, T5.2, and T5.3 are complete. T5.3 live acceptance passed on 2026-11-14: the selected Docker container triggered an alert within 2 minutes, was restarted, and its alert auto-resolved. No other blocked SSH acceptance was changed.
 
+T5.4 live acceptance is blocked because no Telegram bot token/chat ID or ntfy topic/token is configured. Code and mocked HTTP contracts are verified; no message was sent to a third-party destination. Exact unblock step: configure one destination in Settings › Notifications, use Send test message, then verify both alert-open and alert-resolve delivery.
+
 T6.4 is deferred because it depends on incomplete T6.3 and blocked T5.3. Resume after those dependencies are completed.
 
 T6.6 remains blocked because T6.3 and T6.4 acceptance is unresolved; it depends on all preceding tasks and requires end-to-end journey checks.
@@ -68,7 +70,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T5.1 | Metric poller | done | `feat(T5.1): metric polling and server detail` |
 | T5.2 | Health checks | done | `feat(T5.2): scheduled health checks` |
 | T5.3 | Alert engine and Alerts page | done | `feat(T5.3): complete alert engine and live acceptance` |
-| T5.4 | Notifications | in-progress | |
+| T5.4 | Notifications | blocked | `wip(T5.4): implement notification delivery` |
 | T5.5 | Overview with real data | todo | |
 | T6.1 | Tool registry and execution modes | done | `feat(T6.1): tool policies and approvals` |
 | T6.2 | Action log | done | `feat(T6.2): approved action execution and log` |
@@ -186,4 +188,6 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T5.3 · live acceptance passed: selected container alert opened within 2 minutes, container restarted successfully, alert auto-resolved; Add server key validation fixed; build clean, 90/90 tests
 
 - 2026-11-14 · Codex / GPT-6 · started T5.4 · inspect notification contracts, settings persistence, alert lifecycle, and UI conventions; then implement Telegram/ntfy configuration and test delivery
-- 2026-11-14 · Codex / GPT-6 · resumed T5.4 · clean baseline: build 0 warnings/errors and 90/90 tests; notification settings/senders/lifecycle implemented; both themes and mobile form verified; 92/92 tests pass; real delivery awaits a configured destination
+- 2026-11-14 · Codex / GPT-6 · resumed T5.4 · clean baseline: build 0 warnings/errors and 90/90 tests; notification settings/senders/lifecycle implemented; both themes and mobile form verified; final build clean and 94/94 tests pass; real delivery awaits a configured destination
+- 2026-11-14 · Codex / GPT-6 · Graphify · refreshed to 5,990 nodes / 20,300 edges / 203 communities; 60 self-loops and no dangling/missing endpoints; tokens.css skipped by sensitivity detector; outputs committed
+- 2026-11-14 · Codex / GPT-6 · T5.4 · implementation and automated/UI verification complete; live destination test blocked until owner configures Telegram or ntfy
