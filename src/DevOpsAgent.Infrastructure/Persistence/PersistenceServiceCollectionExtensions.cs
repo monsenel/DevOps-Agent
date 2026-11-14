@@ -27,6 +27,7 @@ public static class PersistenceServiceCollectionExtensions
         services.Configure<ServerInventoryOptions>(configuration.GetSection(ServerInventoryOptions.SectionName));
         services.Configure<SshConnectionOptions>(configuration.GetSection(SshConnectionOptions.SectionName));
         services.Configure<SecurityMonitoringOptions>(configuration.GetSection(SecurityMonitoringOptions.SectionName));
+        services.Configure<UpdateCollectorOptions>(configuration.GetSection(UpdateCollectorOptions.SectionName));
         services.AddDbContext<AppDbContext>((serviceProvider, options) =>
         {
             var persistenceOptions = serviceProvider.GetRequiredService<IOptions<PersistenceOptions>>().Value;

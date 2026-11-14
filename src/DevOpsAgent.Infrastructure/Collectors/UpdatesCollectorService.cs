@@ -2,16 +2,20 @@ using System.Text.Json;
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Discovery;
 using DevOpsAgent.Application.Updates;
+using Microsoft.Extensions.Options;
 
 namespace DevOpsAgent.Infrastructure.Collectors;
 
-public sealed class UpdatesCollectorService(IServerRepository servers, ISshRunner sshRunner) : IUpdatesCollector
+public sealed class UpdatesCollectorService(
+    IServerRepository servers,
+    ISshRunner sshRunner,
+    IOptions<UpdateCollectorOptions> options) : IUpdatesCollector
 {
     public async Task<CollectedUpdateResult> CollectAsync(Guid serverId, CancellationToken cancellationToken)
     {
         var server = await servers.GetAsync(serverId, cancellationToken)
             ?? throw new KeyNotFoundException("The server no longer exists.");
-        var collector = new UpdatesCollector();
+        var collector = new UpdatesCollector(options.Value);
         var context = new ServerContext(server, sshRunner);
         if (!await collector.IsApplicableAsync(context, cancellationToken))
             throw new InvalidOperationException("This server has neither apt-get nor dnf installed.");

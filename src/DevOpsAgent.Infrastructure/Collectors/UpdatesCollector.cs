@@ -8,7 +8,11 @@ namespace DevOpsAgent.Infrastructure.Collectors;
 
 public sealed class UpdatesCollector : ICollector
 {
-    private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(5);
+    private const string RepositoriesUnreachableMarker = "__DVA_REPOSITORIES_UNREACHABLE__";
+    private readonly UpdateCollectorOptions _options;
+
+    public UpdatesCollector(UpdateCollectorOptions? options = null) => _options = options ?? new UpdateCollectorOptions();
+
     public string Name => "updates";
 
     public async Task<bool> IsApplicableAsync(ServerContext context, CancellationToken cancellationToken)
@@ -26,18 +30,35 @@ public sealed class UpdatesCollector : ICollector
         if (apt.ExitCode == 0)
         {
             var result = await context.SshRunner.RunAsync(context.Server.Id,
-                "apt-get update -qq && apt list --upgradable 2>/dev/null",
-                new SshRunOptions(Timeout, UseSudo: true), cancellationToken);
-            return new CollectorOutput(JsonSerializer.Serialize(new UpdateCollectionOutput(result.StandardOutput, "", "",
-                result.ExitCode == 0 ? null : string.IsNullOrWhiteSpace(result.StandardError) ? "apt-get update or apt list failed." : result.StandardError)),
-                result.StandardError, result.ExitCode, result.Duration);
+                AptScanCommand(_options.RepositoryTimeout),
+                new SshRunOptions(_options.CommandTimeout, UseSudo: true), cancellationToken);
+            var unreachable = result.StandardOutput.Contains(RepositoriesUnreachableMarker, StringComparison.Ordinal);
+            var output = unreachable
+                ? new UpdateCollectionOutput("", "", "", "Repositories unreachable (apt): one or more configured package repositories could not be reached.")
+                : new UpdateCollectionOutput(result.StandardOutput, "", "",
+                    result.ExitCode == 0 ? null : string.IsNullOrWhiteSpace(result.StandardError) ? "apt-get update or apt list failed." : result.StandardError);
+            return new CollectorOutput(JsonSerializer.Serialize(output), result.StandardError, result.ExitCode == 0 || unreachable ? 0 : result.ExitCode, result.Duration);
         }
 
         var dnfResult = await context.SshRunner.RunAsync(context.Server.Id,
-            "dnf check-update; result=$?; if [ \"$result\" -ne 0 ] && [ \"$result\" -ne 100 ]; then exit \"$result\"; fi",
-            new SshRunOptions(Timeout), cancellationToken);
+            DnfScanCommand(_options.RepositoryTimeout),
+            new SshRunOptions(_options.CommandTimeout), cancellationToken);
+        var dnfUnreachable = dnfResult.StandardOutput.Contains(RepositoriesUnreachableMarker, StringComparison.Ordinal);
+        if (dnfUnreachable)
+        {
+            return new CollectorOutput(JsonSerializer.Serialize(new UpdateCollectionOutput("", "", "",
+                "Repositories unreachable (dnf): one or more configured package repositories could not be reached.")),
+                dnfResult.StandardError, 0, dnfResult.Duration);
+        }
+        if (dnfResult.ExitCode is not 0 and not 100)
+        {
+            return new CollectorOutput(JsonSerializer.Serialize(new UpdateCollectionOutput("", "", "",
+                string.IsNullOrWhiteSpace(dnfResult.StandardError) ? "dnf check-update failed." : dnfResult.StandardError)),
+                dnfResult.StandardError, dnfResult.ExitCode, dnfResult.Duration);
+        }
+
         var security = await context.SshRunner.RunAsync(context.Server.Id, "dnf updateinfo list security",
-            new SshRunOptions(Timeout), cancellationToken);
+            new SshRunOptions(_options.CommandTimeout), cancellationToken);
         var error = dnfResult.ExitCode == 0 || dnfResult.ExitCode == 100 ? null
             : string.IsNullOrWhiteSpace(dnfResult.StandardError) ? "dnf check-update failed." : dnfResult.StandardError;
         return new CollectorOutput(JsonSerializer.Serialize(new UpdateCollectionOutput("", dnfResult.StandardOutput,
@@ -54,4 +75,14 @@ public sealed class UpdatesCollector : ICollector
             : UpdatesParser.ParseDnf(data.DnfOutput, data.SecurityOutput);
         return new CollectorResult(JsonSerializer.SerializeToElement(packages));
     }
+
+    private static string AptScanCommand(int repositoryTimeoutSeconds) =>
+        $"update_output=$(apt-get -o Acquire::Retries=0 -o Acquire::http::Timeout={repositoryTimeoutSeconds} -o Acquire::https::Timeout={repositoryTimeoutSeconds} update 2>&1); update_status=$?; " +
+        $"if [ \"$update_status\" -ne 0 ] || printf '%s\\n' \"$update_output\" | grep -Eiq '(^|[[:space:]])Err:|Failed to fetch|Could not resolve|Temporary failure resolving|Network is unreachable|Connection timed out|Some index files failed'; then " +
+        $"printf '%s\\n' '{RepositoriesUnreachableMarker}'; exit 0; fi; apt list --upgradable 2>/dev/null";
+
+    private static string DnfScanCommand(int repositoryTimeoutSeconds) =>
+        $"dnf --setopt=timeout={repositoryTimeoutSeconds} --setopt=retries=0 check-update; result=$?; " +
+        $"if [ \"$result\" -eq 0 ] || [ \"$result\" -eq 100 ]; then exit \"$result\"; fi; " +
+        $"printf '%s\\n' '{RepositoriesUnreachableMarker}'; exit 0";
 }
