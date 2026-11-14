@@ -1,5 +1,6 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JavaScript
+@inject DiscoveryTriggerState DiscoveryTrigger
 @implements IDisposable
 
 <header class="top-bar">
@@ -13,7 +14,7 @@
     <button class="ui-button secondary" type="button" @onclick="ToggleTheme">Theme: @ThemeName</button>
     @if (IsOverview)
     {
-        <Button>Run discovery</Button>
+        <Button Disabled="@DiscoveryTrigger.IsRunning" OnClick="RequestDiscovery">@(DiscoveryTrigger.IsRunning ? "Discovering…" : "Run discovery")</Button>
     }
 </header>
 
@@ -22,7 +23,11 @@
 
     private bool IsOverview => Navigation.ToBaseRelativePath(Navigation.Uri).TrimEnd('/') is "";
 
-    protected override void OnInitialized() => Navigation.LocationChanged += OnLocationChanged;
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        DiscoveryTrigger.Changed += OnDiscoveryChanged;
+    }
 
     private string PageTitle => Navigation.ToBaseRelativePath(Navigation.Uri).Trim('/') switch
     {
@@ -56,8 +61,16 @@
         ThemeName = current == "dark" ? "Dark" : "Light";
     }
 
+    private void RequestDiscovery() => DiscoveryTrigger.RequestRun();
+
+    private void OnDiscoveryChanged() => _ = InvokeAsync(StateHasChanged);
+
     private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs args) =>
         _ = InvokeAsync(StateHasChanged);
 
-    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        DiscoveryTrigger.Changed -= OnDiscoveryChanged;
+    }
 }

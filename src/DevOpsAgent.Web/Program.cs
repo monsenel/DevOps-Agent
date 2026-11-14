@@ -36,6 +36,7 @@ builder.Services.AddScoped<DiscoveryService>();
 builder.Services.AddScoped<DriftService>();
 builder.Services.AddScoped<DiscoveryScheduleService>();
 builder.Services.AddSingleton<ToolRegistry>();
+builder.Services.AddScoped<DiscoveryTriggerState>();
 builder.Services.AddScoped<ExecutionModeService>();
 builder.Services.AddScoped<ApprovalService>();
 builder.Services.AddScoped<ActionExecutionService>();

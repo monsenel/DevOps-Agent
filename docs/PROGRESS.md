@@ -11,12 +11,13 @@
 
 ## Current
 
-- **Task:** T5.5 Overview with real data
+- **Task:** T6.3 Agent chat with tools — repeat J4 live acceptance on the supplied lab
 - **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
-- T3.3 passed live trace and evidence acceptance. Exact next step: read DESIGN.md and the overview mockup, then verify the Overview page against live lab data in both themes; record any mismatches and fix only T5.5 scope. J2 follow-up remains: outbound app connection to srv-search does not yet appear as Unknown; keep srv-search out of the inventory. Never use a server tagged `prod`.
+- T5.5 is complete. Overview uses the lab's 3 servers, latest snapshot, graph/evidence, open alerts, metric samples, update-scan state, and default provider; Run discovery now rerenders the TopBar when shared discovery state changes. Live discovery refreshed successfully, the button returned to enabled, and both light/dark themes were visually checked. Build passed with 0 warnings/errors and tests passed (109/109). Files: `src/DevOpsAgent.Web/Components/Pages/Home.razor`, `src/DevOpsAgent.Web/Components/Layout/TopBar.razor`, `src/DevOpsAgent.Web/DiscoveryTriggerState.cs`, `src/DevOpsAgent.Web/Program.cs`, `src/DevOpsAgent.Web/wwwroot/css/app.css`.
+- Exact next step: inspect the isolated app's provider settings and local Ollama availability, then repeat J4 with the disposable lab servers (read-only tool call and approved action) and record which provider passes. If no provider is configured, use an available local provider without exposing credentials; if none is available, record the specific live acceptance blocker and continue to T6.4. J2 follow-up remains: outbound app connection to srv-search does not yet appear as Unknown; keep srv-search out of inventory. Never use a server tagged `prod`.
 
 ## Blockers
 
@@ -62,7 +63,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T5.2 | Health checks | done | `feat(T5.2): scheduled health checks` |
 | T5.3 | Alert engine and Alerts page | done | `feat(T5.3): complete alert engine and live acceptance` |
 | T5.4 | Notifications | blocked | `wip(T5.4): implement notification delivery` |
-| T5.5 | Overview with real data | in-progress | |
+| T5.5 | Overview with real data | done | `feat(T5.5): live Overview data and discovery state` |
 | T6.1 | Tool registry and execution modes | done | `feat(T6.1): tool policies and approvals` |
 | T6.2 | Action log | done | `feat(T6.2): approved action execution and log` |
 | T6.3 | Agent chat with tools | done | `feat(T6.3): complete J4 tool and approval flow` |
@@ -190,4 +191,5 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T2.7 · discovery 3/3 succeeded on the disposable lab, 17 nested nodes rendered; theme switching and api details/evidence passed; systemd skipped because the containers do not run it; collector compatibility fixes, build clean, 108/108 tests
 - 2026-11-14 · Codex / GPT-6 · started T3.3 · live trace acceptance found nginx include-context parsing gap; next add support for expanded nginx files and verify api.test.local trace/evidence
 - 2026-11-14 · Codex / GPT-6 · T3.3 · live trace `api.test.local` highlighted 4 nodes/3 connections; edge evidence identified `/etc/nginx/conf.d/demo.conf:10`; build clean and 109/109 tests pass
-- 2026-11-14 · Codex / GPT-6 · started T5.5 · inspect Overview against mockup and verify live data in both themes
+- 2026-11-14 · Codex / GPT-6 · T5.5 · connected Overview to live servers, metrics, topology/evidence, alerts, updates and provider state; fixed TopBar discovery rerender; live discovery/button reset and light/dark checks passed; build clean and 109/109 tests pass
+- 2026-11-14 · Codex · resumed T6.3 live acceptance · T5.5 completed; next inspect the isolated app's provider and repeat J4 with the disposable lab

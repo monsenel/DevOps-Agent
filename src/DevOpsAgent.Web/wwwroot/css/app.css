@@ -1179,6 +1179,191 @@ p {
     font-weight: 700;
 }
 
+.overview-section-header {
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.overview-section-header .segmented-control {
+    width: auto;
+}
+
+.overview-section-header .segmented-control button {
+    min-height: 40px;
+    padding: 0 12px;
+}
+
+.overview-trace-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding: 0 12px;
+    border-radius: 12px;
+    background: var(--dva-soft);
+    color: var(--dva-on-soft);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.overview-trace-pill code,
+.overview-topology-edges code,
+.overview-selected-edge code {
+    font-family: var(--dva-font-mono);
+    font-size: 12px;
+}
+
+.overview-topology {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 180px;
+    padding: 16px;
+    border-radius: 18px;
+    background: var(--dva-inset);
+}
+
+.overview-topology-nodes {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 8px;
+}
+
+.overview-topology-node {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 0 12px;
+    border: 1px solid var(--dva-line);
+    border-radius: 12px;
+    background: var(--dva-card);
+    font-weight: 600;
+}
+
+.overview-topology-node .topology-node-kind {
+    color: var(--dva-muted);
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.overview-topology-edges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.overview-topology-edges > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 10px;
+    border-radius: 10px;
+    background: var(--dva-card);
+    color: var(--dva-ink);
+    font-size: 12px;
+}
+
+.overview-open-graph {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    color: var(--dva-on-soft);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.overview-alert-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.overview-alert-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 8px 10px;
+    min-height: 56px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: var(--dva-inset);
+    color: var(--dva-ink);
+    text-decoration: none;
+}
+
+.overview-alert-row.high {
+    background: var(--dva-warn-soft);
+    color: var(--dva-on-warn);
+}
+
+.overview-alert-row small {
+    grid-column: 2;
+    color: var(--dva-muted);
+}
+
+.overview-agent-ready {
+    margin: 0;
+    font-weight: 700;
+}
+
+.overview-load-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.overview-load-row {
+    display: grid;
+    grid-template-columns: minmax(64px, 1fr) minmax(60px, 1.5fr) auto;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+}
+
+.overview-load-track {
+    display: block;
+    height: 8px;
+    overflow: hidden;
+    border-radius: 8px;
+    background: var(--dva-inset);
+}
+
+.overview-load-track span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--dva-accent);
+}
+
+.overview-load-value {
+    min-width: 54px;
+    color: var(--dva-muted);
+    text-align: right;
+}
+
+.overview-selected-edge {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    overflow-wrap: anywhere;
+}
+
+.overview-selected-edge strong {
+    font-weight: 700;
+}
+
+.overview-evidence {
+    width: 100%;
+    padding: 12px;
+    border-radius: 12px;
+    background: var(--dva-inset);
+    color: var(--dva-ink);
+    overflow-wrap: anywhere;
+}
+
 .flex-spacer {
     flex: 1;
 }

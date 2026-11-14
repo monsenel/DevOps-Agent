@@ -1,50 +1,388 @@
 @page "/"
+@implements IDisposable
+@using System.Text.Json
+@using DevOpsAgent.Application.Abstractions
+@using DevOpsAgent.Application.Discovery
+@using DevOpsAgent.Application.Llm
+@using DevOpsAgent.Application.Monitoring
+@using DevOpsAgent.Application.Servers
+@using DevOpsAgent.Application.Updates
+@using DevOpsAgent.Domain.Discovery
+@using DevOpsAgent.Domain.Monitoring
+@inject ServerService ServersService
+@inject ISnapshotRepository SnapshotRepository
+@inject IGraphRepository GraphRepository
+@inject AlertService AlertManager
+@inject UpdatesService UpdatesManager
+@inject MetricService Metrics
+@inject DriftService DriftManager
+@inject ProviderService Providers
+@inject DiscoveryService Discovery
+@inject DiscoveryTriggerState DiscoveryTrigger
+@inject NavigationManager Navigation
+
 <PageTitle>Overview · DevOps Agent</PageTitle>
+
+@if (!string.IsNullOrWhiteSpace(_pageError))
+{
+    <div class="alert-message error" role="alert">@_pageError</div>
+}
 
 <div class="bento-row">
     <section class="ui-card bento-hero overview-hero">
-        <h2>Your server map starts here</h2>
-        <p class="muted">Add servers to discover how your services connect and monitor their health.</p>
-        <div class="flex-spacer"></div>
-        <Button>Ask the agent</Button>
+        @if (_servers.Count == 0)
+        {
+            <h2>Your server map starts here</h2>
+            <p class="muted">Add servers to discover how your services connect and monitor their health.</p>
+            <div class="flex-spacer"></div>
+            <Button Variant="secondary" OnClick="OpenServers">Add servers</Button>
+        }
+        else
+        {
+            <h2>@_servers.Count servers, @_attentionCount need attention</h2>
+            <p class="muted">@LastDiscoverySummary</p>
+            <div class="flex-spacer"></div>
+            <Button OnClick="OpenAgent">Ask the agent</Button>
+        }
     </section>
-    <div class="bento-stat"><StatTile Label="Servers online" Value="0" Suffix="of 0" IconName="server" /></div>
-    <div class="bento-stat"><StatTile Label="Pending updates" Value="0" Suffix="packages" IconName="updates" /></div>
-    <div class="bento-stat"><StatTile Label="Open alerts" Value="0" Suffix="alerts" IconName="alert" Emphasized="true" /></div>
+    <div class="bento-stat"><StatTile Label="Servers online" Value="@_onlineCount.ToString()" Suffix="@($"of {_servers.Count}")" IconName="server" /></div>
+    <div class="bento-stat">
+        <StatTile Label="Pending updates" Value="@(_updatesChecked ? _pendingUpdates.ToString() : "—")"
+                  Suffix="@(_updatesChecked ? "packages" : "until first scan")" IconName="updates"
+                  BadgeText="@(_updatesChecked && _securityUpdates > 0 ? $"{_securityUpdates} security" : null)" />
+    </div>
+    <div class="bento-stat"><StatTile Label="Open alerts" Value="@_openAlerts.Count.ToString()" Suffix="alerts"
+                                         BadgeText="@(_highAlerts > 0 ? $"{_highAlerts} high" : null)"
+                                         IconName="alert" Emphasized="true" /></div>
 </div>
 
 <div class="bento-row">
     <section class="ui-card bento-main">
-        <div class="ui-card-header">
+        <div class="ui-card-header overview-section-header">
             <h2>Topology</h2>
-            <Segmented Label="Topology view" Options="TopologyViews" Value="Service" InsetActive="true" />
+            <div class="segmented-control" role="group" aria-label="Topology view">
+                <button type="button" class="active" aria-pressed="true" @onclick="OpenTopology">Service</button>
+                <button type="button" aria-pressed="false" @onclick="OpenTopology">Network</button>
+            </div>
             <div class="top-bar-spacer"></div>
-            <Badge Variant="soft">Trace · add a server first</Badge>
+            @if (_traceDomain is not null)
+            {
+                <a class="overview-trace-pill" href="/topology"><span>Trace</span><code>@_traceDomain</code></a>
+            }
+            else
+            {
+                <span class="muted">Trace · no domain discovered</span>
+            }
         </div>
-        <EmptyState Title="No topology yet" Description="Run discovery after adding your first server to see the service graph." ActionLabel="Open servers" OnAction="OpenServers" />
+        @if (_graph is null || _graph.Nodes.Count == 0)
+        {
+            <EmptyState Title="No topology yet" Description="Run discovery to build a map of your servers and services."
+                        ActionLabel="Run discovery" OnAction="RunDiscoveryAsync" />
+        }
+        else
+        {
+            <div class="overview-topology" aria-label="Compact live topology">
+                <div class="overview-topology-nodes">
+                    @foreach (var node in _topologyNodes)
+                    {
+                        <span class="overview-topology-node"><span class="topology-node-kind">@ReadString(node, "kind")</span>@ReadString(node, "label")</span>
+                    }
+                </div>
+                @if (_topologyEdges.Count > 0)
+                {
+                    <div class="overview-topology-edges" aria-label="Connections">
+                        @foreach (var edge in _topologyEdges)
+                        {
+                            var source = FindNodeName(ReadString(edge, "source"));
+                            var target = FindNodeName(ReadString(edge, "target"));
+                            <span>@source <span aria-hidden="true">→</span> @target <code>@PortLabel(edge)</code></span>
+                        }
+                    </div>
+                }
+            </div>
+            <a class="overview-open-graph" href="/topology">Open full topology</a>
+        }
     </section>
     <div class="bento-side">
         <Card Title="Alerts">
-            <EmptyState Title="No open alerts" Description="Alerts from monitored servers will appear here." />
+            @if (_openAlerts.Count == 0)
+            {
+                <EmptyState Title="No open alerts" Description="Alerts from monitored servers will appear here." />
+            }
+            else
+            {
+                <div class="overview-alert-list">
+                    @foreach (var alert in _openAlerts.Take(3))
+                    {
+                        <a class="overview-alert-row @(alert.Severity == AlertSeverity.High ? "high" : null)" href="/alerts">
+                            <Badge Variant="@(alert.Severity == AlertSeverity.High ? "warn" : "soft")">@alert.Severity</Badge>
+                            <span>@alert.Title</span>
+                            <small>@alert.Target</small>
+                        </a>
+                    }
+                </div>
+            }
         </Card>
         <Card Title="Agent">
-            <EmptyState Title="No provider configured" Description="Connect a model to chat with the agent." ActionLabel="Open settings" OnAction="OpenSettings" />
+            @if (_defaultProvider is null)
+            {
+                <EmptyState Title="No provider configured" Description="Connect a model to chat with the agent."
+                            ActionLabel="Open settings" OnAction="OpenSettings" />
+            }
+            else
+            {
+                <p class="overview-agent-ready">@_defaultProvider.Name · @_defaultProvider.Model</p>
+                <p class="muted">@(_defaultProvider.LastTestSucceeded == true ? "Connected and ready to assist." : "Provider saved; run a connection test to check availability.")</p>
+                <Button Variant="secondary" OnClick="OpenAgent">Open agent chat</Button>
+            }
         </Card>
     </div>
 </div>
 
 <div class="overview-three">
-    <div class="bento-third"><Card Title="Drift since yesterday"><EmptyState Title="No snapshots yet" Description="Changes between discoveries will appear here." /></Card></div>
-    <div class="bento-third"><Card Title="Server load"><EmptyState Title="No server metrics" Description="Add a server to see recent load." /></Card></div>
-    <div class="bento-third"><Card Title="Selected edge"><EmptyState Title="Select an edge" Description="Connection details and evidence will appear here." /></Card></div>
+    <div class="bento-third">
+        <Card Title="Drift since yesterday">
+            @if (_driftChanges.Count == 0)
+            {
+                <EmptyState Title="No changes detected" Description="Compare recent discovery snapshots to see infrastructure changes." />
+            }
+            else
+            {
+                <div class="drift-list">
+                    @foreach (var change in _driftChanges.Take(4))
+                    {
+                        <div class="drift-item"><span class="drift-kind @ChangeClass(change.ChangeType)">@change.ChangeType</span><span>@change.Description</span></div>
+                    }
+                </div>
+            }
+        </Card>
+    </div>
+    <div class="bento-third">
+        <Card Title="Server load">
+            @if (_loadRows.Count == 0)
+            {
+                <EmptyState Title="No server metrics" Description="Load samples will appear here after the first monitoring poll." />
+            }
+            else
+            {
+                <div class="overview-load-list">
+                    @foreach (var row in _loadRows.Take(4))
+                    {
+                        <div class="overview-load-row">
+                            <span class="mono">@row.Name</span>
+                            <span class="overview-load-track" role="img" aria-label="@row.Name load @row.Percent%">
+                                <span style="width:@(row.Percent)%"></span>
+                            </span>
+                            <span class="mono overview-load-value">@row.Value</span>
+                        </div>
+                    }
+                </div>
+            }
+        </Card>
+    </div>
+    <div class="bento-third">
+        <Card Title="Selected edge">
+            @if (_selectedEdge is null)
+            {
+                <EmptyState Title="Select an edge" Description="Connection details and evidence will appear here." ActionLabel="Open topology" OnAction="OpenTopology" />
+            }
+            else
+            {
+                <div class="overview-selected-edge">
+                    <strong>@FindNodeName(ReadString(_selectedEdge.Value, "source")) → @FindNodeName(ReadString(_selectedEdge.Value, "target")) <code>@PortLabel(_selectedEdge.Value)</code></strong>
+                    <span class="muted">@ReadString(_selectedEdge.Value, "kind") · evidence from discovery</span>
+                    @if (_selectedEvidence is not null)
+                    {
+                        <code class="overview-evidence">@_selectedEvidence.Description</code>
+                    }
+                    <Button Variant="secondary" OnClick="OpenTopology">Open edge details</Button>
+                </div>
+            }
+        </Card>
+    </div>
 </div>
 
 @code {
-    private static readonly IReadOnlyList<string> TopologyViews = ["Service", "Network"];
+    private IReadOnlyList<ServerSummary> _servers = [];
+    private IReadOnlyList<AlertDto> _openAlerts = [];
+    private IReadOnlyList<DriftChange> _driftChanges = [];
+    private IReadOnlyList<JsonElement> _topologyNodes = [];
+    private IReadOnlyList<JsonElement> _topologyEdges = [];
+    private IReadOnlyList<LoadRow> _loadRows = [];
+    private GraphSnapshotDto? _graph;
+    private Snapshot? _latestSnapshot;
+    private JsonElement? _selectedEdge;
+    private GraphEvidenceDto? _selectedEvidence;
+    private LlmProviderSummary? _defaultProvider;
+    private string? _traceDomain;
+    private string? _pageError;
+    private int _onlineCount;
+    private int _attentionCount;
+    private int _pendingUpdates;
+    private int _securityUpdates;
+    private int _highAlerts;
+    private bool _updatesChecked;
 
-    [Inject] private NavigationManager Navigation { get; set; } = default!;
+    private string LastDiscoverySummary => _latestSnapshot is null
+        ? "Discovery has not run yet."
+        : $"Last discovery ran {_latestSnapshot.StartedAtUtc.ToLocalTime():g} and found {_driftChanges.Count} changes since the previous snapshot.";
 
+    protected override async Task OnInitializedAsync()
+    {
+        DiscoveryTrigger.RunRequested += HandleRunRequested;
+        DiscoveryTrigger.Changed += HandleDiscoveryChanged;
+        await LoadOverviewAsync(CancellationToken.None);
+    }
+
+    private async Task LoadOverviewAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            _servers = await ServersService.ListAsync(cancellationToken);
+            _openAlerts = await AlertManager.ListAsync(AlertState.Open, cancellationToken);
+            _highAlerts = _openAlerts.Count(alert => alert.Severity == AlertSeverity.High);
+            _defaultProvider = (await Providers.ListAsync(cancellationToken)).FirstOrDefault(provider => provider.IsDefault);
+
+            var updates = await UpdatesManager.ListAsync(cancellationToken);
+            _updatesChecked = updates.Any(update => update.CheckedAtUtc is not null);
+            _pendingUpdates = updates.Sum(update => update.Packages.Count);
+            _securityUpdates = updates.Sum(update => update.Packages.Count(package => package.IsSecurity));
+
+            var snapshots = (await SnapshotRepository.ListAsync(cancellationToken))
+                .OrderByDescending(snapshot => snapshot.StartedAtUtc).ToArray();
+            _latestSnapshot = snapshots.FirstOrDefault();
+            var completedSnapshots = snapshots.Where(snapshot => snapshot.Status is SnapshotStatus.Completed or SnapshotStatus.Partial).ToArray();
+            if (_latestSnapshot is not null)
+            {
+                _graph = await GraphRepository.GetAsync(_latestSnapshot.Id, GraphView.Service, cancellationToken);
+                if (_graph is not null)
+                {
+                    var nodes = _graph.Nodes.Select(node => node.Data).ToArray();
+                    var edges = _graph.Edges.Select(edge => edge.Data).ToArray();
+                    _traceDomain = nodes.FirstOrDefault(node => ReadString(node, "kind") == "Domain") is var domain && domain.ValueKind == JsonValueKind.Object
+                        ? ReadString(domain, "label") : null;
+                    _topologyNodes = nodes.Where(node => ReadString(node, "kind") is "Domain" or "Host" or "Container" or "Service")
+                        .OrderBy(node => ReadString(node, "kind") switch
+                        {
+                            "Domain" => 0,
+                            "Host" => 1,
+                            "Container" => 2,
+                            _ => 3
+                        })
+                        .ThenBy(node => ReadString(node, "label"), StringComparer.OrdinalIgnoreCase)
+                        .Take(8).ToArray();
+                    _topologyEdges = edges.Where(edge => ReadString(edge, "kind") is "Declared" or "Observed" or "Both")
+                        .Take(5).ToArray();
+                    var selected = edges.FirstOrDefault(edge =>
+                        (ReadString(edge, "kind") is "Declared" or "Observed" or "Both") && PortLabel(edge) == ":5000");
+                    if (selected.ValueKind != JsonValueKind.Object)
+                    {
+                        selected = edges.FirstOrDefault(edge => ReadString(edge, "kind") is "Declared" or "Observed" or "Both");
+                    }
+
+                    _selectedEdge = selected.ValueKind == JsonValueKind.Object ? selected : null;
+                    _selectedEvidence = _selectedEdge is JsonElement selectedEdge
+                        ? _graph.Evidence.FirstOrDefault(item => item.EdgeId?.ToString("D") == ReadString(selectedEdge, "id"))
+                        : null;
+                }
+
+                if (completedSnapshots.Length > 1)
+                {
+                    var current = completedSnapshots[0];
+                    var previous = completedSnapshots[1];
+                    _driftChanges = (await DriftManager.CompareAsync(previous.Id, current.Id, cancellationToken)).Changes;
+                }
+            }
+
+            var metricResults = new List<ServerMetrics?>(_servers.Count);
+            foreach (var server in _servers)
+            {
+                metricResults.Add(await Metrics.GetServerMetricsAsync(server.Id, cancellationToken));
+            }
+
+            var serverMetrics = metricResults.ToArray();
+            var now = DateTimeOffset.UtcNow;
+            _onlineCount = serverMetrics.Count(metrics => metrics?.Recent.Any(sample => now - sample.AtUtc <= TimeSpan.FromMinutes(3)) == true);
+            _loadRows = serverMetrics.Where(metrics => metrics is not null)
+                .Select(metrics =>
+                {
+                    var latest = metrics!.Latest.ToDictionary(value => value.Name, value => value.Value, StringComparer.Ordinal);
+                    var cpuCores = Math.Max(1, latest.GetValueOrDefault("cpu_cores", 1));
+                    var load = latest.GetValueOrDefault("load_1m");
+                    var percent = latest.TryGetValue("cpu_percent", out var cpuPercent)
+                        ? cpuPercent
+                        : Math.Clamp(load / cpuCores * 100, 0, 100);
+                    return new LoadRow(metrics.ServerName, Math.Clamp((int)Math.Round(percent), 0, 100),
+                        latest.ContainsKey("cpu_percent") ? $"{percent:0}%" : $"{load:0.00} load");
+                })
+                .OrderByDescending(row => row.Percent).ToArray();
+
+            var onlineServerIds = serverMetrics.Where(metrics => metrics?.Recent.Any(sample => now - sample.AtUtc <= TimeSpan.FromMinutes(3)) == true)
+                .Select(metrics => metrics!.ServerId).ToHashSet();
+            var attentionServers = _servers.Where(server => !onlineServerIds.Contains(server.Id))
+                .Select(server => server.Id).ToHashSet();
+            attentionServers.UnionWith(_openAlerts.Where(alert => alert.ServerId.HasValue).Select(alert => alert.ServerId!.Value));
+            _attentionCount = attentionServers.Count;
+        }
+        catch (Exception exception)
+        {
+            _pageError = $"Overview data could not be loaded: {exception.Message}";
+        }
+    }
+
+    private async Task RunDiscoveryAsync()
+    {
+        if (DiscoveryTrigger.IsRunning || _servers.Count == 0) return;
+        DiscoveryTrigger.SetRunning(true);
+        _pageError = null;
+        try
+        {
+            _latestSnapshot = await Discovery.RunAsync(null, CancellationToken.None);
+            await LoadOverviewAsync(CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            _pageError = $"Discovery failed: {exception.Message}";
+        }
+        finally
+        {
+            DiscoveryTrigger.SetRunning(false);
+        }
+    }
+
+    private void HandleRunRequested() => _ = InvokeAsync(RunDiscoveryAsync);
+    private void HandleDiscoveryChanged() => _ = InvokeAsync(StateHasChanged);
     private void OpenServers() => Navigation.NavigateTo("/servers");
+    private void OpenAgent() => Navigation.NavigateTo("/agent-chat");
+    private void OpenSettings() => Navigation.NavigateTo("/settings/llm");
+    private void OpenTopology() => Navigation.NavigateTo("/topology");
 
-    private void OpenSettings() => Navigation.NavigateTo("/settings");
+    private string? FindNodeName(string? id)
+    {
+        if (id is null || _graph is null) return null;
+        return _graph.Nodes.Select(node => node.Data)
+            .FirstOrDefault(node => ReadString(node, "id") == id) is var value && value.ValueKind == JsonValueKind.Object
+                ? ReadString(value, "label") : null;
+    }
+
+    private static string? ReadString(JsonElement element, string property) =>
+        element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    private static string PortLabel(JsonElement edge) => edge.TryGetProperty("port", out var port) && port.ValueKind == JsonValueKind.Number
+        ? $":{port.GetInt32()}" : string.Empty;
+
+    private static string ChangeClass(DriftChangeType changeType) => changeType switch
+    {
+        DriftChangeType.Added => "added",
+        DriftChangeType.Changed => "changed",
+        _ => "removed"
+    };
+
+    public void Dispose()
+    {
+        DiscoveryTrigger.RunRequested -= HandleRunRequested;
+        DiscoveryTrigger.Changed -= HandleDiscoveryChanged;
+    }
+
+    private sealed record LoadRow(string Name, int Percent, string Value);
 }
