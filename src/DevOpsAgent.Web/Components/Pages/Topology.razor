@@ -100,7 +100,7 @@
                     var id = ReadString(node, "id");
                     <button type="button" @key="id" aria-pressed="@(_selectedId == id)" @onclick="() => SelectNodeAsync(node)">
                         <span class="topology-node-kind">@ReadString(node, "kind")</span>
-                        <span>@ReadString(node, "label")</span>
+                        <span>@GraphNodeLabel.Describe(node)</span>
                     </button>
                 }
             </nav>
