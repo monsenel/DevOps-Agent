@@ -7,7 +7,6 @@ namespace DevOpsAgent.Application.Agent;
 public static class SensitivePathPolicy
 {
     private static readonly string[] KeyFilePrefixes = ["id_rsa", "id_ed25519", "id_ecdsa"];
-    private static readonly string[] KeyFileSuffixes = [".pem", ".key"];
 
     /// <summary>Returns an error message when the path must not be read, otherwise null.</summary>
     public static string? Check(string? path)
@@ -34,22 +33,51 @@ public static class SensitivePathPolicy
             return "Reading SSH directories is not allowed.";
 
         var name = segments[^1];
+        var parent = segments.Count >= 2 ? segments[^2] : string.Empty;
         if (name.StartsWith(".env", StringComparison.OrdinalIgnoreCase))
             return "Reading environment files is not allowed.";
-        if (KeyFileSuffixes.Any(suffix => name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
-            || KeyFilePrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+        if (KeyFilePrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            || name.EndsWith(".key", StringComparison.OrdinalIgnoreCase)
+            || IsPrivateKeyPem(name)
+            || name.StartsWith("ssh_host_", StringComparison.Ordinal) && name.EndsWith("_key", StringComparison.Ordinal))
             return "Reading private key files is not allowed.";
 
-        if (segments.Count >= 2 && segments[0].Equals("proc", StringComparison.Ordinal)
-            && name.Equals("environ", StringComparison.Ordinal))
+        if (name.EndsWith("_history", StringComparison.OrdinalIgnoreCase))
+            return "Reading shell and client history files is not allowed.";
+        if (name.Equals(".git-credentials", StringComparison.OrdinalIgnoreCase)
+            || name.Equals(".netrc", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith(".htpasswd", StringComparison.OrdinalIgnoreCase)
+            || parent.Equals(".aws", StringComparison.OrdinalIgnoreCase) && name.Equals("credentials", StringComparison.OrdinalIgnoreCase)
+            || parent.Equals(".docker", StringComparison.OrdinalIgnoreCase) && name.Equals("config.json", StringComparison.OrdinalIgnoreCase))
+            return "Reading credential files is not allowed.";
+
+        if (segments[0].Equals("proc", StringComparison.Ordinal) && segments.Count >= 3
+            && (segments[1] is "self" or "thread-self" || segments[1].All(char.IsAsciiDigit))
+            && segments.Skip(2).Any(segment => segment is "environ" or "root"))
+            return "Reading process environments and root filesystems is not allowed.";
+        if (name.Equals("environ", StringComparison.Ordinal) && segments[0].Equals("proc", StringComparison.Ordinal))
             return "Reading process environments is not allowed.";
 
-        if (segments.Count == 2 && segments[0].Equals("etc", StringComparison.Ordinal)
+        // shadow and gshadow (and their backups) anywhere that ends in .../etc/shadow*, e.g. a mounted backup.
+        if (parent.Equals("etc", StringComparison.Ordinal)
             && (name.StartsWith("shadow", StringComparison.Ordinal) || name.StartsWith("gshadow", StringComparison.Ordinal)))
             return "Reading password databases is not allowed.";
+        if (segments.Count >= 2 && segments[0].Equals("etc", StringComparison.Ordinal)
+            && segments[1].Equals("wireguard", StringComparison.Ordinal))
+            return "Reading WireGuard configuration is not allowed.";
+        for (var index = 0; index + 1 < segments.Count; index++)
+        {
+            if (segments[index].Equals("ssl", StringComparison.Ordinal) && segments[index + 1].Equals("private", StringComparison.Ordinal))
+                return "Reading private TLS key directories is not allowed.";
+        }
 
         return null;
     }
+
+    // Public certificates (fullchain.pem, cert.pem, chain.pem) stay readable; only key-looking PEM names are blocked.
+    private static bool IsPrivateKeyPem(string name) =>
+        name.EndsWith(".pem", StringComparison.OrdinalIgnoreCase)
+        && (name.StartsWith("privkey", StringComparison.OrdinalIgnoreCase) || name.Contains("key", StringComparison.OrdinalIgnoreCase));
 
     public static void EnsureAllowed(string? path)
     {

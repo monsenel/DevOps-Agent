@@ -54,6 +54,23 @@ public sealed class AgentToolPolicyTests
     [InlineData("read_file", "/etc/shadow")]
     [InlineData("read_file", "/etc//gshadow")]
     [InlineData("read_file", "/var/log/../../etc/shadow")]
+    [InlineData("read_file", "/mnt/backup/etc/shadow-")]
+    [InlineData("read_file", "/mnt/backup/etc/gshadow")]
+    [InlineData("read_file", "/proc/1/root/etc/shadow")]
+    [InlineData("read_file", "/proc/self/root/etc/hostname")]
+    [InlineData("tail_log", "/proc/4242/task/4242/environ")]
+    [InlineData("read_file", "/etc/ssh/ssh_host_ed25519_key")]
+    [InlineData("read_file", "/etc/ssh/ssh_host_rsa_key")]
+    [InlineData("read_file", "/home/deploy/.aws/credentials")]
+    [InlineData("read_file", "/home/deploy/.docker/config.json")]
+    [InlineData("read_file", "/home/deploy/.git-credentials")]
+    [InlineData("read_file", "/home/deploy/.netrc")]
+    [InlineData("tail_log", "/home/deploy/.bash_history")]
+    [InlineData("tail_log", "/root/.mysql_history")]
+    [InlineData("read_file", "/etc/wireguard/wg0.conf")]
+    [InlineData("read_file", "/etc/nginx/.htpasswd")]
+    [InlineData("read_file", "/etc/letsencrypt/live/example.com/privkey.pem")]
+    [InlineData("read_file", "/etc/pki/tls/server-key.pem")]
     public void FileToolsRejectSensitivePaths(string tool, string path)
     {
         var registry = new ToolRegistry();
@@ -68,6 +85,14 @@ public sealed class AgentToolPolicyTests
     [InlineData("tail_log", "/var/log/auth.log")]
     [InlineData("read_file", "/srv/app/environment.md")]
     [InlineData("read_file", "/home/deploy/ssh-notes.txt")]
+    [InlineData("read_file", "/etc/letsencrypt/live/example.com/fullchain.pem")]
+    [InlineData("read_file", "/etc/letsencrypt/live/example.com/cert.pem")]
+    [InlineData("read_file", "/etc/ssh/ssh_host_ed25519_key.pub")]
+    [InlineData("read_file", "/etc/ssh/sshd_config")]
+    [InlineData("read_file", "/proc/cpuinfo")]
+    [InlineData("read_file", "/proc/1234/status")]
+    [InlineData("read_file", "/etc/wireguard-tools.txt")]
+    [InlineData("tail_log", "/var/log/history.log")]
     public void FileToolsStillAllowOrdinaryPaths(string tool, string path)
     {
         var registry = new ToolRegistry();
