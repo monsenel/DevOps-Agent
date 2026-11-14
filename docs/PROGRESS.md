@@ -7,12 +7,12 @@
 ## Current
 
 - **Task:** T6.1 Tool registry and execution modes
-- **Status:** in-progress
+- **Status:** done
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
-T5.1 (and dependent M5 tasks T5.2–T5.5) deferred at the owner's direction to skip M5 and start M6. T6.1 slice 1 is implemented: typed registry for all AGT-1 tools, DataAnnotations argument validation, per-group execution policy persistence/service, approval decision service, proposed ActionRecord persistence model/repository, and execution-modes settings UI. Build passes with 0 warnings/errors. Next: generate the ActionRecords migration, add policy/approval matrix and validation tests (including `run_shell` always pending), then verify Settings in both themes and run full build/tests. Files touched: `src/DevOpsAgent.Application/Agent/*`, `src/DevOpsAgent.Application/Abstractions/IActionRecordRepository.cs`, `src/DevOpsAgent.Domain/Agent/ExecutionPolicy.cs`, `src/DevOpsAgent.Infrastructure/Persistence/{AppDbContext,ActionRecordRepository,PersistenceServiceCollectionExtensions}.cs`, `src/DevOpsAgent.Web/Program.cs`, `src/DevOpsAgent.Web/Components/{_Imports.razor,Pages/Settings.razor}`, `src/DevOpsAgent.Web/wwwroot/css/app.css`.
+No active WIP. T6.1 is complete. T5.1 (and dependent M5 tasks T5.2–T5.5) remain deferred at the owner's direction.
 
 ## Blockers
 
@@ -65,7 +65,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T5.3 | Alert engine and Alerts page | todo | |
 | T5.4 | Notifications | todo | |
 | T5.5 | Overview with real data | todo | |
-| T6.1 | Tool registry and execution modes | in-progress | |
+| T6.1 | Tool registry and execution modes | done | `feat(T6.1): tool policies and approvals` |
 | T6.2 | Action log | todo | |
 | T6.3 | Agent chat with tools | todo | |
 | T6.4 | SSH attack detection and bans | todo | |
@@ -136,3 +136,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T4.3 · drift service, persistent schedule and initial UI implemented; SQLite ordering adjusted, build clean and 49/49 tests pass
 - 2026-11-14 · Codex / GPT-6 · T4.3 · complete; synthetic snapshots showed add/remove/change graph highlights, schedule save/readback and both themes verified; build clean and 49/49 tests pass
 - 2026-11-14 · Codex / GPT-6 · resumed T6.1 · owner directed skipping M5; initial build passed with 0 warnings/errors and tests passed (49/49)
+- 2026-11-14 · Codex / GPT-6 · T6.1 · typed tool registry and policy/approval matrix; migration applied, settings checked in both themes, build clean and 62/62 tests pass

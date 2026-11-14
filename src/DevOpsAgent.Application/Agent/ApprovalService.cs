@@ -50,6 +50,10 @@ public sealed class ApprovalService(
         }
 
         var targetIds = request.ServerIds.Distinct().ToArray();
+        if (descriptor.RequiresServer && targetIds.Length == 0)
+        {
+            return new(ToolApprovalState.Denied, $"Tool '{request.ToolName}' requires at least one target server.");
+        }
         var allServers = await servers.ListAsync(cancellationToken);
         var targets = allServers.Where(server => targetIds.Contains(server.Id)).ToArray();
         if (targets.Length != targetIds.Length)

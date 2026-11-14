@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -10,7 +11,7 @@ public enum ToolAccess
     Mutating
 }
 
-public sealed record ToolDescriptor(string Name, string Description, ToolAccess Access, Type ArgumentsType)
+public sealed record ToolDescriptor(string Name, string Description, ToolAccess Access, Type ArgumentsType, bool RequiresServer = true)
 {
     public bool RequiresApproval => Access == ToolAccess.Mutating || Name == "run_shell";
 }
@@ -29,9 +30,9 @@ public sealed class ToolRegistry
     {
         ToolDescriptor[] tools =
         [
-            Define<ListServersArgs>("list_servers", "List inventoried servers and their groups.", ToolAccess.ReadOnly),
-            Define<QueryGraphArgs>("query_graph", "Query known infrastructure nodes and connections.", ToolAccess.ReadOnly),
-            Define<RunDiscoveryArgs>("run_discovery", "Run read-only discovery and save a snapshot.", ToolAccess.ReadOnly),
+            Define<ListServersArgs>("list_servers", "List inventoried servers and their groups.", ToolAccess.ReadOnly, requiresServer: false),
+            Define<QueryGraphArgs>("query_graph", "Query known infrastructure nodes and connections.", ToolAccess.ReadOnly, requiresServer: false),
+            Define<RunDiscoveryArgs>("run_discovery", "Run read-only discovery and save a snapshot.", ToolAccess.ReadOnly, requiresServer: false),
             Define<ServiceStatusArgs>("service_status", "Read the state of a systemd unit.", ToolAccess.ReadOnly),
             Define<RestartServiceArgs>("restart_service", "Restart a systemd unit.", ToolAccess.Mutating),
             Define<DockerPsArgs>("docker_ps", "List Docker containers.", ToolAccess.ReadOnly),
@@ -65,8 +66,16 @@ public sealed class ToolRegistry
             throw new ArgumentException("Tool arguments must be a JSON object.", nameof(arguments));
         }
 
-        var value = JsonSerializer.Deserialize(arguments, descriptor.ArgumentsType, JsonOptions)
-            ?? throw new ArgumentException("Tool arguments could not be read.", nameof(arguments));
+        object value;
+        try
+        {
+            value = JsonSerializer.Deserialize(arguments, descriptor.ArgumentsType, JsonOptions)
+                ?? throw new ArgumentException("Tool arguments could not be read.", nameof(arguments));
+        }
+        catch (JsonException exception)
+        {
+            throw new ArgumentException("Tool arguments do not match the registered parameter type.", nameof(arguments), exception);
+        }
         var context = new ValidationContext(value);
         var errors = new List<ValidationResult>();
         if (!Validator.TryValidateObject(value, context, errors, validateAllProperties: true))
@@ -77,8 +86,8 @@ public sealed class ToolRegistry
         return value;
     }
 
-    private static ToolDescriptor Define<T>(string name, string description, ToolAccess access) where T : class =>
-        new(name, description, access, typeof(T));
+    private static ToolDescriptor Define<T>(string name, string description, ToolAccess access, bool requiresServer = true) where T : class =>
+        new(name, description, access, typeof(T), requiresServer);
 }
 
 public sealed record EmptyToolArgs;
@@ -91,15 +100,15 @@ public sealed record QueryGraphArgs(
 public sealed record RunDiscoveryArgs(IReadOnlyList<Guid>? ServerIds = null);
 
 public sealed record ServiceStatusArgs(
-    [property: Required, StringLength(200, MinimumLength = 1)] string Unit);
+    [property: Required, StringLength(200, MinimumLength = 1), RegularExpression("^[A-Za-z0-9][A-Za-z0-9@_.:-]*$")] string Unit);
 
 public sealed record RestartServiceArgs(
-    [property: Required, StringLength(200, MinimumLength = 1)] string Unit);
+    [property: Required, StringLength(200, MinimumLength = 1), RegularExpression("^[A-Za-z0-9][A-Za-z0-9@_.:-]*$")] string Unit);
 
 public sealed record DockerPsArgs;
 
 public sealed record DockerLogsArgs(
-    [property: Required, StringLength(128, MinimumLength = 1)] string Container,
+    [property: Required, StringLength(128, MinimumLength = 1), RegularExpression("^[A-Za-z0-9][A-Za-z0-9_.-]*$")] string Container,
     [property: Range(1, 2000)] int Tail = 200);
 
 public sealed record TailLogArgs(
@@ -114,13 +123,43 @@ public sealed record DiskUsageArgs([property: StringLength(1024)] string? Path =
 public sealed record ListUpdatesArgs;
 
 public sealed record ApplyUpdatesArgs(
-    [property: MinLength(1), MaxLength(100)] IReadOnlyList<string> Packages);
+    [property: Required, MinLength(1), MaxLength(100)] IReadOnlyList<string> Packages) : IValidatableObject
+{
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (Packages is null || Packages.Any(package => string.IsNullOrWhiteSpace(package)
+                || package.Length > 200
+                || !char.IsAsciiLetterOrDigit(package[0])
+                || package.Any(character => !char.IsAsciiLetterOrDigit(character) && character is not ('.' or '+' or ':' or '@' or '_' or '-'))))
+        {
+            yield return new ValidationResult("Package names contain unsupported characters.", [nameof(Packages)]);
+        }
+    }
+}
 
 public sealed record BlockIpArgs(
-    [property: Required, StringLength(64, MinimumLength = 3)] string Address);
+    [property: Required, StringLength(64, MinimumLength = 3)] string Address) : IValidatableObject
+{
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (!IPAddress.TryParse(Address, out _))
+        {
+            yield return new ValidationResult("Address must be a valid IPv4 or IPv6 address.", [nameof(Address)]);
+        }
+    }
+}
 
 public sealed record UnblockIpArgs(
-    [property: Required, StringLength(64, MinimumLength = 3)] string Address);
+    [property: Required, StringLength(64, MinimumLength = 3)] string Address) : IValidatableObject
+{
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (!IPAddress.TryParse(Address, out _))
+        {
+            yield return new ValidationResult("Address must be a valid IPv4 or IPv6 address.", [nameof(Address)]);
+        }
+    }
+}
 
 public sealed record ListBansArgs;
 
