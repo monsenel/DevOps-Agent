@@ -81,7 +81,7 @@
                         {
                             <li class="drift-change-row @ChangeClass(change.ChangeType)">
                                 <span class="drift-change-kind">@change.ChangeType</span>
-                                <span class="drift-change-description">@change.Description</span>
+                                <span class="drift-change-description">@DisplayDescription(change)</span>
                                 <span class="ui-badge neutral">@change.EntityType</span>
                             </li>
                         }
@@ -258,6 +258,14 @@
 
     private static string SnapshotLabel(SnapshotSummary snapshot) =>
         $"{snapshot.StartedAtUtc.ToLocalTime():g} · {snapshot.Status} · {snapshot.SucceededServerCount} ok / {snapshot.FailedServerCount} failed";
+
+    private static string DisplayDescription(DriftChange change)
+    {
+        var prefix = $"{change.ChangeType} ";
+        return change.Description.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? change.Description[prefix.Length..]
+            : change.Description;
+    }
 
     private static string ChangeClass(DriftChangeType type) => ChangeClass((DriftChangeType?)type);
 

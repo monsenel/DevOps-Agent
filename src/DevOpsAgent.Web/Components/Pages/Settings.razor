@@ -35,7 +35,7 @@
                 <label for="discovery-interval">Run discovery every</label>
                 <div class="discovery-interval-input">
                     <input id="discovery-interval" class="mono" type="number" min="@DiscoveryScheduleService.MinimumIntervalHours"
-                           max="@DiscoveryScheduleService.MaximumIntervalHours" @bind="_discoveryIntervalHours" />
+                           max="@DiscoveryScheduleService.MaximumIntervalHours" value="@_discoveryIntervalHours" @oninput="UpdateDiscoveryInterval" />
                     <span>hours</span>
                 </div>
                 <span class="field-helper">Choose between 1 and 24 hours. The default is 6 hours.</span>
@@ -320,6 +320,11 @@
         {
             _savingDiscovery = false;
         }
+    }
+
+    private void UpdateDiscoveryInterval(ChangeEventArgs args)
+    {
+        _discoveryIntervalHours = int.TryParse(args.Value?.ToString(), out var hours) ? hours : 0;
     }
 
     private void OnTypeChanged()

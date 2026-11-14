@@ -7,39 +7,12 @@
 ## Current
 
 - **Task:** T4.3 Drift and scheduled discovery
-- **Status:** in-progress
+- **Status:** done
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
-What is done so far:
-- T4.2 is complete and committed as `85e3b68 feat(T4.2): unknown node expansion`; build is clean and 47/47 tests pass, with the prefilled flow checked in both themes.
-- T4.3 has `DriftService` graph comparison, full-graph view, snapshot listing, persistent 1–24 hour discovery interval (default 6), hosted scheduler, and first drift page/settings UI slice; snapshot fixture and schedule tests pass (49/49).
-What is next (exact next step):
-- Seed a disposable local database with two synthetic completed snapshots, visually verify Drift changes/graph highlights and Settings › Discovery in light and dark, then inspect results and finish any acceptance gaps.
-Files touched:
-- `docs/PROGRESS.md`
-- `src/DevOpsAgent.Application/Abstractions/IAppSettingRepository.cs`
-- `src/DevOpsAgent.Application/Abstractions/ISnapshotRepository.cs`
-- `src/DevOpsAgent.Application/Discovery/DiscoveryScheduleService.cs`
-- `src/DevOpsAgent.Application/Discovery/DriftContracts.cs`
-- `src/DevOpsAgent.Application/Discovery/DriftService.cs`
-- `src/DevOpsAgent.Application/Discovery/GraphViewContracts.cs`
-- `src/DevOpsAgent.Infrastructure/Persistence/AppSettingRepository.cs`
-- `src/DevOpsAgent.Infrastructure/Persistence/GraphRepository.cs`
-- `src/DevOpsAgent.Infrastructure/Persistence/PersistenceServiceCollectionExtensions.cs`
-- `src/DevOpsAgent.Infrastructure/Persistence/SnapshotRepository.cs`
-- `src/DevOpsAgent.Web/Components/Layout/Sidebar.razor`
-- `src/DevOpsAgent.Web/Components/Pages/Drift.razor`
-- `src/DevOpsAgent.Web/Components/Pages/Settings.razor`
-- `src/DevOpsAgent.Web/Hosted/DiscoveryScheduler.cs`
-- `src/DevOpsAgent.Web/Program.cs`
-- `src/DevOpsAgent.Web/wwwroot/css/app.css`
-- `tests/DevOpsAgent.Tests/DriftServiceTests.cs`
-Gotchas found:
-- T1.2 live direct/jump SSH verification remains deferred by owner direction; its status stays blocked.
-- T2.7's real two-server discovery criterion cannot be verified until authorized targets and pinned keys are configured; the browser check used a temporary synthetic persisted graph.
-- SQLite cannot translate `DateTimeOffset` ordering; `SnapshotRepository.ListAsync` sorts materialized snapshots in memory, matching `GetLatestAsync`.
+No active WIP. T4.3 is complete.
 
 ## Blockers
 
@@ -84,7 +57,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T3.3 | Evidence panel and Trace | blocked | `wip(T3.3): trace evidence UI` |
 | T4.1 | Live connections | done | `feat(T4.1): observed connections` |
 | T4.2 | Unknown nodes | done | `feat(T4.2): unknown node expansion` |
-| T4.3 | Drift and scheduled discovery | in-progress | |
+| T4.3 | Drift and scheduled discovery | done | `feat(T4.3): drift and scheduled discovery` |
 | T5.1 | Metric poller | todo | |
 | T5.2 | Health checks | todo | |
 | T5.3 | Alert engine and Alerts page | todo | |
@@ -159,3 +132,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T4.2 · complete; synthetic J2 flow verified, live SSH unavailable
 - 2026-11-14 · Codex / GPT-6 · resumed T4.3 · started drift comparison and scheduled discovery
 - 2026-11-14 · Codex / GPT-6 · T4.3 · drift service, persistent schedule and initial UI implemented; SQLite ordering adjusted, build clean and 49/49 tests pass
+- 2026-11-14 · Codex / GPT-6 · T4.3 · complete; synthetic snapshots showed add/remove/change graph highlights, schedule save/readback and both themes verified; build clean and 49/49 tests pass
