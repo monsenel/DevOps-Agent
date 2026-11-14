@@ -6,25 +6,18 @@
 
 ## Current
 
-- **Task:** T3.3 Evidence panel and Trace
-- **Status:** blocked
+- **Task:** T4.1 Live connections
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
 What is done so far:
-- T3.2 is complete and committed as `feat(T3.2): nginx edge resolution`; 39 tests pass, including nginx on host A resolving to a Compose service on host B through the target host's published port.
-- T3.3 implementation adds nginx server-block/upstream graph nodes, edge selection and evidence lookup, URL/domain trace traversal across declared and observed edges, trace path styling, and accessible edge selection. Build passes with zero warnings/errors and 40/40 tests pass. Topology toolbar and empty-state layout were checked in light and dark themes.
+- T3.3 implementation is committed as `wip(T3.3): trace evidence UI`; J3's real-server acceptance is blocked by missing authorized SSH targets and pinned host keys.
 What is next (exact next step):
-- Resume J3 verification when authorized SSH targets and independently verified `/keys/known_hosts` entries are available; run discovery on real servers and verify the domain → server block → upstream → API → downstream trace and edge evidence. T4.1 can proceed independently from T3.2.
+- Read DSC-6 and DESIGN §7, inspect collector/graph integration, then implement the read-only host/container established-connection collector and observed-edge ownership mapping with fixture tests.
 Files touched:
 - `docs/PROGRESS.md`
-- `src/DevOpsAgent.Application/Discovery/GraphBuilder.cs`
-- `src/DevOpsAgent.Application/Discovery/GraphTraceResolver.cs`
-- `src/DevOpsAgent.Web/Components/Pages/Topology.razor`
-- `src/DevOpsAgent.Web/wwwroot/css/app.css`
-- `src/DevOpsAgent.Web/wwwroot/js/graph.js`
-- `tests/DevOpsAgent.Tests/EdgeResolverTests.cs`
 Gotchas found:
 - T1.2 live direct/jump SSH verification remains deferred by owner direction; its status stays blocked.
 - T2.7's real two-server discovery criterion cannot be verified until authorized targets and pinned keys are configured; the browser check used a temporary synthetic persisted graph.
@@ -70,7 +63,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T3.1 | nginx parser | done | `feat(T3.1): nginx parser` |
 | T3.2 | Edge resolution | done | `feat(T3.2): nginx edge resolution` |
 | T3.3 | Evidence panel and Trace | blocked | `wip(T3.3): trace evidence UI` |
-| T4.1 | Live connections | todo | |
+| T4.1 | Live connections | in-progress | |
 | T4.2 | Unknown nodes | todo | |
 | T4.3 | Drift and scheduled discovery | todo | |
 | T5.1 | Metric poller | todo | |
@@ -140,3 +133,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T3.2 · completed
 - 2026-11-14 · Codex / GPT-6 · T3.3 · started
 - 2026-11-14 · Codex / GPT-6 · resumed T3.3 · edge evidence, trace graph and path highlighting implemented; build clean, 40/40 tests pass, light/dark UI checked; real-server J3 verification blocked
+- 2026-11-14 · Codex / GPT-6 · T4.1 · started after deferring T3.3's real-server acceptance
