@@ -8,6 +8,8 @@ namespace DevOpsAgent.Infrastructure.Monitoring;
 
 public sealed class HealthProbe(IHttpClientFactory httpClientFactory, TimeProvider timeProvider) : IHealthProbe
 {
+    private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(10);
+
     public async Task<HealthProbeResult> ProbeAsync(Domain.Monitoring.HealthCheckType type, string target,
         CancellationToken cancellationToken)
     {
@@ -15,7 +17,16 @@ public sealed class HealthProbe(IHttpClientFactory httpClientFactory, TimeProvid
         {
             var address = new Uri($"tcp://{target}");
             using var client = new TcpClient();
-            await client.ConnectAsync(address.DnsSafeHost, address.Port, cancellationToken);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(ConnectTimeout);
+            try
+            {
+                await client.ConnectAsync(address.DnsSafeHost, address.Port, timeout.Token);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                return new HealthProbeResult(false, null, null, $"TCP connect timed out after {ConnectTimeout.TotalSeconds:0} seconds.");
+            }
             return new HealthProbeResult(true, null, null, null);
         }
 
@@ -42,9 +53,11 @@ public sealed class HealthProbe(IHttpClientFactory httpClientFactory, TimeProvid
     {
         var port = uri.IsDefaultPort ? 443 : uri.Port;
         using var client = new TcpClient();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(ConnectTimeout);
         try
         {
-            await client.ConnectAsync(uri.DnsSafeHost, port, cancellationToken);
+            await client.ConnectAsync(uri.DnsSafeHost, port, timeout.Token);
             DateTimeOffset? expiresAt = null;
             using var ssl = new SslStream(client.GetStream(), leaveInnerStreamOpen: false,
                 (_, certificate, _, errors) =>
@@ -57,7 +70,7 @@ public sealed class HealthProbe(IHttpClientFactory httpClientFactory, TimeProvid
                 });
             try
             {
-                await ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = uri.DnsSafeHost }, cancellationToken);
+                await ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = uri.DnsSafeHost }, timeout.Token);
             }
             catch (AuthenticationException) when (expiresAt.HasValue) { }
 
