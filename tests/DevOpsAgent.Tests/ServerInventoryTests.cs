@@ -40,6 +40,38 @@ public sealed class ServerInventoryTests
     }
 
     [Fact]
+    public async Task OnlyConnectionRelevantEditsEvictThePooledSshConnection()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var pool = new RecordingSshConnectionPool();
+        var service = new ServerService(new ServerRepository(database.Context), new TestSecretProtector(),
+            new TestKeyStore("id_ed25519", "id_other"), pool);
+        var gateway = await service.CreateAsync(Input("gateway", null), CancellationToken.None);
+        var server = await service.CreateAsync(Input("edge", null), CancellationToken.None);
+
+        // Cosmetic edits (name, group, tags, blank passphrase field) keep live sessions alive.
+        await service.UpdateAsync(server.Id, Input("edge-renamed", null) with { Group = "staging", Tags = ["x"] }, CancellationToken.None);
+        Assert.Empty(pool.Evicted);
+
+        var current = Input("edge-renamed", null) with { Group = "staging", Tags = ["x"] };
+        foreach (var changed in new[]
+                 {
+                     current with { Port = 2222 },
+                     current with { User = "other" },
+                     current with { KeyFile = "id_other" },
+                     current with { KeyPassphrase = "new phrase" },
+                     current with { JumpServerId = gateway.Id },
+                     current with { Host = "moved.example.internal" }
+                 })
+        {
+            pool.Evicted.Clear();
+            await service.UpdateAsync(server.Id, changed, CancellationToken.None);
+            Assert.Equal([server.Id], pool.Evicted);
+            await service.UpdateAsync(server.Id, current with { KeyPassphrase = null }, CancellationToken.None);
+        }
+    }
+
+    [Fact]
     public async Task UpdateAndDeleteEvictThePooledSshConnection()
     {
         await using var database = await CreateDatabaseAsync();

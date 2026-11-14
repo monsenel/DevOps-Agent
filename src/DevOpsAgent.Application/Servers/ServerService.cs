@@ -42,12 +42,19 @@ public sealed class ServerService(
         Validate(input, id, servers);
         EnsureUniqueName(input.Name, servers, id);
 
+        var connectionBefore = (server.Host, server.Port, server.User, server.KeyFile, server.JumpServerId, server.ProtectedKeyPassphrase);
         server.Update(
             input.Name.Trim(), input.Host.Trim(), input.Port, input.User.Trim(), input.KeyFile.Trim(), input.JumpServerId,
             NormalizeGroup(input.Group), SerializeTags(input.Tags), ProtectPassphrase(input.KeyPassphrase));
         await repository.SaveAsync(server, cancellationToken);
-        // Connection settings may have changed (host, user, key, jump route); never reuse the old session.
-        connectionPool.Evict(id);
+        // Only a change to how the server is reached invalidates the pooled session; renaming or retagging a server
+        // must not kill live sessions (for example a running package update).
+        var connectionAfter = (server.Host, server.Port, server.User, server.KeyFile, server.JumpServerId, server.ProtectedKeyPassphrase);
+        if (connectionBefore != connectionAfter)
+        {
+            connectionPool.Evict(id);
+        }
+
         return ToSummary(server, servers);
     }
 
