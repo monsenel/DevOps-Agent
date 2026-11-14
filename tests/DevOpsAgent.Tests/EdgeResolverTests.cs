@@ -1,6 +1,7 @@
 using DevOpsAgent.Application.Discovery;
 using DevOpsAgent.Domain.Graph;
 using DevOpsAgent.Domain.Servers;
+using System.Text.Json;
 
 namespace DevOpsAgent.Tests;
 
@@ -110,13 +111,40 @@ public sealed class EdgeResolverTests
         var result = new GraphBuilder().Build(Guid.NewGuid(), [source, target]);
         var targetService = result.Nodes.Single(node => node.Key == $"service:{target.Server.Id:N}:compose:prod/api");
         var edge = result.Edges.Single(item => item.Kind == GraphEdgeKind.Declared && item.TargetNodeId == targetService.Id);
+        var domain = result.Nodes.Single(node => node.Key == "domain:app.example.test");
+        var serverBlock = result.Nodes.Single(node => node.Key == $"service:{source.Server.Id:N}:nginx-server:/etc/nginx/sites-enabled/app:3");
+        var upstreamNode = result.Nodes.Single(node => node.Key == $"service:{source.Server.Id:N}:nginx-upstream:api_pool");
 
-        Assert.Contains(result.Nodes, node => node.Kind == GraphNodeKind.Domain && node.Key == "domain:app.example.test");
+        Assert.Contains(result.Edges, item => item.Kind == GraphEdgeKind.Declared && item.SourceNodeId == domain.Id && item.TargetNodeId == serverBlock.Id);
+        Assert.Contains(result.Edges, item => item.Kind == GraphEdgeKind.Declared && item.SourceNodeId == serverBlock.Id && item.TargetNodeId == upstreamNode.Id);
+        Assert.Contains(result.Edges, item => item.Kind == GraphEdgeKind.Declared && item.SourceNodeId == upstreamNode.Id && item.TargetNodeId == targetService.Id);
         Assert.Equal(8080, edge.Port);
         var evidence = result.Evidence.Single(item => item.EdgeId == edge.Id);
         Assert.Contains("/etc/nginx/sites-enabled/app:12", evidence.Description);
         Assert.Contains("/etc/nginx/conf.d/upstream.conf:2", evidence.Description);
         Assert.Contains("published host port", evidence.Description);
+    }
+
+    [Fact]
+    public void GraphTraceResolver_TracesUrlAcrossDownstreamEdgesAndSkipsUnrelatedNodes()
+    {
+        var graph = new GraphSnapshotDto(Guid.NewGuid(), "service",
+            [Node("domain-id", "Domain", "api.example.test"), Node("block-id", "Service", "server block · api.example.test"),
+                Node("upstream-id", "Service", "upstream · api_pool"), Node("api-id", "Service", "api"),
+                Node("db-id", "Service", "postgres"), Node("other-id", "Domain", "other.example.test")],
+            [Edge("domain-edge", "domain-id", "block-id", "Declared"), Edge("block-edge", "block-id", "upstream-id", "Declared"),
+                Edge("api-edge", "upstream-id", "api-id", "Declared"), Edge("db-edge", "api-id", "db-id", "Observed"),
+                Edge("other-edge", "other-id", "db-id", "Declared")], [], []);
+
+        var result = GraphTraceResolver.Resolve(graph, "https://API.example.test/v1/items?active=true");
+
+        Assert.NotNull(result);
+        Assert.Equal("api.example.test", result.Hostname);
+        Assert.Equal(new[] { "domain-id", "block-id", "upstream-id", "api-id", "db-id" }.OrderBy(value => value),
+            result.NodeIds.OrderBy(value => value));
+        Assert.Equal(new[] { "domain-edge", "block-edge", "api-edge", "db-edge" }.OrderBy(value => value),
+            result.EdgeIds.OrderBy(value => value));
+        Assert.Null(GraphTraceResolver.Resolve(graph, "missing.example.test"));
     }
 
     private static ServerDiscoveryData Data(string name, HostDiscoveryResult? host = null,
@@ -136,4 +164,10 @@ public sealed class EdgeResolverTests
 
     private static DockerNetworkEndpoint Endpoint(string network, string address, params string[] aliases) =>
         new(network, network, address, null, aliases);
+
+    private static GraphElementDto Node(string id, string kind, string label) =>
+        new(JsonSerializer.SerializeToElement(new { id, kind, label }));
+
+    private static GraphElementDto Edge(string id, string source, string target, string kind) =>
+        new(JsonSerializer.SerializeToElement(new { id, source, target, kind }));
 }

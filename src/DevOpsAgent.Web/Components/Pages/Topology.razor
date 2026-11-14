@@ -17,6 +17,15 @@
             <button type="button" class="@(CurrentView == GraphView.Service ? "active" : null)" aria-pressed="@(CurrentView == GraphView.Service)" @onclick="() => ChangeViewAsync(GraphView.Service)">Service</button>
             <button type="button" class="@(CurrentView == GraphView.Network ? "active" : null)" aria-pressed="@(CurrentView == GraphView.Network)" @onclick="() => ChangeViewAsync(GraphView.Network)">Network</button>
         </div>
+        <form class="topology-trace" @onsubmit="TraceAsync" @onsubmit:preventDefault>
+            <label for="topology-trace-input">Trace domain</label>
+            <input id="topology-trace-input" type="text" placeholder="api.example.com or URL" @bind="_traceQuery" />
+            <button class="ui-button secondary" type="submit" disabled="@(_graph is null)">Trace</button>
+            @if (_tracedNodeIds.Count > 0)
+            {
+                <button class="ui-button secondary" type="button" @onclick="ClearTraceAsync">Clear trace</button>
+            }
+        </form>
         <label class="topology-search">
             <span class="visually-hidden">Search topology</span>
             <input type="search" placeholder="Search name, IP, port…" value="@_search" @oninput="SearchChanged" />
@@ -65,6 +74,10 @@
     {
         <div class="alert-message error" role="alert">@_pageError</div>
     }
+    @if (!string.IsNullOrWhiteSpace(_traceMessage))
+    {
+        <p class="topology-trace-message" role="status">@_traceMessage</p>
+    }
 </section>
 
 <div class="topology-layout">
@@ -90,29 +103,42 @@
                 }
             </nav>
         }
+        @if (VisibleEdges.Count > 0)
+        {
+            <nav class="topology-node-list" aria-label="Graph edges">
+                @foreach (var edge in VisibleEdges)
+                {
+                    var id = ReadString(edge, "id");
+                    <button type="button" @key="id" aria-pressed="@(_selectedId == id)" @onclick="() => SelectEdgeAsync(edge)">
+                        <span class="topology-node-kind">@ReadString(edge, "kind")</span>
+                        <span>@FindNodeName(ReadString(edge, "source") ?? "") → @FindNodeName(ReadString(edge, "target") ?? "") @PortLabel(edge)</span>
+                    </button>
+                }
+            </nav>
+        }
     </section>
 
     <aside class="ui-card topology-details" aria-labelledby="topology-details-title" aria-live="polite">
         <div class="ui-card-header">
             <div>
                 <p class="eyebrow">Selection</p>
-                <h2 id="topology-details-title">@(_selected is null ? "Node details" : ReadString(_selected.Value, "label") ?? ReadString(_selected.Value, "kind") ?? "Selected item")</h2>
+                <h2 id="topology-details-title">@(_selected is null ? "Node or edge details" : SelectedTitle)</h2>
             </div>
         </div>
         @if (_selected is JsonElement selected)
         {
             <dl class="topology-detail-list">
                 <dt>Kind</dt><dd>@ReadString(selected, "kind")</dd>
-                @if (ReadString(selected, "port") is string port)
+                @if (ReadValue(selected, "port") is string port)
                 {
                     <dt>Port</dt><dd class="mono">:@port @ReadString(selected, "protocol")</dd>
                 }
-                @if (ReadString(selected, "source") is string sourceId && ReadString(selected, "target") is string targetId)
+                @if (IsEdge(selected) && ReadString(selected, "source") is string sourceId && ReadString(selected, "target") is string targetId)
                 {
                     <dt>Source</dt><dd>@FindNodeName(sourceId)</dd>
                     <dt>Target</dt><dd>@FindNodeName(targetId)</dd>
                 }
-                @if (selected.TryGetProperty("attributes", out var attributes) && attributes.ValueKind == JsonValueKind.Object)
+                @if (!IsEdge(selected) && selected.TryGetProperty("attributes", out var attributes) && attributes.ValueKind == JsonValueKind.Object)
                 {
                     @foreach (var property in attributes.EnumerateObject().Where(property => property.Value.ValueKind is JsonValueKind.String or JsonValueKind.Number))
                     {
@@ -140,6 +166,10 @@
                     }
                 </ul>
             }
+            @if (IsEdge(selected) && _selectedEvidence.Count == 0)
+            {
+                <p class="muted">No collector evidence is attached to this edge.</p>
+            }
         }
         else
         {
@@ -161,6 +191,10 @@
     private string _search = string.Empty;
     private string _selectedTag = string.Empty;
     private string _selectedProject = string.Empty;
+    private string _traceQuery = string.Empty;
+    private string? _traceMessage;
+    private IReadOnlySet<string> _tracedNodeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    private IReadOnlySet<string> _tracedEdgeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     private string? _pageError;
     private string? _progressMessage;
     private bool _discovering;
@@ -170,6 +204,15 @@
     private IReadOnlyList<string> _projects = [];
     private IReadOnlyList<GraphListenerDto> _selectedListeners = [];
     private IReadOnlyList<GraphEvidenceDto> _selectedEvidence = [];
+    private IReadOnlyList<JsonElement> VisibleEdges => _graph is null ? [] : _graph.Edges
+        .Select(edge => edge.Data)
+        .Where(edge => ReadString(edge, "source") is string source && ReadString(edge, "target") is string target
+            && _visibleNodes.Any(node => ReadString(node, "id") == source)
+            && _visibleNodes.Any(node => ReadString(node, "id") == target))
+        .ToArray();
+    private string SelectedTitle => _selected is JsonElement selected && IsEdge(selected)
+        ? $"{FindNodeName(ReadString(selected, "source") ?? "") ?? "Source"} → {FindNodeName(ReadString(selected, "target") ?? "") ?? "Target"}"
+        : _selected is JsonElement node ? ReadString(node, "label") ?? ReadString(node, "kind") ?? "Selected node" : "Node or edge details";
     private int ProgressPercent => _servers.Count == 0 ? (_discovering ? 15 : 0) : _completedServers * 100 / _servers.Count;
     private string GraphSummary => _graph is null
         ? "Run discovery to build a map of your servers and services."
@@ -218,6 +261,7 @@
         CurrentView = view;
         if (_snapshot is not null) await LoadGraphAsync(_snapshot.Id);
         await PushGraphAsync();
+        if (_tracedNodeIds.Count > 0) await PushTraceAsync();
     }
 
     private async Task LoadGraphAsync(Guid snapshotId)
@@ -225,6 +269,9 @@
         _graph = await GraphRepository.GetAsync(snapshotId, CurrentView, CancellationToken.None);
         _selected = null;
         _selectedId = null;
+        _traceMessage = null;
+        _tracedNodeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        _tracedEdgeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         UpdateOptions();
         UpdateVisibleNodes();
     }
@@ -384,17 +431,77 @@
 
     private Task FitGraphAsync() => _graphModule is null ? Task.CompletedTask : _graphModule.InvokeVoidAsync("fit").AsTask();
 
+    private async Task TraceAsync()
+    {
+        if (_graph is null || string.IsNullOrWhiteSpace(_traceQuery))
+        {
+            _traceMessage = "Enter a domain name or URL to trace.";
+            return;
+        }
+
+        if (CurrentView != GraphView.Service)
+        {
+            CurrentView = GraphView.Service;
+            if (_snapshot is not null) await LoadGraphAsync(_snapshot.Id);
+            await PushGraphAsync();
+        }
+
+        var trace = GraphTraceResolver.Resolve(_graph, _traceQuery);
+        if (trace is null)
+        {
+            _tracedNodeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            _tracedEdgeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            _traceMessage = $"No domain in this snapshot matches '{_traceQuery.Trim()}'.";
+            if (_graphModule is not null) await _graphModule.InvokeVoidAsync("clearTrace");
+            return;
+        }
+
+        _tracedNodeIds = trace.NodeIds;
+        _tracedEdgeIds = trace.EdgeIds;
+        _traceMessage = $"Trace for {trace.Hostname}: {trace.NodeIds.Count} nodes and {trace.EdgeIds.Count} connections.";
+        await PushTraceAsync();
+    }
+
+    private async Task ClearTraceAsync()
+    {
+        _tracedNodeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        _tracedEdgeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        _traceMessage = null;
+        if (_graphModule is not null) await _graphModule.InvokeVoidAsync("clearTrace");
+    }
+
+    private Task PushTraceAsync() => _graphModule is null
+        ? Task.CompletedTask
+        : _graphModule.InvokeVoidAsync("highlightTrace", _tracedNodeIds.ToArray(), _tracedEdgeIds.ToArray()).AsTask();
+
     private async Task SelectNodeAsync(JsonElement node)
     {
-        var id = ReadString(node, "id");
+        await SelectEntityAsync(node);
+    }
+
+    private async Task SelectEdgeAsync(JsonElement edge)
+    {
+        await SelectEntityAsync(edge);
+    }
+
+    private async Task SelectEntityAsync(JsonElement entity)
+    {
+        var id = ReadString(entity, "id");
         if (id is null) return;
         _selectedId = id;
-        _selected = node;
-        if (_graph is not null)
+        _selected = entity;
+        _selectedListeners = [];
+        if (_graph is not null && Guid.TryParseExact(id, "N", out var parsed))
         {
-            var entityId = Guid.TryParseExact(id, "N", out var parsed) ? parsed : Guid.Empty;
-            _selectedListeners = _graph.Listeners.Where(listener => listener.NodeId == entityId).ToArray();
-            _selectedEvidence = _graph.Evidence.Where(item => item.NodeId == entityId).ToArray();
+            if (IsEdge(entity))
+            {
+                _selectedEvidence = _graph.Evidence.Where(item => item.EdgeId == parsed).ToArray();
+            }
+            else
+            {
+                _selectedListeners = _graph.Listeners.Where(listener => listener.NodeId == parsed).ToArray();
+                _selectedEvidence = _graph.Evidence.Where(item => item.NodeId == parsed).ToArray();
+            }
         }
         if (_graphModule is not null) await _graphModule.InvokeVoidAsync("select", id);
     }
@@ -417,8 +524,16 @@
             _selectedId = ReadString(data, "id");
             if (_graph is not null && Guid.TryParseExact(_selectedId, "N", out var id))
             {
-                _selectedListeners = _graph.Listeners.Where(listener => listener.NodeId == id).ToArray();
-                _selectedEvidence = _graph.Evidence.Where(item => item.NodeId == id).ToArray();
+                if (IsEdge(data))
+                {
+                    _selectedListeners = [];
+                    _selectedEvidence = _graph.Evidence.Where(item => item.EdgeId == id).ToArray();
+                }
+                else
+                {
+                    _selectedListeners = _graph.Listeners.Where(listener => listener.NodeId == id).ToArray();
+                    _selectedEvidence = _graph.Evidence.Where(item => item.NodeId == id).ToArray();
+                }
             }
         }
         await InvokeAsync(StateHasChanged);
@@ -436,6 +551,16 @@
         TryGetProperty(element, property, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()
             : null;
+
+    private static string? ReadValue(JsonElement element, string property) =>
+        TryGetProperty(element, property, out var value) && value.ValueKind is JsonValueKind.String or JsonValueKind.Number
+            ? value.ToString()
+            : null;
+
+    private static bool IsEdge(JsonElement element) => ReadString(element, "source") is not null
+        && ReadString(element, "target") is not null;
+
+    private static string PortLabel(JsonElement edge) => ReadString(edge, "port") is string port ? $":{port}" : string.Empty;
 
     private static bool TryGetProperty(JsonElement element, string property, out JsonElement value)
     {

@@ -7,17 +7,24 @@
 ## Current
 
 - **Task:** T3.3 Evidence panel and Trace
-- **Status:** in-progress
+- **Status:** blocked
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
 What is done so far:
 - T3.2 is complete and committed as `feat(T3.2): nginx edge resolution`; 39 tests pass, including nginx on host A resolving to a Compose service on host B through the target host's published port.
+- T3.3 implementation adds nginx server-block/upstream graph nodes, edge selection and evidence lookup, URL/domain trace traversal across declared and observed edges, trace path styling, and accessible edge selection. Build passes with zero warnings/errors and 40/40 tests pass. Topology toolbar and empty-state layout were checked in light and dark themes.
 What is next (exact next step):
-- Review `docs/PRD.md` J3 and `docs/DESIGN.md` graph detail/trace requirements; inspect current topology graph APIs, then implement the edge evidence panel and domain/URL trace path.
+- Resume J3 verification when authorized SSH targets and independently verified `/keys/known_hosts` entries are available; run discovery on real servers and verify the domain → server block → upstream → API → downstream trace and edge evidence. T4.1 can proceed independently from T3.2.
 Files touched:
 - `docs/PROGRESS.md`
+- `src/DevOpsAgent.Application/Discovery/GraphBuilder.cs`
+- `src/DevOpsAgent.Application/Discovery/GraphTraceResolver.cs`
+- `src/DevOpsAgent.Web/Components/Pages/Topology.razor`
+- `src/DevOpsAgent.Web/wwwroot/css/app.css`
+- `src/DevOpsAgent.Web/wwwroot/js/graph.js`
+- `tests/DevOpsAgent.Tests/EdgeResolverTests.cs`
 Gotchas found:
 - T1.2 live direct/jump SSH verification remains deferred by owner direction; its status stays blocked.
 - T2.7's real two-server discovery criterion cannot be verified until authorized targets and pinned keys are configured; the browser check used a temporary synthetic persisted graph.
@@ -31,6 +38,8 @@ T1.2 live SSH acceptance is blocked because there is no configured test host or 
 Per owner direction, T1.2 live verification is deferred while T2.1 proceeds; return to those checks when authorized test hosts and keys are available.
 
 T2.7 live acceptance is blocked by the same missing authorized SSH targets and pinned host keys. The topology UI was verified with a temporary two-host persisted graph, but that does not satisfy the plan's real two-server discovery criterion. Return to T2.7 once live SSH verification can run.
+
+T3.3's implementation and synthetic trace tests are complete, but PLAN requires J3 to work on real servers. Verification is blocked by the missing authorized SSH targets and pinned host keys recorded under T1.2/T2.7. Resume real trace/evidence verification when those are available; do not treat the synthetic UI check as satisfying J3.
 
 ---
 
@@ -60,7 +69,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T2.7 | Topology page | blocked | `wip(T2.7): topology page and graph interop` |
 | T3.1 | nginx parser | done | `feat(T3.1): nginx parser` |
 | T3.2 | Edge resolution | done | `feat(T3.2): nginx edge resolution` |
-| T3.3 | Evidence panel and Trace | in-progress | |
+| T3.3 | Evidence panel and Trace | blocked | `wip(T3.3): trace evidence UI` |
 | T4.1 | Live connections | todo | |
 | T4.2 | Unknown nodes | todo | |
 | T4.3 | Drift and scheduled discovery | todo | |
@@ -130,3 +139,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · resumed T3.2 · edge resolver, graph evidence, and path tests; build clean, 39/39 tests pass
 - 2026-11-14 · Codex / GPT-6 · T3.2 · completed
 - 2026-11-14 · Codex / GPT-6 · T3.3 · started
+- 2026-11-14 · Codex / GPT-6 · resumed T3.3 · edge evidence, trace graph and path highlighting implemented; build clean, 40/40 tests pass, light/dark UI checked; real-server J3 verification blocked

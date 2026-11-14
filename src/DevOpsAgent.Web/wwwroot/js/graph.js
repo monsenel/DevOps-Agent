@@ -55,6 +55,9 @@ function applyStyles() {
         { selector: "edge[kind = 'Observed']", style: { "line-style": "dashed", "line-dash-pattern": [5, 4], "line-color": c.warn, "target-arrow-color": c.warn } },
         { selector: "edge:selected", style: { "width": 2.5, "line-color": c.accent, "target-arrow-color": c.accent, "color": c.ink } },
         { selector: "node:selected", style: { "border-width": 2, "border-color": c.accent } },
+        { selector: "node.traced", style: { "border-width": 2, "border-color": c.accent } },
+        { selector: "edge.traced", style: { "width": 2.5, "line-color": c.accent, "target-arrow-color": c.accent, "color": c.ink } },
+        { selector: ".trace-dim", style: { "opacity": 0.16 } },
         { selector: ".search-dim", style: { "opacity": 0.18 } }
     ]);
 }
@@ -124,6 +127,24 @@ export function select(id) {
     if (!graph) return;
     graph.elements().unselect();
     graph.getElementById(id).select();
+}
+
+export function highlightTrace(nodeIds, edgeIds) {
+    if (!graph) return;
+    clearTrace();
+    graph.elements().addClass("trace-dim");
+    for (const id of nodeIds || []) {
+        const element = graph.getElementById(id);
+        element.removeClass("trace-dim").addClass("traced");
+    }
+    for (const id of edgeIds || []) {
+        const element = graph.getElementById(id);
+        element.removeClass("trace-dim").addClass("traced");
+    }
+}
+
+export function clearTrace() {
+    graph?.elements().removeClass("trace-dim traced");
 }
 
 export function search(query) {

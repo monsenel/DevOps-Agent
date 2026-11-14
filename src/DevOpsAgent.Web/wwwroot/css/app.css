@@ -1241,7 +1241,8 @@ p {
 }
 
 .topology-search input,
-.topology-filter select {
+.topology-filter select,
+.topology-trace input {
     width: 100%;
     min-width: 0;
     height: var(--dva-control-h);
@@ -1250,6 +1251,37 @@ p {
     border-radius: var(--dva-radius-input);
     background: var(--dva-card);
     color: var(--dva-ink);
+}
+
+.topology-trace {
+    display: flex;
+    flex: 1 1 350px;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 8px;
+}
+
+.topology-trace label {
+    display: grid;
+    flex: 1 1 160px;
+    gap: 4px;
+    color: var(--dva-muted);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.topology-trace input {
+    font-family: "JetBrains Mono", monospace;
+}
+
+.topology-trace .ui-button {
+    margin-left: 0;
+}
+
+.topology-trace-message {
+    margin: 0;
+    color: var(--dva-muted);
+    font-size: 12px;
 }
 
 .topology-filter {

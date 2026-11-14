@@ -225,6 +225,12 @@ public sealed class GraphBuilder
             var nginxNode = GetNginxNode(state);
             foreach (var serverBlock in nginx.Servers)
             {
+                var blockName = serverBlock.ServerNames.Select(value => value.Value).FirstOrDefault()
+                    ?? $"default server · {serverBlock.FilePath ?? "nginx"}:{serverBlock.Line}";
+                var blockKey = $"service:{state.Data.Server.Id:N}:nginx-server:{serverBlock.FilePath}:{serverBlock.Line}";
+                var blockNode = AddNode(blockKey, GraphNodeKind.Service, $"server block · {blockName}",
+                    nginxNode.Id, state.Data.Server.Id,
+                    new { serverBlock.Context, serverBlock.FilePath, serverBlock.Line, ServerNames = serverBlock.ServerNames.Select(value => value.Value).ToArray() });
                 var listenPort = serverBlock.Listens.Select(value => TryParseListenPort(value.Value))
                     .FirstOrDefault(port => port.HasValue) ?? (serverBlock.Listens.Any(value => value.Value == "ssl") ? 443 : 80);
                 var listenProtocol = listenPort == 443 || serverBlock.Listens.Any(value => value.Value == "ssl") ? "https" : "http";
@@ -233,7 +239,7 @@ public sealed class GraphBuilder
                     var normalizedName = serverName.Value.Trim().ToLowerInvariant();
                     var domain = AddNode($"domain:{normalizedName}", GraphNodeKind.Domain, serverName.Value,
                         null, null, new { Domain = serverName.Value });
-                    var edge = AddDeclaredEdge(domain, nginxNode, listenPort, listenProtocol);
+                    var edge = AddDeclaredEdge(domain, blockNode, listenPort, listenProtocol);
                     evidence.Add(new GraphEvidence(snapshotId, null, edge.Id, "nginx",
                         FormatEvidence(serverName.FilePath, serverName.Line, $"server_name {serverName.Value};")));
                 }
@@ -248,6 +254,17 @@ public sealed class GraphBuilder
                         : upstream.Servers.Select(server =>
                             (Endpoint: NginxEndpointParser.Parse(server.Address), Server: (NginxUpstreamServerInfo?)server)).ToArray();
                     if (targets.Length == 0) targets = [(target, null)];
+                    var sourceNode = blockNode;
+                    if (upstream is not null)
+                    {
+                        var upstreamNode = AddNode($"service:{state.Data.Server.Id:N}:nginx-upstream:{upstream.Name.ToLowerInvariant()}",
+                            GraphNodeKind.Service, $"upstream · {upstream.Name}", blockNode.Id, state.Data.Server.Id,
+                            new { upstream.Name, upstream.FilePath, upstream.Line, Context = upstream.Context });
+                        var upstreamEdge = AddDeclaredEdge(blockNode, upstreamNode, null, target.Protocol);
+                        evidence.Add(new GraphEvidence(snapshotId, null, upstreamEdge.Id, "nginx",
+                            FormatEvidence(proxy.FilePath, proxy.Line, $"{proxy.Directive} {proxy.Target}; upstream {upstream.Name}")));
+                        sourceNode = upstreamNode;
+                    }
 
                     foreach (var (endpoint, upstreamServer) in targets)
                     {
@@ -262,7 +279,7 @@ public sealed class GraphBuilder
                                     new { Address = endpoint.Address, endpoint.Port, endpoint.Protocol, resolution.Reason, endpoint.IsUnresolved });
                         }
 
-                        var edge = AddDeclaredEdge(nginxNode, targetNode, endpoint.Port, endpoint.Protocol);
+                        var edge = AddDeclaredEdge(sourceNode, targetNode, endpoint.Port, endpoint.Protocol);
                         var upstreamEvidence = upstreamServer is null
                             ? string.Empty
                             : $" {upstreamServer.FilePath ?? "nginx configuration"}:{upstreamServer.Line}: server {upstreamServer.Address};";
