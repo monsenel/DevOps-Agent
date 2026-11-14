@@ -6,13 +6,13 @@
 
 ## Current
 
-- **Task:** T6.1 Tool registry and execution modes
-- **Status:** done
+- **Task:** T6.2 Action log
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
-No active WIP. T6.1 is complete. T5.1 (and dependent M5 tasks T5.2–T5.5) remain deferred at the owner's direction.
+T5.1 (and dependent M5 tasks T5.2–T5.5) remain deferred at the owner's direction. T6.2 start: inspect ActionRecord persistence, SSH runner, existing action log page, and `DESIGN.md §8`; then implement approval transitions, execution per server with parallelism and output capture, plus the action log view. Next step is to design the executor boundary and record state fields before coding.
 
 ## Blockers
 
@@ -66,7 +66,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T5.4 | Notifications | todo | |
 | T5.5 | Overview with real data | todo | |
 | T6.1 | Tool registry and execution modes | done | `feat(T6.1): tool policies and approvals` |
-| T6.2 | Action log | todo | |
+| T6.2 | Action log | in-progress | |
 | T6.3 | Agent chat with tools | todo | |
 | T6.4 | SSH attack detection and bans | todo | |
 | T6.5 | Updates | todo | |
@@ -137,3 +137,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T4.3 · complete; synthetic snapshots showed add/remove/change graph highlights, schedule save/readback and both themes verified; build clean and 49/49 tests pass
 - 2026-11-14 · Codex / GPT-6 · resumed T6.1 · owner directed skipping M5; initial build passed with 0 warnings/errors and tests passed (49/49)
 - 2026-11-14 · Codex / GPT-6 · T6.1 · typed tool registry and policy/approval matrix; migration applied, settings checked in both themes, build clean and 62/62 tests pass
+- 2026-11-14 · Codex / GPT-6 · resumed T6.2 · started approved-action execution and action log
