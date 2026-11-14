@@ -40,7 +40,7 @@ public sealed class ToolCommandBuilder(ToolRegistry tools)
             ("disk_usage", DiskUsageArgs { Path: not null } value) => new(
                 $"df -P -- {Quote(value.Path)} 2>&1; printf '%s\\n' 'Top-level disk usage:'; timeout 90s du -x -h --max-depth=1 -- {Quote(value.Path)} 2>/dev/null | sort -hr | head -20", true),
             ("disk_usage", DiskUsageArgs) => new(
-                "df -P -- / /lab /var/lib/docker 2>&1; printf '%s\\n' 'Top-level directory usage:'; for path in / /lab /var/lib/docker; do if [ -d \"$path\" ]; then printf '\\n%s\\n' \"$path\"; timeout 90s du -x -h --max-depth=1 -- \"$path\" 2>/dev/null | sort -hr | head -20; fi; done", true),
+                "df -P -- / /var/lib/docker 2>&1; printf '%s\\n' 'Top-level directory usage:'; for path in / /var/lib/docker; do if [ -d \"$path\" ]; then printf '\\n%s\\n' \"$path\"; timeout 90s du -x -h --max-depth=1 -- \"$path\" 2>/dev/null | sort -hr | head -20; fi; done", true),
             ("list_updates", ListUpdatesArgs) => new(
                 "if command -v apt >/dev/null 2>&1; then apt list --upgradable 2>/dev/null; "
                 + "elif command -v dnf >/dev/null 2>&1; then dnf check-update; "
