@@ -11,13 +11,14 @@
 
 ## Current
 
-- **Task:** T6.3 Agent chat with tools — repeat J4 live acceptance on the supplied lab
+- **Task:** T6.4 SSH attack detection and bans — live J5 acceptance
 - **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 - T5.5 is complete. Overview uses the lab's 3 servers, latest snapshot, graph/evidence, open alerts, metric samples, update-scan state, and default provider; Run discovery now rerenders the TopBar when shared discovery state changes. Live discovery refreshed successfully, the button returned to enabled, and both light/dark themes were visually checked. Build passed with 0 warnings/errors and tests passed (109/109). Files: `src/DevOpsAgent.Web/Components/Pages/Home.razor`, `src/DevOpsAgent.Web/Components/Layout/TopBar.razor`, `src/DevOpsAgent.Web/DiscoveryTriggerState.cs`, `src/DevOpsAgent.Web/Program.cs`, `src/DevOpsAgent.Web/wwwroot/css/app.css`.
-- Exact next step: inspect the isolated app's provider settings and local Ollama availability, then repeat J4 with the disposable lab servers (read-only tool call and approved action) and record which provider passes. If no provider is configured, use an available local provider without exposing credentials; if none is available, record the specific live acceptance blocker and continue to T6.4. J2 follow-up remains: outbound app connection to srv-search does not yet appear as Unknown; keep srv-search out of inventory. Never use a server tagged `prod`.
+- T6.3 J4 had previously passed with Ollama and OpenRouter (see session log). Repeat acceptance in the current isolated app could not run: its provider table is empty and no Ollama endpoint responded on `127.0.0.1:11434`. Exact unblock step for repeating the live flow: configure/launch a local Ollama model or save an OpenRouter provider in the isolated app. Continue with T6.4; do not wait for this repeat. J2 follow-up remains: outbound app connection to srv-search does not yet appear as Unknown; keep srv-search out of inventory. Never use a server tagged `prod`.
+- Exact next step: inspect `dva-testlab.sh` attack and unban targets plus the app inventory, then run the authorized attack acceptance only against the disposable lab; verify the alert details and clear bans with the lab's unban command. Never use a server tagged `prod`.
 
 ## Blockers
 
@@ -67,7 +68,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T6.1 | Tool registry and execution modes | done | `feat(T6.1): tool policies and approvals` |
 | T6.2 | Action log | done | `feat(T6.2): approved action execution and log` |
 | T6.3 | Agent chat with tools | in-progress | `feat(T6.3): complete J4 tool and approval flow` |
-| T6.4 | SSH attack detection and bans | todo | `wip(T6.4): implement SSH attack detection` |
+| T6.4 | SSH attack detection and bans | in-progress | `wip(T6.4): implement SSH attack detection` |
 | T6.5 | Updates | done | `feat(T6.5): updates inventory and approval flow` |
 | T6.6 | MVP hardening pass | blocked | |
 
@@ -193,3 +194,5 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T3.3 · live trace `api.test.local` highlighted 4 nodes/3 connections; edge evidence identified `/etc/nginx/conf.d/demo.conf:10`; build clean and 109/109 tests pass
 - 2026-11-14 · Codex / GPT-6 · T5.5 · connected Overview to live servers, metrics, topology/evidence, alerts, updates and provider state; fixed TopBar discovery rerender; live discovery/button reset and light/dark checks passed; build clean and 109/109 tests pass
 - 2026-11-14 · Codex · resumed T6.3 live acceptance · T5.5 completed; next inspect the isolated app's provider and repeat J4 with the disposable lab
+- 2026-11-14 · Codex · T6.3 acceptance repeat · blocked in current isolated app (no saved provider or local Ollama); previous J4 passes remain documented; proceeding to T6.4 per order
+- 2026-11-14 · Codex · started T6.4 live acceptance · inspect disposable attack/unban script and confirm only the three staging servers are registered before running it
