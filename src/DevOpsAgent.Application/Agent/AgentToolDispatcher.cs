@@ -87,6 +87,12 @@ public sealed class AgentToolDispatcher(
                     new SshRunOptions(TimeSpan.FromMinutes(2), readOnly.UseSudo), cancellationToken);
                 return $"[{server.Name}] exit={result.ExitCode}\n{result.StandardOutput}\n{result.StandardError}";
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch (Exception exception)
+            {
+                // One unreachable server must not discard the output of the others.
+                return $"[{server.Name}] error: {exception.Message}";
+            }
             finally { throttle.Release(); }
         }));
         return new(name, string.Join("\n", output));
