@@ -19,10 +19,11 @@ public sealed class AgentContextBuilderTests
             new Server("srv-db", "db.test", 22, "dva", "id_ed25519", "staging")
         };
         var snapshot = new Snapshot(servers.Select(server => server.Id).ToArray(), DateTimeOffset.UtcNow);
+        var snapshots = new FakeSnapshots(snapshot);
         using var node = JsonDocument.Parse("{\"id\":\"srv-db-node\",\"name\":\"srv-db\"}");
-        var graph = new GraphSnapshotDto(snapshot.Id, "all", [new GraphElementDto(node.RootElement.Clone())], [], [], []);
-        var builder = new AgentContextBuilder(new FakeServers(servers), new FakeSnapshots(snapshot),
-            new FakeGraphs(graph), new FakeAlerts(), new FakeMetrics());
+        var graphs = new FakeGraphs(new GraphSnapshotDto(snapshot.Id, "all", [new GraphElementDto(node.RootElement.Clone())], [], [], []));
+        var builder = new AgentContextBuilder(new FakeServers(servers), snapshots,
+            graphs, new FakeAlerts(), new FakeMetrics(), new DriftService(snapshots, graphs));
 
         var json = await builder.BuildAsync("anything I should look at?", CancellationToken.None);
 
@@ -35,6 +36,7 @@ public sealed class AgentContextBuilderTests
         Assert.NotNull(graphText);
         using var graphJson = JsonDocument.Parse(graphText!);
         Assert.Single(graphJson.RootElement.GetProperty("nodes").EnumerateArray());
+        Assert.Contains("No previous completed snapshot", context.RootElement.GetProperty("drift").GetString(), StringComparison.Ordinal);
     }
 
     private sealed class FakeServers(IReadOnlyList<Server> values) : IServerRepository

@@ -10,7 +10,8 @@ public sealed class AgentContextBuilder(
     ISnapshotRepository snapshots,
     IGraphRepository graphs,
     IAlertRepository alerts,
-    IMetricRepository metrics)
+    IMetricRepository metrics,
+    DriftService drift)
 {
     public async Task<string> BuildAsync(string prompt, CancellationToken cancellationToken)
     {
@@ -21,6 +22,7 @@ public sealed class AgentContextBuilder(
             || prompt.Contains(server.Host, StringComparison.OrdinalIgnoreCase)).ToArray();
         var latest = await snapshots.GetLatestAsync(cancellationToken);
         var graphSummary = "No discovery graph is available yet.";
+        var driftSummary = "Drift is unavailable until two completed discovery snapshots exist.";
         if (latest is not null)
         {
             var graph = await graphs.GetAsync(latest.Id, GraphView.All, cancellationToken);
@@ -40,6 +42,31 @@ public sealed class AgentContextBuilder(
                     return nodeIds.Contains(source) || nodeIds.Contains(target);
                 }).Take(60).Select(edge => edge.Data).ToArray();
                 graphSummary = JsonSerializer.Serialize(new { snapshotId = latest.Id, nodes, edges });
+            }
+        }
+
+        if (broadReview)
+        {
+            var history = (await snapshots.ListAsync(cancellationToken))
+                .OrderByDescending(snapshot => snapshot.StartedAtUtc).Take(2).ToArray();
+            if (history.Length == 2)
+            {
+                var report = await drift.CompareAsync(history[1].Id, history[0].Id, cancellationToken);
+                driftSummary = JsonSerializer.Serialize(new
+                {
+                    fromSnapshotId = report.FromSnapshotId,
+                    toSnapshotId = report.ToSnapshotId,
+                    changes = report.Changes.Take(40).Select(change => new
+                    {
+                        change.ChangeType,
+                        change.EntityType,
+                        change.Description
+                    })
+                });
+            }
+            else
+            {
+                driftSummary = "No previous completed snapshot is available for comparison.";
             }
         }
 
@@ -76,6 +103,7 @@ public sealed class AgentContextBuilder(
         {
             servers = matches.Select(server => new { server.Id, server.Name, server.Host, server.Group, server.OsInfo }),
             graph = graphSummary,
+            drift = driftSummary,
             alerts = alertContext,
             metrics = metricContext
         });

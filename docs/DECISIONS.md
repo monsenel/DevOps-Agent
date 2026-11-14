@@ -101,3 +101,9 @@ Format: `D-<number> · <date> · <title>` then Decision / Why / Consequences.
 - **Decision:** Map `host.docker.internal` to Docker's host gateway for the app service.
 - **Why:** On Linux, a disposable SSH lab may publish its port on the host loopback; the app container needs a stable route to that host port, and its own `127.0.0.1` cannot reach it.
 - **Consequences:** Configure those inventory entries with `host.docker.internal` and the published port. A port bound only to Linux host loopback also needs a Docker-bridge-reachable bind or temporary bridge-scoped forward. Keep ordinary server routing and VPN requirements unchanged.
+
+
+### D-024 · 2026-11-15 · Scope agent tools to intent and evidence
+- **Decision:** Broad daily reviews use persisted inventory, alerts, latest metrics, recent graph, and snapshot drift without remote tool calls. Read-only questions expose only read-only tools; mutating tools are exposed only for matching requests, and arbitrary shell requires an explicit shell request. Disk diagnosis reports filesystem mounts and Docker usage separately and leaves unexplained usage unknown.
+- **Why:** J4 acceptance showed that an OpenAI-compatible model can chain irrelevant tool calls, propose shell commands for read-only questions, and infer causes not supported by measured data.
+- **Consequences:** Keep prompt-to-tool scoping covered by tests, preserve explicit approval for mutations, and do not infer disk causes from `df` alone.

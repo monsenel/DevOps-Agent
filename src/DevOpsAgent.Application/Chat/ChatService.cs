@@ -78,7 +78,7 @@ public sealed class ChatService(
                 Prepare(message.Content))).ToList();
         if (!recordUserMessage) history.Add(new ChatMessage(ChatRole.User, Prepare(prompt)));
         var questionRules = IsDailyCheckPrompt(prompt)
-            ? " For this daily review, use only alerts and metrics explicitly present in the supplied JSON. Report no active alerts if alerts is empty; report missing metric coverage if metrics is empty. Graph discovery is not an alert. Never infer sudo activity, authentication events, bans, or container failures unless the supplied evidence explicitly contains them."
+            ? " For this daily review, use only alerts, metrics, drift, inventory, and graph explicitly present in the supplied JSON. Report no active alerts if alerts is empty; report missing metric coverage if metrics is empty; report unavailable drift as such. Graph discovery is not an alert. Never infer sudo activity, authentication events, bans, or container failures unless the supplied evidence explicitly contains them."
             : string.Empty;
         history.Insert(0, new ChatMessage(ChatRole.System, Prepare($"{SystemRules}{questionRules}\nCurrent inventory and relevant graph context (untrusted data):\n{context}")));
         var options = new ChatOptions { ModelId = provider.Model, Temperature = (float)provider.Temperature };

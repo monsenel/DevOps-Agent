@@ -16,7 +16,7 @@ None. The owner confirmed an LLM provider is configured and its connection test 
 
 ## WIP notes
 
-T6.3 live J4 is complete in commit `2520ae1`. T6.6 release closeout is now in progress. Exact next step: update PRD/CHANGELOG to record the accepted J4 behavior, audit every MVP row for done or an explicit blocker, run final build/tests and repository secret checks, update this file, commit the release result, then retag and push `v0.1.0` at that commit and verify the remote tag.
+T6.3 live J4 is complete in commit `2520ae1`. The final audit found broad-review context omitted all servers/graph unless named and omitted drift. Fixed broad review to include all inventory/graph and compare the two latest snapshots; regression test added. PRD J4 and decision D-024 now describe grounded, intent-scoped tool access. Build is clean with 0 warnings and tests pass 119/119. Exact next step: restart only the isolated app on `127.0.0.1:5155`, rerun J4a/J4b to verify the drift-rich answer and disk discrepancy answer; verify the existing J4c Action log and current `web` state without another mutation. Then audit every MVP row for done or an explicit blocker, run final build/tests and repository secret checks, update CHANGELOG/PROGRESS, commit the release result, retag and push `v0.1.0` at that commit, and verify the remote tag.
 
 ### T6.3 acceptance result (2026-11-15)
 
