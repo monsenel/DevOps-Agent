@@ -1,0 +1,18 @@
+nginx: configuration file syntax is ok
+# configuration file /etc/nginx/nginx.conf:
+worker_processes auto;
+http {
+    include /etc/nginx/conf.d/*.conf;
+}
+# configuration file /etc/nginx/conf.d/demo.conf:
+upstream api_backend {
+    server api.internal:5000;
+    keepalive 8;
+}
+server {
+    listen 80;
+    server_name api.test.local;
+    location / {
+        proxy_pass http://api_backend;
+    }
+}

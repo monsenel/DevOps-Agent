@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using DevOpsAgent.Application.Discovery;
 
 namespace DevOpsAgent.Infrastructure.Collectors;
@@ -17,9 +18,34 @@ public static class NginxCollectorParser
         var stack = new Stack<Block>();
         stack.Push(root);
         var pending = new List<Token>();
+        var includeContexts = new List<(string Pattern, string Context)>();
+        var wrapperActive = false;
 
-        foreach (var token in Tokenize(output))
+        var tokens = Tokenize(output).ToArray();
+        for (var index = 0; index < tokens.Length; index++)
         {
+            var token = tokens[index];
+            if (token.Kind == TokenKind.FileMarker)
+            {
+                AddDirectiveAndTrackInclude();
+                if (wrapperActive && stack.Count > 1)
+                {
+                    stack.Pop();
+                    wrapperActive = false;
+                }
+
+                var context = FindIncludedContext(token.Value, includeContexts);
+                if (context is not null && !StartsWithContextBlock(tokens, index + 1, context))
+                {
+                    var wrapper = new Block(context, [], token.Value, 0);
+                    stack.Peek().Blocks.Add(wrapper);
+                    stack.Push(wrapper);
+                    wrapperActive = true;
+                }
+
+                continue;
+            }
+
             switch (token.Kind)
             {
                 case TokenKind.OpenBrace:
@@ -33,10 +59,10 @@ public static class NginxCollectorParser
                     }
                     break;
                 case TokenKind.Semicolon:
-                    AddDirective(stack.Peek(), pending);
+                    AddDirectiveAndTrackInclude();
                     break;
                 case TokenKind.CloseBrace:
-                    AddDirective(stack.Peek(), pending);
+                    AddDirectiveAndTrackInclude();
                     if (stack.Count > 1) stack.Pop();
                     break;
                 case TokenKind.Word:
@@ -44,7 +70,7 @@ public static class NginxCollectorParser
                     break;
             }
         }
-        AddDirective(stack.Peek(), pending);
+        AddDirectiveAndTrackInclude();
 
         var servers = new List<NginxServerInfo>();
         var upstreams = new List<NginxUpstreamInfo>();
@@ -64,6 +90,57 @@ public static class NginxCollectorParser
         }
 
         return new NginxDiscoveryResult(servers, upstreams);
+
+        void AddDirectiveAndTrackInclude()
+        {
+            if (pending.Count > 1 && pending[0].Value == "include")
+            {
+                var context = stack.FirstOrDefault(block => block.Name is "http" or "stream")?.Name;
+                if (context is not null)
+                {
+                    foreach (var pattern in pending.Skip(1).Select(item => item.Value))
+                    {
+                        includeContexts.Add((pattern, context));
+                    }
+                }
+            }
+
+            AddDirective(stack.Peek(), pending);
+        }
+    }
+
+    private static string? FindIncludedContext(string filePath, IReadOnlyList<(string Pattern, string Context)> includes)
+    {
+        foreach (var (pattern, context) in includes)
+        {
+            var regex = "^" + Regex.Escape(pattern).Replace("\\*", ".*", StringComparison.Ordinal)
+                .Replace("\\?", ".", StringComparison.Ordinal) + "$";
+            if (Regex.IsMatch(filePath, regex, RegexOptions.CultureInvariant)) return context;
+        }
+
+        return null;
+    }
+
+    private static bool StartsWithContextBlock(IReadOnlyList<Token> tokens, int startIndex, string context)
+    {
+        var words = new List<string>();
+        for (var index = startIndex; index < tokens.Count; index++)
+        {
+            if (tokens[index].Kind == TokenKind.OpenBrace)
+            {
+                return words.Count > 0 && words[0] == context;
+            }
+
+            if (tokens[index].Kind == TokenKind.FileMarker || tokens[index].Kind == TokenKind.CloseBrace)
+            {
+                return false;
+            }
+
+            if (tokens[index].Kind == TokenKind.Word) words.Add(tokens[index].Value);
+            if (tokens[index].Kind == TokenKind.Semicolon) words.Clear();
+        }
+
+        return false;
     }
 
     private static NginxServerInfo ParseServer(string context, Block block)
@@ -142,6 +219,7 @@ public static class NginxCollectorParser
             {
                 filePath = trimmed[marker.Length..^1].Trim();
                 fileLine = 0;
+                yield return new Token(TokenKind.FileMarker, filePath, filePath, 0);
                 continue;
             }
 
@@ -234,5 +312,5 @@ public static class NginxCollectorParser
 
     private sealed record Directive(string Name, IReadOnlyList<string> Arguments, string? FilePath, int Line);
     private sealed record Token(TokenKind Kind, string Value, string? FilePath, int Line);
-    private enum TokenKind { Word, OpenBrace, CloseBrace, Semicolon }
+    private enum TokenKind { Word, OpenBrace, CloseBrace, Semicolon, FileMarker }
 }

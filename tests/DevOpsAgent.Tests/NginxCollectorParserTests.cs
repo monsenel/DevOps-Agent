@@ -64,6 +64,21 @@ public sealed class NginxCollectorParserTests
     }
 
     [Fact]
+    public void Parse_ExpandedIncludeInheritsItsHttpContext()
+    {
+        var result = NginxCollectorParser.Parse(Fixture("nginx-T-expanded-includes.txt"));
+
+        var upstream = Assert.Single(result.Upstreams);
+        Assert.Equal("api_backend", upstream.Name);
+        Assert.Equal("api.internal:5000", Assert.Single(upstream.Servers).Address);
+        var server = Assert.Single(result.Servers);
+        Assert.Equal("http", server.Context);
+        Assert.Contains(server.ServerNames, name => name.Value == "api.test.local");
+        Assert.Contains(server.Proxies, proxy => proxy.Target == "http://api_backend");
+        Assert.Equal("/etc/nginx/conf.d/demo.conf", server.FilePath);
+    }
+
+    [Fact]
     public async Task CollectAsync_UsesSbinNginxWhenNonLoginPathOmitsSbin()
     {
         var server = new Server("edge", "edge.example.internal", 22, "deploy", "id_ed25519", "staging");

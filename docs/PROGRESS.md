@@ -16,7 +16,7 @@
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
-- T3.3 real acceptance is next. Live nginx `nginx -T` output includes files expanded outside their original block context; parser currently returns no domains/upstreams despite HTTP 200 from `api.test.local`. Exact next step: make include-context parsing handle the real output shape, add fixture/fake coverage, rerun discovery, then trace `api.test.local` and verify its path and evidence panel. J2 follow-up: outbound app connection to srv-search does not yet appear as Unknown; do not add srv-search. Never use a server tagged `prod`.
+- Done in code: parser now matches expanded nginx file markers to parent `http`/`stream` include globs; fixture-backed test verifies domain, upstream, proxy and source path. Build clean; tests 109/109. Exact next step: restart the local app with the new build, rerun discovery, then trace `api.test.local` and verify path/evidence. J2 follow-up: outbound app connection to srv-search does not yet appear as Unknown; do not add srv-search. Never use a server tagged `prod`.
 
 ## Blockers
 
