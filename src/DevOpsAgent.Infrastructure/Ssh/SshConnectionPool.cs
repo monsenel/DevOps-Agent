@@ -17,20 +17,30 @@ public sealed class SshConnectionPool(
 {
     private readonly ConcurrentDictionary<Guid, ConnectionEntry> _connections = new();
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _connectionLocks = new();
+    // Bumped by Evict so a connect that started with old server settings never caches its result.
+    private readonly ConcurrentDictionary<Guid, int> _generations = new();
     private readonly SshConnectionOptions _options = options.Value;
     private bool _disposed;
 
     public async Task<ISshCommandSession> GetSessionAsync(Guid serverId, CancellationToken cancellationToken)
     {
         var connection = await GetOrConnectAsync(serverId, [], cancellationToken);
-        return new SshCommandSession(connection.Client, () => InvalidateAsync(serverId, connection));
+        return new SshCommandSession(connection.Client, () =>
+        {
+            Invalidate(serverId, connection);
+            return Task.CompletedTask;
+        });
     }
 
     public void Evict(Guid serverId)
     {
         // Sessions that depend on this entry as a jump host notice the replaced entry on their next request and reconnect.
-        if (!_disposed) RemoveConnection(serverId);
+        if (_disposed) return;
+        _generations.AddOrUpdate(serverId, 1, static (_, current) => current + 1);
+        RemoveConnection(serverId);
     }
+
+    private int Generation(Guid serverId) => _generations.GetValueOrDefault(serverId);
 
     public void Dispose()
     {
@@ -67,32 +77,42 @@ public sealed class SshConnectionPool(
 
         try
         {
-            var server = await LoadServerAsync(serverId, cancellationToken);
-            var jumpConnection = server.JumpServerId is Guid jumpId
-                ? await GetOrConnectAsync(jumpId, visited, cancellationToken)
-                : null;
-
-            var gate = _connectionLocks.GetOrAdd(serverId, static _ => new SemaphoreSlim(1, 1));
-            await gate.WaitAsync(cancellationToken);
-            try
+            // A connect that raced with Evict (settings edited while it was connecting) is discarded and retried once.
+            for (var attempt = 0; attempt < 2; attempt++)
             {
-                if (_connections.TryGetValue(serverId, out var current)
-                    && current.Client.IsConnected
-                    && (jumpConnection is null || jumpConnection.Client.IsConnected)
-                    && ReferenceEquals(current.JumpConnection, jumpConnection))
+                var generation = Generation(serverId);
+                var server = await LoadServerAsync(serverId, cancellationToken);
+                var jumpConnection = server.JumpServerId is Guid jumpId
+                    ? await GetOrConnectAsync(jumpId, visited, cancellationToken)
+                    : null;
+
+                var gate = _connectionLocks.GetOrAdd(serverId, static _ => new SemaphoreSlim(1, 1));
+                await gate.WaitAsync(cancellationToken);
+                try
                 {
-                    return current;
-                }
+                    if (_connections.TryGetValue(serverId, out var current)
+                        && current.Client.IsConnected
+                        && (jumpConnection is null || jumpConnection.Client.IsConnected)
+                        && ReferenceEquals(current.JumpConnection, jumpConnection))
+                    {
+                        return current;
+                    }
 
-                RemoveConnection(serverId);
-                var created = await CreateConnectionAsync(server, jumpConnection, cancellationToken);
-                _connections[serverId] = created;
-                return created;
+                    RemoveConnection(serverId);
+                    var created = await CreateConnectionAsync(server, jumpConnection, cancellationToken);
+                    _connections[serverId] = created;
+                    if (Generation(serverId) == generation) return created;
+
+                    // Evicted while connecting: do not keep a connection built from stale settings.
+                    Invalidate(serverId, created);
+                }
+                finally
+                {
+                    gate.Release();
+                }
             }
-            finally
-            {
-                gate.Release();
-            }
+
+            throw new InvalidOperationException("The server settings changed while connecting. Try again.");
         }
         finally
         {
@@ -193,27 +213,12 @@ public sealed class SshConnectionPool(
 
     // A connection-level failure leaves a poisoned client in the pool; drop exactly that entry (not a newer replacement)
     // so the next request reconnects.
-    private async Task InvalidateAsync(Guid serverId, ConnectionEntry entry)
+    private void Invalidate(Guid serverId, ConnectionEntry entry)
     {
-        if (_disposed || !_connectionLocks.TryGetValue(serverId, out var gate)) return;
-        try
+        // TryRemove(KeyValuePair) is identity-checked, so a newer replacement entry is never removed.
+        if (!_disposed && _connections.TryRemove(new KeyValuePair<Guid, ConnectionEntry>(serverId, entry)))
         {
-            await gate.WaitAsync(CancellationToken.None);
-            try
-            {
-                if (_connections.TryRemove(new KeyValuePair<Guid, ConnectionEntry>(serverId, entry)))
-                {
-                    entry.Dispose();
-                }
-            }
-            finally
-            {
-                gate.Release();
-            }
-        }
-        catch (ObjectDisposedException)
-        {
-            // The pool was disposed while the failure was being handled; nothing is left to invalidate.
+            entry.Dispose();
         }
     }
 
@@ -244,6 +249,12 @@ public sealed class SshConnectionPool(
 
     private sealed class SshCommandSession(SshClient client, Func<Task> onConnectionFailure) : ISshCommandSession
     {
+        private static bool IsClientConnected(SshClient value)
+        {
+            try { return value.IsConnected; }
+            catch (ObjectDisposedException) { return false; }
+        }
+
         public bool IsConnected => client.IsConnected;
 
         public async Task<RemoteCommandResult> ExecuteAsync(
@@ -274,13 +285,21 @@ public sealed class SshConnectionPool(
                     sshCommand.Error,
                     stopwatch.Elapsed);
             }
-            catch (Exception exception) when (exception is SshOperationTimeoutException or SshConnectionException
-                or SocketException or ObjectDisposedException)
+            catch (Exception exception) when (SshTransportFailure.IsTransportFailure(exception) && !IsClientConnected(client))
             {
-                // INV-5: reconnect on failure. Drop the pooled client so the next call opens a fresh connection.
+                // INV-5: reconnect on failure. Only a dead transport poisons the shared client; a command timeout merely
+                // ends this command's channel and must not tear down other commands or jump tunnels sharing the client.
                 await onConnectionFailure();
                 throw;
             }
         }
     }
+}
+
+/// <summary>Decides which command failures mean the pooled SSH transport itself is broken.</summary>
+public static class SshTransportFailure
+{
+    // SshOperationTimeoutException is deliberately absent: a slow command is not a dead connection.
+    public static bool IsTransportFailure(Exception exception) =>
+        exception is SshConnectionException or SocketException or ObjectDisposedException;
 }
