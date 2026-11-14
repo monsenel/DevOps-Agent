@@ -12,7 +12,7 @@
 ## Current
 
 - **Task:** T6.6 MVP hardening pass — finish provider-dependent J4/J7 acceptance
-- **Status:** in-progress
+- **Status:** blocked
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
@@ -31,7 +31,7 @@ T5.4 live acceptance is blocked because no Telegram bot token/chat ID or ntfy UR
 
 The prior M5 deferral has been lifted by the owner's instruction to continue task by task. T5.1, T5.2, and T5.3 are complete. T5.3 live acceptance passed on 2026-11-14: the selected Docker container triggered an alert within 2 minutes, was restarted, and its alert auto-resolved. No other blocked SSH acceptance was changed.
 
-T6.3 live J4 acceptance is blocked until the owner adds an LLM provider; T5.4 live notification acceptance is blocked until the owner configures Telegram or ntfy. T6.6 remains in progress until provider-dependent J4/J7 steps can be completed. systemd-only checks are excepted.
+T6.3 live J4 acceptance is blocked until the owner adds an LLM provider; T5.4 live notification acceptance is blocked until the owner configures Telegram or ntfy. T6.6 is blocked on the T6.3 provider-dependent J4/J7 acceptance. systemd-only checks are excepted.
 
 ---
 
@@ -75,7 +75,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T6.3 | Agent chat with tools | blocked | `feat(T6.3): complete J4 tool and approval flow` |
 | T6.4 | SSH attack detection and bans | done | `feat(T6.4): verify SSH attack detection in disposable lab` |
 | T6.5 | Updates | done | `feat(T6.5): verify security update workflow and resilient scans` |
-| T6.6 | MVP hardening pass | in-progress | |
+| T6.6 | MVP hardening pass | blocked | |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
 
