@@ -11,8 +11,8 @@
 
 ## Current
 
-- **Task:** T6.5 Updates
-- **Status:** done
+- **Task:** T5.4 Notifications — repeat disposable alert lifecycle acceptance
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
@@ -21,7 +21,7 @@
 - T6.4 live J5 passed on the disposable lab after two fixes: parser counts OpenSSH `Invalid user` lines, and scanner splits output at the final sentinels because sudo audit lines contain the command's earlier marker strings. The 60-login one-off attack opened `SSH login attack detected` with 59–60 failures, attacker IP and usernames; fail2ban reported the attacker banned. The loop completed, runtime maxretry was restored to 5, and `unban --all` confirmed 0 active bans. The lab has only the three `staging` targets; `srv-search` remains absent. Build clean, 110/110 tests. Docker CLI is blocked by Snap confinement; the test used the local Docker API and existing lab image.
 - T6.5's current-lab retry ran apt scans on `srv-app` and `srv-db` successfully; both had 0 pending updates. `srv-edge` timed out at five minutes during `apt-get update`; its orphan apt process was terminated on that disposable server. No package was installed. Earlier J6 steps 1–3 passed on a disposable Debian apt target (security/standard classification, approval, update report, no reboot/restarts). T6.5 remains complete based on that acceptance; the retry could not exercise the apply path because this lab has no pending packages and one mirror scan timed out.
 - T6.5 is complete; its original J6 steps 1–3 passed on a disposable apt target. The current-lab scan retry found no pending packages on app/db and timed out on edge; no package was installed in the retry.
-- WIP notes cleared. Next task: T5.4 disposable alert open/resolve retry; notification delivery remains owner-blocked.
+- Exact next step: verify the lab's inner `web` container is running, run `alert-down`, wait for its container alert to open, run `alert-up`, and verify auto-resolution. Record the missing notification destination as the remaining T5.4 live delivery blocker. Never use a server tagged `prod`.
 
 ## Blockers
 
@@ -66,7 +66,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T5.1 | Metric poller | done | `feat(T5.1): metric polling and server detail` |
 | T5.2 | Health checks | done | `feat(T5.2): scheduled health checks` |
 | T5.3 | Alert engine and Alerts page | done | `feat(T5.3): complete alert engine and live acceptance` |
-| T5.4 | Notifications | blocked | `wip(T5.4): implement notification delivery` |
+| T5.4 | Notifications | in-progress | `wip(T5.4): implement notification delivery` |
 | T5.5 | Overview with real data | done | `feat(T5.5): live Overview data and discovery state` |
 | T6.1 | Tool registry and execution modes | done | `feat(T6.1): tool policies and approvals` |
 | T6.2 | Action log | done | `feat(T6.2): approved action execution and log` |
@@ -205,3 +205,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex · T6.4 · J5 passed live: 60 failed SSH logins from a disposable container opened the attack alert and fail2ban ban; restored lab maxretry=5 and unbanned all; parser/sentinel fixes, build clean and 110/110 tests
 - 2026-11-14 · Codex · T6.5 live acceptance repeat · `srv-app` and `srv-db` scanned with no pending packages; `srv-edge` timed out in apt update and was cleaned up; earlier J6 acceptance remains passed, no package installed in this retry
 - 2026-11-14 · Codex · resumed T5.4 alert lifecycle · next run alert-down/up only on disposable `srv-app`; notification delivery still awaits an owner destination
+- 2026-11-14 · Codex · started T5.4 live alert lifecycle retry · verify the nested `web` container and use alert-down/up on disposable staging only
