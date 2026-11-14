@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.ComponentModel.DataAnnotations;
+using System.Reflection;
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Agent;
 using DevOpsAgent.Domain.Chat;
@@ -157,7 +158,7 @@ public sealed class ChatService(
     private static AIFunctionDeclaration CreateDeclaration(ToolDescriptor descriptor)
     {
         var propertyInfos = descriptor.ArgumentsType.GetProperties();
-        var required = new List<string>();
+        var requiredProperties = new List<string>();
         var properties = propertyInfos.Select(property =>
         {
             var type = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
@@ -165,13 +166,15 @@ public sealed class ChatService(
             var elementType = isArray ? type.GetGenericArguments().FirstOrDefault() ?? typeof(string) : type;
             var schemaType = ToJsonType(elementType);
             var name = JsonEncodedText.Encode(char.ToLowerInvariant(property.Name[0]) + property.Name[1..]).ToString();
-            if (property.GetCustomAttributes(typeof(RequiredAttribute), true).Length > 0
-                || property.GetCustomAttributes(typeof(MinLengthAttribute), true).OfType<MinLengthAttribute>().Any(attribute => attribute.Length > 0))
-                required.Add($"\"{name}\"");
+            var isRequired = property.IsDefined(typeof(RequiredAttribute), inherit: true);
+            var minLength = property.GetCustomAttribute<MinLengthAttribute>();
+            var hasRequiredLength = minLength is not null && minLength.Length > 0;
+            if (isRequired || hasRequiredLength)
+                requiredProperties.Add($"\"{name}\"");
             var valueSchema = $"{{\"type\":\"{schemaType}\"{(elementType == typeof(Guid) ? ",\"format\":\"uuid\"" : string.Empty)}}}";
             return $"\"{name}\":{{\"type\":\"{(isArray ? "array" : schemaType)}\"{(isArray ? $",\"items\":{valueSchema}" : elementType == typeof(Guid) ? ",\"format\":\"uuid\"" : string.Empty)}}}";
         });
-        var requiredJson = required.Count == 0 ? string.Empty : $",\"required\":[{string.Join(",", required)}]";
+        var requiredJson = requiredProperties.Count == 0 ? string.Empty : $",\"required\":[{string.Join(",", requiredProperties)}]";
         using var schema = JsonDocument.Parse($"{{\"type\":\"object\",\"properties\":{{{string.Join(",", properties)}}}{requiredJson},\"additionalProperties\":false}}");
         return AIFunctionFactory.CreateDeclaration(descriptor.Name, descriptor.Description, schema.RootElement);
     }

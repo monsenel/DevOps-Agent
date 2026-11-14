@@ -152,3 +152,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · started T6.5 after deferring blocked T6.3 live acceptance and dependency-blocked T6.4
 - 2026-11-14 · Codex / GPT-6 · T6.5 · started update inventory and apply reporting implementation
 - 2026-11-14 · Codex / GPT-6 · T6.5 · apt/dnf parsers, persisted scans, security classification, single-server approval flow and restart/reboot report added; migration verified in isolated SQLite; build clean and 77/77 tests pass; J6 live SSH acceptance blocked by unavailable authorized test server
+- 2026-11-14 · Codex / GPT-6 · refreshed Graphify after T6.5; 5,591 nodes, 19,025 edges, 291 communities; fixed one C# parser ambiguity and reverified build/tests
