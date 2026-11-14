@@ -17,8 +17,9 @@
 
 ## WIP notes
 - T1.2 live acceptance passed: `srv-edge` connected directly; `srv-app` and `srv-db` connected through `srv-edge`. Capability probes reported Debian 12, uptime, passwordless sudo, and `docker`, `ip`, `ss` on all three. The app inventory contains only the requested three staging servers; `srv-search` was not added. Build passed with 0 warnings/errors; tests passed (106/106).
+- Discovery reached the lab and produced nested host/container/service nodes, but reported 0/3 successful servers. Root causes: OpenSSH non-login `PATH` omits `/usr/sbin` (hiding nginx), the app container's `hostname` binary fails under its memory-protection restrictions although `/proc/sys/kernel/hostname` works, and srv-db has the Docker CLI without a daemon. Curl with `api.test.local` returned HTTP 200 through nginx. systemd is unavailable in the containers as expected.
 - Files touched so far in this resumed session: `docs/PROGRESS.md`; ignored local `keys/dva_test_ed25519` and `keys/known_hosts`.
-- Exact next step: run discovery on `srv-edge`, `srv-app`, and `srv-db`; verify nested host/container/service graph, theme switching and node details, and confirm `srv-search` appears only as an Unknown node. Note systemd collector cannot be verified inside these containers, without blocking. Never use a server tagged `prod`.
+- Exact next step: harden HostCollector hostname fallback, NginxCollector path detection, and DockerCollector daemon applicability; add fake-runner tests, then rerun discovery and verify graph, Unknown srv-search, theme switching and node details. Note systemd cannot be verified, without blocking. Never use a server tagged `prod`.
 
 ## Blockers
 
