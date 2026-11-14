@@ -33,6 +33,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddScoped<IServerRepository, ServerRepository>();
         services.AddScoped<ISnapshotRepository, SnapshotRepository>();
         services.AddSingleton<ICollector, HostCollector>();
+        services.AddSingleton<ICollector, ListenerCollector>();
         services.AddSingleton<IServerKeyStore, ServerKeyStore>();
         services.AddSingleton<SshConnectionPool>();
         services.AddSingleton<ISshConnectionPool>(serviceProvider => serviceProvider.GetRequiredService<SshConnectionPool>());

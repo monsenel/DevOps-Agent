@@ -7,20 +7,12 @@
 ## Current
 
 - **Task:** T2.3 Listener collector (DSC-2)
-- **Status:** in-progress
+- **Status:** done
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
-What is done so far:
-- T2.2 is complete and committed as `eda55e6`; fixture-backed host discovery handles interfaces, IPv4/IPv6, subnet CIDRs, routes, default gateways, hostname, and `/etc/hosts`.
-- Build passes with zero warnings/errors; all 21 tests pass.
-What is next (exact next step):
-- Implement the `ss -tulpnH` collector and parser for protocol, state, local endpoint, process name, and PID; cover wildcard and scoped addresses plus missing process data in fixtures.
-Files touched:
-- `docs/PROGRESS.md`
-Gotchas found:
-- T1.2 live direct/jump SSH verification remains deferred by owner direction; its status stays blocked.
+_None; T2.3 is complete._
 
 ## Blockers
 
@@ -51,7 +43,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T1.3 | Import ssh config | done | `feat(T1.3): import ssh config` |
 | T2.1 | Collector framework and snapshots | done | `feat(T2.1): collector framework and snapshots` |
 | T2.2 | Host collector | done | `feat(T2.2): host collector` |
-| T2.3 | Listener collector | in-progress | |
+| T2.3 | Listener collector | done | `feat(T2.3): listener collector` |
 | T2.4 | Docker collector | todo | |
 | T2.5 | systemd collector | todo | |
 | T2.6 | Graph builder | todo | |
@@ -112,3 +104,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T2.2 · started
 - 2026-11-14 · Codex / GPT-6 · T2.2 · host discovery parser and read-only SSH collector; fixture coverage for interfaces, address families, CIDR and default routes; build/test pass (21/21)
 - 2026-11-14 · Codex / GPT-6 · T2.3 · started
+- 2026-11-14 · Codex / GPT-6 · T2.3 · listener parser and collector; fixture coverage for endpoints, wildcard/scoped addresses, missing process info, sudo behavior; build/test pass (23/23)

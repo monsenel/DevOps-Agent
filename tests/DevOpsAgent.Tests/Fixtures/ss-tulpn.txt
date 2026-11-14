@@ -1,0 +1,5 @@
+tcp   LISTEN 0      4096     0.0.0.0:22                 0.0.0.0:*                 users:(("sshd",pid=1000,fd=3))
+tcp6  LISTEN 0      511      [::]:80                    [::]:*                    users:(("nginx",pid=220,fd=6))
+udp   UNCONN 0      0        *:53                       *:*                       users:(("systemd-resolve",pid=410,fd=12))
+udp6  UNCONN 0      0        [fe80::1%eth0]:546         [::]:*                    users:(("NetworkManager",pid=760,fd=16))
+tcp   LISTEN 0      128      127.0.0.1:5432             0.0.0.0:*
