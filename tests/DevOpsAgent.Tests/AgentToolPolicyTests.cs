@@ -39,6 +39,26 @@ public sealed class AgentToolPolicyTests
     }
 
     [Fact]
+    public void BanToolsPreferFail2banThenUfwThenDedicatedNftablesSets()
+    {
+        var builder = new ToolCommandBuilder(new ToolRegistry());
+        var read = builder.BuildReadOnly("list_bans", new ListBansArgs());
+        var block = builder.Build(new ActionRecord("block_ip", "staging", "[]",
+            "{\"address\":\"2001:db8::5\"}", null, DateTimeOffset.UtcNow));
+        var unblock = builder.Build(new ActionRecord("unblock_ip", "staging", "[]",
+            "{\"address\":\"2001:db8::5\"}", null, DateTimeOffset.UtcNow));
+
+        Assert.Contains("fail2ban-client", read.Command, StringComparison.Ordinal);
+        Assert.Contains("ufw", read.Command, StringComparison.Ordinal);
+        Assert.Contains("nft list table inet dva", read.Command, StringComparison.Ordinal);
+        Assert.Contains("blocked_ipv6", block.Command, StringComparison.Ordinal);
+        Assert.Contains("timeout 24h", block.Command, StringComparison.Ordinal);
+        Assert.True(block.UseSudo);
+        Assert.Contains("nft delete element inet dva blocked_ipv6", unblock.Command, StringComparison.Ordinal);
+        Assert.True(unblock.UseSudo);
+    }
+
+    [Fact]
     public void RemoteReadOnlyCommandsAreBuiltWithoutSudoAndTargetIdsAreValidated()
     {
         var registry = new ToolRegistry();

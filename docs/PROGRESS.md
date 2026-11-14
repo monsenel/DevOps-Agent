@@ -9,20 +9,25 @@
 - **T3.3 — Evidence panel and Trace:** provide a non-production target with a real nginx-to-backend route, domain/path, SSH identity key, and verified host key for J3 acceptance.
 - **T5.4 — Notifications:** configure either Telegram bot token + chat ID or an ntfy URL + topic (and optional token), then send a test message and verify alert open/resolve delivery.
 - **T5.5 — Overview with real data:** unblock T3.3 by providing the non-production J3 target details above; T5.5 depends on T3.3.
+- **T6.4 — SSH attack detection and bans:** provide an authorized disposable non-production Linux container reachable over SSH, with an identity key and verified host key, for live J5. Production servers must not be used.
+- **T6.6 — MVP hardening:** J3 and J5 acceptance remain blocked by T3.3 and T6.4 above; notification acceptance needs the T5.4 destination above.
 
 ---
 
 ## Current
 
 - **Task:** T6.4 SSH attack detection and bans
-- **Status:** in-progress
+- **Status:** blocked (implementation complete; live J5 acceptance pending)
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 - T6.1 was already complete in commit `de4590e`; confirmed typed registry, mode × access policy tests, and `run_shell` pending approval coverage. Build passed with 0 warnings/errors and tests passed (99/99).
-- T6.4 implementation is the current task. T6.3 and T5.3 dependencies are implemented. Do not use or propose any `prod` server; use fakes/unit tests, and any runtime alert testing must use a disposable container.
-- Exact next step: inspect existing security/alert contracts, then implement the auth-log collector, detection rules, available ban-tool discovery, alert details, and fixture-backed tests. After build/test pass, block only the live J5 acceptance until an authorized disposable non-production target is available.
-- Files touched so far in this resumed session: `AGENTS.md`, `docs/PROGRESS.md`.
+- T6.4 implementation is complete; only live J5 remains blocked. T6.3 and T5.3 dependencies are implemented. Do not use or propose any `prod` server; all verification here used fixture data and fake SSH/settings repositories.
+- Done: fixture-backed parser recognizes failed logins, successful SSH logins, and sudo commands; scanner persists a per-server cursor, seen IPs, and five-minute event window; rules cover 50+ failures, a successful login from a new IP, and sudo outside the configured allowlist. Alert details include usernames, IPs, successful-login state, detected ban tools, and current ban state.
+- Done: `block_ip`, `unblock_ip`, and `list_bans` support an active fail2ban SSH jail, active UFW, then dedicated timed nftables sets. `SecurityMonitoring:SudoAllowlist` uses normal .NET configuration; its environment-variable form is documented.
+- Verification: `dotnet build DevOpsAgent.slnx` succeeded with 0 warnings/errors; `dotnet test DevOpsAgent.slnx` passed 106/106. Graphify refreshed after `.graphifyignore` and T6.4 code (2,317 nodes, 6,351 edges, 157 communities); god-node list has no KC/Inb/jQb labels. Graphify outputs are ignored and untracked.
+- Exact next step: run J5 only after the owner supplies the disposable non-production SSH container and pinned host key; verify attack alert details, approve `block_ip`, confirm via `list_bans`, and resolve the alert. Then continue T6.6. T6.5 remains complete from its previous disposable Debian acceptance.
+- Files touched: `AGENTS.md`, `.env.example`, `docs/PROGRESS.md`, auth log scanner/parser, alert signal integration, tool command builder, app configuration, fixture, and tests.
 
 ## Blockers
 
@@ -38,7 +43,7 @@ The prior M5 deferral has been lifted by the owner's instruction to continue tas
 
 T5.4 live acceptance is blocked because no Telegram bot token/chat ID or ntfy topic/token is configured. Code and mocked HTTP contracts are verified; no message was sent to a third-party destination. Exact unblock step: configure one destination in Settings › Notifications, use Send test message, then verify both alert-open and alert-resolve delivery.
 
-T6.4's live J5 acceptance must use an authorized disposable non-production target. Its implementation can proceed with fakes and fixture-backed tests; do not run it against any server tagged `prod`.
+T6.4 implementation and fake-based coverage are complete. Live J5 acceptance requires the disposable non-production SSH container and verified host key listed above. No `prod` server will be used or recommended for testing.
 
 T6.6 remains blocked because T6.3 and T6.4 acceptance is unresolved; it depends on all preceding tasks and requires end-to-end journey checks.
 
@@ -78,11 +83,11 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T5.2 | Health checks | done | `feat(T5.2): scheduled health checks` |
 | T5.3 | Alert engine and Alerts page | done | `feat(T5.3): complete alert engine and live acceptance` |
 | T5.4 | Notifications | blocked | `wip(T5.4): implement notification delivery` |
-| T5.5 | Overview with real data | todo | |
+| T5.5 | Overview with real data | blocked | |
 | T6.1 | Tool registry and execution modes | done | `feat(T6.1): tool policies and approvals` |
 | T6.2 | Action log | done | `feat(T6.2): approved action execution and log` |
 | T6.3 | Agent chat with tools | done | `feat(T6.3): complete J4 tool and approval flow` |
-| T6.4 | SSH attack detection and bans | blocked | |
+| T6.4 | SSH attack detection and bans | blocked | `wip(T6.4): implement SSH attack detection` |
 | T6.5 | Updates | done | `feat(T6.5): updates inventory and approval flow` |
 | T6.6 | MVP hardening pass | blocked | |
 
@@ -199,3 +204,5 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · Graphify · refreshed to 5,990 nodes / 20,300 edges / 203 communities; 60 self-loops and no dangling/missing endpoints; tokens.css skipped by sensitivity detector; outputs committed
 - 2026-11-14 · Codex / GPT-6 · T5.4 · implementation and automated/UI verification complete; live destination test blocked until owner configures Telegram or ntfy
 - 2026-11-14 · Codex / GPT-6 · resumed T6.1 · confirmed existing implementation and policy matrix; build clean and 99/99 tests pass; Graphify hygiene commit verified; started T6.4; added prod-server testing prohibition
+- 2026-11-14 · Codex / GPT-6 · T6.4 · auth-log parser/scanner, rolling cursor state, SSH attack alerts and fail2ban/UFW/nftables tool support complete; build clean and 106/106 tests pass with fakes only; live J5 awaits a disposable non-production SSH container
+- 2026-11-14 · Codex / GPT-6 · Graphify · incremental refresh after T6.4 (2,317 nodes, 6,351 edges, 157 communities); minified god-node labels remain absent; output ignored/untracked

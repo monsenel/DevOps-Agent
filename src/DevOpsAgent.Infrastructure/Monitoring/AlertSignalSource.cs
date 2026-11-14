@@ -12,6 +12,7 @@ public sealed class AlertSignalSource(
     IHealthCheckRepository healthChecks,
     ISnapshotRepository snapshots,
     ISshRunner sshRunner,
+    AuthLogScanner authLogScanner,
     DriftService drift,
     TimeProvider timeProvider) : IAlertSignalSource
 {
@@ -22,6 +23,7 @@ public sealed class AlertSignalSource(
         var inventory = await servers.ListAsync(cancellationToken);
         foreach (var server in inventory)
         {
+            result.AddRange(await authLogScanner.ScanAsync(server, cancellationToken));
             var remoteStatus = await TryGetRemoteStatusAsync(server.Id, cancellationToken);
             if (remoteStatus is null)
             {

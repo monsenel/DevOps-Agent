@@ -42,8 +42,9 @@ public sealed class ToolCommandBuilder(ToolRegistry tools)
                 + "elif command -v dnf >/dev/null 2>&1; then dnf check-update; "
                 + "else printf '%s\\n' 'No supported package manager found.' >&2; exit 127; fi", false),
             ("list_bans", ListBansArgs) => new(
-                "if command -v fail2ban-client >/dev/null 2>&1; then fail2ban-client status sshd; "
-                + "elif command -v ufw >/dev/null 2>&1; then ufw status numbered; "
+                "if command -v fail2ban-client >/dev/null 2>&1 && fail2ban-client status sshd >/dev/null 2>&1; then fail2ban-client status sshd; "
+                + "elif command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then ufw status numbered; "
+                + "elif command -v nft >/dev/null 2>&1; then nft list table inet dva 2>/dev/null || true; "
                 + "else printf '%s\\n' 'No supported firewall tool found.'; fi", false),
             _ => throw new InvalidOperationException($"Tool '{toolName}' has no read-only command implementation.")
         };
@@ -67,14 +68,36 @@ public sealed class ToolCommandBuilder(ToolRegistry tools)
     }
 
     private static string BuildBlockIp(BlockIpArgs value) =>
-        "if command -v fail2ban-client >/dev/null 2>&1; then fail2ban-client set sshd banip " + Quote(value.Address)
-        + "; elif command -v ufw >/dev/null 2>&1; then ufw insert 1 deny from " + Quote(value.Address)
+        "if command -v fail2ban-client >/dev/null 2>&1 && fail2ban-client status sshd >/dev/null 2>&1; then fail2ban-client set sshd banip " + Quote(value.Address)
+        + "; elif command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then ufw insert 1 deny from " + Quote(value.Address)
+        + "; elif command -v nft >/dev/null 2>&1; then " + BuildNftablesBlock(value.Address)
         + "; else printf '%s\\n' 'No supported firewall tool found.' >&2; exit 127; fi";
 
     private static string BuildUnblockIp(UnblockIpArgs value) =>
-        "if command -v fail2ban-client >/dev/null 2>&1; then fail2ban-client set sshd unbanip " + Quote(value.Address)
-        + "; elif command -v ufw >/dev/null 2>&1; then ufw delete deny from " + Quote(value.Address)
+        "if command -v fail2ban-client >/dev/null 2>&1 && fail2ban-client status sshd >/dev/null 2>&1; then fail2ban-client set sshd unbanip " + Quote(value.Address)
+        + "; elif command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then ufw delete deny from " + Quote(value.Address)
+        + "; elif command -v nft >/dev/null 2>&1; then " + BuildNftablesUnblock(value.Address)
         + "; else printf '%s\\n' 'No supported firewall tool found.' >&2; exit 127; fi";
+
+    private static string BuildNftablesBlock(string address)
+    {
+        var isIpv6 = address.Contains(':');
+        var family = isIpv6 ? "ipv6_addr" : "ipv4_addr";
+        var match = isIpv6 ? "ip6 saddr" : "ip saddr";
+        var set = isIpv6 ? "blocked_ipv6" : "blocked_ipv4";
+        return "nft list table inet dva >/dev/null 2>&1 || nft add table inet dva; "
+            + "nft list chain inet dva input >/dev/null 2>&1 || nft add chain inet dva input '{ type filter hook input priority 0; policy accept; }'; "
+            + "nft list set inet dva " + set + " >/dev/null 2>&1 || nft add set inet dva " + set
+            + " '{ type " + family + "; flags timeout; timeout 24h; }'; "
+            + "nft list chain inet dva input | grep -Fq '" + match + " @" + set + " drop' || nft add rule inet dva input "
+            + match + " @" + set + " drop; nft add element inet dva " + set + " { " + Quote(address) + " timeout 24h }";
+    }
+
+    private static string BuildNftablesUnblock(string address)
+    {
+        var set = address.Contains(':') ? "blocked_ipv6" : "blocked_ipv4";
+        return "nft delete element inet dva " + set + " { " + Quote(address) + " }";
+    }
 
     private static string Quote(string value) => $"'{value.Replace("'", "'\\''", StringComparison.Ordinal)}'";
 }

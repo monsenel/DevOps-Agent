@@ -26,6 +26,7 @@ public static class PersistenceServiceCollectionExtensions
         services.Configure<PersistenceOptions>(configuration.GetSection(PersistenceOptions.SectionName));
         services.Configure<ServerInventoryOptions>(configuration.GetSection(ServerInventoryOptions.SectionName));
         services.Configure<SshConnectionOptions>(configuration.GetSection(SshConnectionOptions.SectionName));
+        services.Configure<SecurityMonitoringOptions>(configuration.GetSection(SecurityMonitoringOptions.SectionName));
         services.AddDbContext<AppDbContext>((serviceProvider, options) =>
         {
             var persistenceOptions = serviceProvider.GetRequiredService<IOptions<PersistenceOptions>>().Value;
@@ -41,6 +42,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddScoped<IHealthCheckRepository, HealthCheckRepository>();
         services.AddScoped<IAlertRepository, AlertRepository>();
         services.AddScoped<IAlertSignalSource, AlertSignalSource>();
+        services.AddScoped<AuthLogScanner>();
         services.AddTransient<IHealthProbe, HealthProbe>();
         services.AddScoped<IUpdatesCollector, DevOpsAgent.Infrastructure.Collectors.UpdatesCollectorService>();
         services.AddScoped<IChatConversationRepository, ChatConversationRepository>();
