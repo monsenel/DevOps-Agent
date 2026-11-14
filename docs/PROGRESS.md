@@ -10,13 +10,13 @@ None. The owner confirmed an LLM provider is configured and its connection test 
 
 ## Current
 
-- **Task:** T6.3 Agent chat with tools — live J4 acceptance
-- **Status:** done
+- **Task:** T6.6 MVP hardening pass
+- **Status:** in-progress
 - **Last updated:** 2026-11-15 by Codex
 
 ## WIP notes
 
-None. T6.3 live J4 is complete; T6.6 is next.
+T6.3 live J4 is complete in commit `2520ae1`. T6.6 release closeout is now in progress. Exact next step: update PRD/CHANGELOG to record the accepted J4 behavior, audit every MVP row for done or an explicit blocker, run final build/tests and repository secret checks, update this file, commit the release result, then retag and push `v0.1.0` at that commit and verify the remote tag.
 
 ### T6.3 acceptance result (2026-11-15)
 
@@ -75,7 +75,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T6.3 | Agent chat with tools | done | `feat(T6.3): verified J4 tool calling and approval on staging` |
 | T6.4 | SSH attack detection and bans | done | `feat(T6.4): verify SSH attack detection in disposable lab` |
 | T6.5 | Updates | done | `feat(T6.5): verify security update workflow and resilient scans` |
-| T6.6 | MVP hardening pass | blocked | pending T6.3 completion checkpoint |
+| T6.6 | MVP hardening pass | in-progress | `chore(progress): start T6.6 release closeout` |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
 
@@ -84,6 +84,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 ## Session log
 
 One line per session: date · tool/model · tasks touched · result.
+
+- 2026-11-15 · Codex / GPT-6 · started T6.6 release closeout · T6.3 J4 accepted on staging; final docs/task audit, build/tests, secret scan, commit and v0.1.0 tag remain
 
 - 2026-11-15 · Codex / GPT-6 · T6.3 live J4 · provider-backed J4a/J4b/J4c passed on staging; only one approved restart of `web` on `srv-app`, Action log success; build 0 warnings, 119/119 tests; next start T6.6 release closeout
 
