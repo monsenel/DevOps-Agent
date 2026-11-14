@@ -6,13 +6,13 @@
 
 ## Current
 
-- **Task:** Owner-requested fixed full-height sidebar
-- **Status:** done
+- **Task:** T5.1 Metric poller
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
-T6.3/J4 is complete: OpenRouter and Ollama both streamed tool results; `list_servers` was visible in chat and `run_shell` required an explicit approval card. The approved harmless `printf` command succeeded with exit 0 under both providers and both entries appeared in Action log. The streamed JSON fallback now dispatches calls when `assistant.Text` is empty; build passed with 0 warnings/errors and 79/79 tests. M5 remains deferred, so live alert/metrics context is unavailable. Owner-requested sidebar layout is complete: at 1029×850 it is fixed at 248px wide and exactly 850px tall, in light and dark themes; at 390px it returns to the stacked layout. Updated DESIGN.md and added D-021. Build passed with 0 warnings/errors and 79/79 tests. Temporary app/SSH/Ollama services are stopped, and the test DB, protected key ring, test SSH keys, and temporary files are removed. Graphify incremental refresh is complete: 5,415 nodes, 18,841 edges, 299 communities, with `graph.json`, `graph.html`, `GRAPH_REPORT.md`, semantic cache, and manifest updated. All 18 changed documents/fixtures had complete line coverage; 4 changed C# files were structurally extracted. Graph health reports 62 self-loops (also present before refresh), with no dangling or missing endpoints. Graphify marked `src/DevOpsAgent.Web/wwwroot/css/tokens.css` sensitive and skipped it. The host-agent semantic extraction did not expose token usage, so Graphify recorded 0 input/output tokens for this run. Exact next step: resume T5.1 (M5 metric poller) only when the owner requests the deferred M5 phase; T5.2–T5.5 depend on M5, T6.4 depends on T5.3, and T6.6 remains blocked by its prerequisites.
+T6.3/J4 and the owner-requested sidebar layout are complete. Resume verification passed: clean working tree, build with 0 warnings/errors, and 79/79 tests. The owner has now directed work to continue task by task, lifting the previous M5 deferral. T5.1 is active. Exact next step: inspect T5.1's architecture and UI requirements, then implement the combined per-server metric poller, CPU sampling, persistence/rollups, and server-detail metrics view; add parser tests with fixtures, then build/test and check each acceptance criterion. Temporary app/SSH/Ollama services and test credentials from prior checks were removed. Graphify was last incrementally refreshed at 5,415 nodes, 18,841 edges, and 299 communities; refresh it again after repository changes.
 
 ## Blockers
 
@@ -24,7 +24,7 @@ T2.7 live acceptance is blocked by the same missing authorized SSH targets and p
 
 T3.3's implementation and synthetic trace tests are complete, but PLAN requires J3 to work on real servers. Verification is blocked by the missing authorized SSH targets and pinned host keys recorded under T1.2/T2.7. Resume real trace/evidence verification when those are available; do not treat the synthetic UI check as satisfying J3.
 
-T5.1–T5.5 are deferred at the owner's direction to skip M5 and start M6. T5.1 is marked blocked; T5.2–T5.5 remain todo because they depend on M5 monitoring data and checks. Revisit M5 when the owner requests it.
+The prior M5 deferral has been lifted by the owner's instruction to continue task by task. T5.1 is in progress. T5.2–T5.5 remain todo and depend on the metric poller and/or health checks.
 
 T6.4 is deferred because it depends on incomplete T6.3 and T5.3; T5.3 depends on the deferred M5 phase. Resume after those dependencies are completed.
 
@@ -62,7 +62,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T4.1 | Live connections | done | `feat(T4.1): observed connections` |
 | T4.2 | Unknown nodes | done | `feat(T4.2): unknown node expansion` |
 | T4.3 | Drift and scheduled discovery | done | `feat(T4.3): drift and scheduled discovery` |
-| T5.1 | Metric poller | blocked | |
+| T5.1 | Metric poller | in-progress | |
 | T5.2 | Health checks | todo | |
 | T5.3 | Alert engine and Alerts page | todo | |
 | T5.4 | Notifications | todo | |
@@ -89,6 +89,7 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · sidebar layout · desktop full-height fixed sidebar verified in light/dark; mobile stack verified at 390px; build clean and 79/79 tests passed
 - 2026-11-14 · Codex / GPT-6 · T6.3 cleanup · stopped temporary app, SSH daemon, and Ollama container; removed temporary DB, encrypted key ring, SSH keys, and test files; next run Graphify incremental update
 - 2026-11-14 · Codex / GPT-6 · resumed T6.3 · fixed full-height sidebar verified and committed; Graphify incremental refresh completed (5,415 nodes, 18,841 edges, 299 communities); next resume T5.1 when M5 is requested
+- 2026-11-14 · Codex / GPT-6 · resumed T5.1 · clean tree; build passed with 0 warnings/errors and tests passed (79/79); owner lifted M5 deferral
 
 - 2026-11-14 · Codex / GPT-6 · T6.5 · J6 steps 1–3 passed on disposable Debian apt target; security and standard updates classified, explicit approval executed both, report exit 0/no restarts/reboot false, follow-up scan showed 0 pending; temporary test environment removed
 
