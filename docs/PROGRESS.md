@@ -4,7 +4,6 @@
 
 ## Waiting on owner
 
-- **T5.4 — Notifications:** configure a Telegram bot token + chat ID or ntfy URL + topic (optional token), then send a test message and verify open/resolve delivery.
 - **T6.3 — Agent chat live J4:** add an LLM provider in DevOps Agent. Then I will run J4 on the disposable lab using the requested prompts and approve one `web` container restart on `srv-app`.
 
 ---
@@ -20,18 +19,16 @@
 - T6.3 implementation is complete, but the earlier J4 live result predates the disposable SSH lab and is invalid for the requested server journey. Live acceptance is **blocked** until the owner adds an LLM provider. After that, run on this lab exactly: ask “anything I should look at?”, then “why is disk usage on srv-app what it is?”, confirm read-only tools execute on lab servers, then propose and explicitly approve restarting container `web` on `srv-app`; record the tool/action-log result. Keep srv-search out of inventory.
 - T6.4 J5 passed on disposable staging: 60 failed SSH logins opened the attack alert and fail2ban ban; threshold restored and all bans cleared. Build clean, 110/110 tests.
 - T6.5/J6 is now **done** after the prior acceptance claim was retracted and re-run on this lab. Updates now use a configurable update-only SSH command timeout (default 300s) and bounded package-repository retries/timeouts. On `srv-edge`, `libexpat1` was downgraded to `2.5.0-1+deb12u2`, scanned as a `bookworm-security` Security update (`2.5.0-1+deb12u5` candidate), approved in Updates, and applied; action log: exit 0, no restarted services, `REBOOT_REQUIRED=false`. `srv-db` completed its scan quickly with `Repositories unreachable (apt)`; fake offline coverage passes. Build clean, 115/115 tests pass.
-- T5.4 container alert lifecycle passed again on disposable staging: alert opened on `web` down and resolved after it came back. External notification delivery remains blocked on owner destination.
+- T5.4 is **done**: owner configured ntfy and confirmed the test message, alert-open, and alert-resolve notifications were all received.
 - T6.6 journey results on the disposable lab: J1 direct/jump inventory confirmed for srv-edge, srv-app and srv-db; srv-search remains unregistered. J2 passed after fixing the parser for four-column `ss -tnH state established` output, retaining outbound unknown peers in `GraphBuilder`, and normalizing IPv4-mapped IPv6 endpoints; latest discovery recorded 3/3 successes with 27 nodes/16 connections, including srv-app → Unknown for srv-search :9200. J3 passed: `api.test.local` traced 4 nodes/3 connections with `/etc/nginx/conf.d/demo.conf:10` evidence. J4 is blocked per T6.3 until the owner adds an LLM provider; the old pre-lab pass is invalid. J5 attack/ban passed via disposable `attack` script (60 failed SSH attempts, alert + fail2ban ban); threshold restored and bans cleared. J6 now passed on the current lab as recorded above. J7 detected a new `python3` listener on :9000 and removal of worker-redis after temporary staging changes; nginx config, listener and worker-redis were restored and verified. No systemd acceptance was attempted, per owner exception.
 - T6.6 hardening: fixed IPv4-mapped endpoint handling, duplicate `server-unreachable` alert keys across servers (with a regression test), and 390px horizontal overflow; added app setup/key/known_hosts/VPN guidance to README. 390px layout has no document overflow on Overview and all main routes. Both theme palettes and contrast were checked. Build is clean with 0 warnings/errors; 115/115 tests pass. Graphify output remains ignored and excludes vendored/generated files; god nodes contain no minified KC/Inb/jQb names.
 - T6.6 restore discovery is now verified: after restoring the lab's J7 changes, isolated review app discovery completed at 2026-11-14 22:38 with 3 succeeded/0 failed and persisted a new snapshot; graph showed 27 nodes/16 connections and the restored baseline. No discovery bug found. Exact next step: after the owner adds an LLM provider, run J4 on the disposable lab with the requested prompts and explicitly approved `web` restart; finish provider-dependent T6.6 J4/J7 agent acceptance. Keep srv-search unregistered and systemd-specific checks excepted.
 
 ## Blockers
 
-T5.4 live acceptance is blocked because no Telegram bot token/chat ID or ntfy URL/topic/token is configured. Code and mocked HTTP contracts are verified; no message was sent to a third-party destination. Exact unblock step: configure one destination in Settings › Notifications, use Send test message, then verify both alert-open and alert-resolve delivery.
+The prior M5 deferral has been lifted by the owner's instruction to continue task by task. T5.1, T5.2, T5.3, and T5.4 are complete. T5.3 live acceptance passed on 2026-11-14: the selected container triggered an alert within 2 minutes, was restarted, and its alert auto-resolved. T5.4 live acceptance passed per the owner: ntfy test, open, and resolve messages were all received.
 
-The prior M5 deferral has been lifted by the owner's instruction to continue task by task. T5.1, T5.2, and T5.3 are complete. T5.3 live acceptance passed on 2026-11-14: the selected Docker container triggered an alert within 2 minutes, was restarted, and its alert auto-resolved. No other blocked SSH acceptance was changed.
-
-T6.3 live J4 acceptance is blocked until the owner adds an LLM provider; T5.4 live notification acceptance is blocked until the owner configures Telegram or ntfy. T6.6 is blocked on the T6.3 provider-dependent J4/J7 acceptance. systemd-only checks are excepted.
+T6.3 live J4 acceptance is blocked until the owner adds an LLM provider. T6.6 is blocked on provider-dependent J4/J7 acceptance. systemd-only checks are excepted.
 
 ---
 
@@ -68,7 +65,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T5.1 | Metric poller | done | `feat(T5.1): metric polling and server detail` |
 | T5.2 | Health checks | done | `feat(T5.2): scheduled health checks` |
 | T5.3 | Alert engine and Alerts page | done | `feat(T5.3): complete alert engine and live acceptance` |
-| T5.4 | Notifications | blocked | `wip(T5.4): implement notification delivery` |
+| T5.4 | Notifications | done | `feat(T5.4): verify ntfy test and alert delivery` |
 | T5.5 | Overview with real data | done | `feat(T5.5): live Overview data and discovery state` |
 | T6.1 | Tool registry and execution modes | done | `feat(T6.1): tool policies and approvals` |
 | T6.2 | Action log | done | `feat(T6.2): approved action execution and log` |
@@ -84,6 +81,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 ## Session log
 
 One line per session: date · tool/model · tasks touched · result.
+
+- 2026-11-14 · Codex / GPT-6 · T5.4 · owner configured ntfy and confirmed the test message and alert open/resolve notifications all arrived; marked live acceptance done
 
 - 2026-11-14 · Codex / GPT-6 · T6.5 + T6.6 discovery · J6 passed on current lab: security `libexpat1` approved/applied, action report exit 0/no restarts/reboot false; srv-db offline scan returned clear error; restored-lab discovery persisted a new 3/3 snapshot (27 nodes/16 edges); build clean, 115/115 tests
 
