@@ -6,10 +6,10 @@
 
 ## Current
 
-- **Task:** T5.2 Health checks
-- **Status:** done
+- **Task:** T5.3 Alert engine and Alerts page
+- **Status:** blocked
 - **Last updated:** 2026-11-14 by Codex
-T5.2 is complete: health check CRUD and EF persistence; graph-based HTTPS and TCP suggestions; scheduled HTTP, HTTPS/TLS-expiry, and TCP probes; server detail status UI. Build clean with 0 warnings/errors and 87/87 tests pass. Migration applied in isolated SQLite; page verified with seeded status in both themes and at a 390px viewport.
+T5.3 implementation is complete; only live container stop/restart acceptance remains. Exact next step: run PLAN.md acceptance against an authorized Docker-capable SSH server with a pinned host key; confirm alert opens within 2 minutes and resolves after restart.
 ## WIP notes
 
 T5.3 implementation is complete: persistent de-duplicated alert lifecycle; scheduled read-only SSH status polling for Docker and failed systemd units; disk, sustained memory/load, SSH reachability, health-check, TLS expiry, and new-listener rules; Alerts page, sidebar count, and graph severity overlay. Build is clean with 0 warnings/errors, 90/90 tests pass, AddAlerts migration applied in isolated SQLite, and the seeded Alerts page was verified in light/dark. Exact next step: run the PLAN.md container-stop/restart acceptance against an authorized Docker-capable SSH server with a pinned host key; confirm alert opens within 2 minutes and resolves after restart. No such target/key is configured.
@@ -26,7 +26,7 @@ T3.3's implementation and synthetic trace tests are complete, but PLAN requires 
 
 The prior M5 deferral has been lifted by the owner's instruction to continue task by task. T5.1 and T5.2 are complete. T5.3 implementation is complete, but live acceptance is blocked: no authorized Docker-capable SSH target and pinned host key are configured. Continue when those are available; do not run container-stop tests against owner servers without authorization.
 
-T6.4 is deferred because it depends on incomplete T6.3 and T5.3; T5.3 depends on the deferred M5 phase. Resume after those dependencies are completed.
+T6.4 is deferred because it depends on incomplete T6.3 and blocked T5.3. Resume after those dependencies are completed.
 
 T6.6 remains blocked because T6.3 and T6.4 acceptance is unresolved; it depends on all preceding tasks and requires end-to-end journey checks.
 
@@ -171,3 +171,5 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · started T5.3 · inspect metric/discovery/health contracts, then implement deduplicated alert lifecycle and UI; live container test needs an authorized host
 
 - 2026-11-14 · Codex / GPT-6 · T5.3 · alert engine, rule signals, lifecycle, Alerts UI/sidebar badge/graph overlay implemented; 90/90 tests pass, 0-warning build, migration/runtime UI checked; container stop/restart acceptance blocked by missing authorized SSH target and pinned key
+
+- 2026-11-14 · Codex / GPT-6 · resumed T5.3 · confirmed blocked live acceptance; rebuilt Graphify (5,894 nodes, 20,083 edges, 306 communities), integrity check found 60 self-loops and no dangling/missing endpoints

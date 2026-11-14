@@ -192,16 +192,16 @@
     "semantic_hash": "1d0c279a277c4b5182d31aa270db3f71"
   },
   "src/DevOpsAgent.Infrastructure/Migrations/AppDbContextModelSnapshot.cs": {
-    "mtime": 1794634467.385136,
-    "seen": 1794636818.9218266,
-    "ast_hash": "3052c7352d303da09f22f42c0521b11b",
-    "semantic_hash": "3052c7352d303da09f22f42c0521b11b"
+    "mtime": 1794652230.2098029,
+    "seen": 1794653221.4308622,
+    "ast_hash": "cc4e1c3a90cae86e1cea9909a1baeb33",
+    "semantic_hash": "cc4e1c3a90cae86e1cea9909a1baeb33"
   },
   "src/DevOpsAgent.Infrastructure/Persistence/AppDbContext.cs": {
-    "mtime": 1794634260.5160437,
-    "seen": 1794636818.9218335,
-    "ast_hash": "515542aed0ee6929ebb450451183da1c",
-    "semantic_hash": "515542aed0ee6929ebb450451183da1c"
+    "mtime": 1794651811.0495057,
+    "seen": 1794653221.430877,
+    "ast_hash": "cf28f80ab36fb9e9ae4b91b603c0741d",
+    "semantic_hash": "cf28f80ab36fb9e9ae4b91b603c0741d"
   },
   "src/DevOpsAgent.Infrastructure/Persistence/ChatConversationRepository.cs": {
     "mtime": 1794602423.199339,
@@ -222,10 +222,10 @@
     "semantic_hash": "ed3e51320071c70d7d889b333ce321d0"
   },
   "src/DevOpsAgent.Infrastructure/Persistence/PersistenceServiceCollectionExtensions.cs": {
-    "mtime": 1794634260.5160437,
-    "seen": 1794636818.9219542,
-    "ast_hash": "422822c7852a33fc6b6a2a68f82375fd",
-    "semantic_hash": "422822c7852a33fc6b6a2a68f82375fd"
+    "mtime": 1794651811.0495057,
+    "seen": 1794653221.430895,
+    "ast_hash": "c967118e0ffc19e2cdacf394e052db44",
+    "semantic_hash": "c967118e0ffc19e2cdacf394e052db44"
   },
   "src/DevOpsAgent.Infrastructure/Security/DataProtectionSecretProtector.cs": {
     "mtime": 1794597083.1252663,
@@ -264,10 +264,10 @@
     "semantic_hash": "e4bd78fe24ecbc35cd50f1ccce91e891"
   },
   "src/DevOpsAgent.Web/Components/Layout/Sidebar.razor": {
-    "mtime": 1794630615.2499204,
-    "seen": 1794636818.9224143,
-    "ast_hash": "46a5f9ad0e42aff5d3032c57e2651363",
-    "semantic_hash": "46a5f9ad0e42aff5d3032c57e2651363"
+    "mtime": 1794651833.0143967,
+    "seen": 1794653221.430936,
+    "ast_hash": "5c2202ef96d030473d133d18faa5601e",
+    "semantic_hash": "5c2202ef96d030473d133d18faa5601e"
   },
   "src/DevOpsAgent.Web/Components/Layout/TopBar.razor": {
     "mtime": 1794632785.3310735,
@@ -288,10 +288,10 @@
     "semantic_hash": "34adec994a208fdfdab208aa375d32d8"
   },
   "src/DevOpsAgent.Web/Components/Pages/Alerts.razor": {
-    "mtime": 1794597934.7666142,
-    "seen": 1794603302.662218,
-    "ast_hash": "ff7077f147fab514c062df02a2ef5c59",
-    "semantic_hash": "ff7077f147fab514c062df02a2ef5c59"
+    "mtime": 1794651935.4858873,
+    "seen": 1794653221.4309454,
+    "ast_hash": "bc45e72e6648549de63bd9047793feba",
+    "semantic_hash": "bc45e72e6648549de63bd9047793feba"
   },
   "src/DevOpsAgent.Web/Components/Pages/ComponentPreview.razor": {
     "mtime": 1794597985.1501906,
@@ -318,10 +318,10 @@
     "semantic_hash": "b43132764687de5710f24e46d3d3f7ff"
   },
   "src/DevOpsAgent.Web/Components/Pages/Servers.razor": {
-    "mtime": 1794629950.448551,
-    "seen": 1794636818.9226325,
-    "ast_hash": "86c48dd799350ff754eb8f42c4cbbe37",
-    "semantic_hash": "86c48dd799350ff754eb8f42c4cbbe37"
+    "mtime": 1794649879.1913123,
+    "seen": 1794653221.4309602,
+    "ast_hash": "fd4337bfe04402016799daf7b8ac87dd",
+    "semantic_hash": "fd4337bfe04402016799daf7b8ac87dd"
   },
   "src/DevOpsAgent.Web/Components/Pages/Settings.razor": {
     "mtime": 1794631581.3136423,
@@ -330,10 +330,10 @@
     "semantic_hash": "0a59d2946eac120a722cdd074cf13a95"
   },
   "src/DevOpsAgent.Web/Components/Pages/Topology.razor": {
-    "mtime": 1794629453.0032697,
-    "seen": 1794636818.9226372,
-    "ast_hash": "bf84659d1387e106de3da1a263036ff5",
-    "semantic_hash": "bf84659d1387e106de3da1a263036ff5"
+    "mtime": 1794652271.892215,
+    "seen": 1794653221.4309642,
+    "ast_hash": "bec81aa65f5c973f9e306d8e2745c9b6",
+    "semantic_hash": "bec81aa65f5c973f9e306d8e2745c9b6"
   },
   "src/DevOpsAgent.Web/Components/Pages/Updates.razor": {
     "mtime": 1794634445.1005,
@@ -438,10 +438,10 @@
     "semantic_hash": "d6e633622f7a032b576a7ece7d76fc54"
   },
   "src/DevOpsAgent.Web/Components/_Imports.razor": {
-    "mtime": 1794631625.3214018,
-    "seen": 1794636818.9232628,
-    "ast_hash": "b3b0d663bbda9d8ecfbb083960aedf64",
-    "semantic_hash": "b3b0d663bbda9d8ecfbb083960aedf64"
+    "mtime": 1794651867.7702239,
+    "seen": 1794653221.4310048,
+    "ast_hash": "08777b9e86ddda69296b44d27cad0016",
+    "semantic_hash": "08777b9e86ddda69296b44d27cad0016"
   },
   "src/DevOpsAgent.Web/DevOpsAgent.Web.csproj": {
     "mtime": 1794597123.641045,
@@ -480,10 +480,10 @@
     "semantic_hash": "fae4989c8a99d738c3af74435a1983a0"
   },
   "src/DevOpsAgent.Web/Program.cs": {
-    "mtime": 1794634452.1617765,
-    "seen": 1794636818.9234912,
-    "ast_hash": "60a06b9eb577f152f81a07c54ed5fc87",
-    "semantic_hash": "60a06b9eb577f152f81a07c54ed5fc87"
+    "mtime": 1794651833.0143967,
+    "seen": 1794653221.4310298,
+    "ast_hash": "d3e595ae10d1690a0bfd0dfd6114f95b",
+    "semantic_hash": "d3e595ae10d1690a0bfd0dfd6114f95b"
   },
   "src/DevOpsAgent.Web/Properties/launchSettings.json": {
     "mtime": 1794596721.2526839,
@@ -588,10 +588,10 @@
     "semantic_hash": "2b7711b241daa921d00f90f81800a464"
   },
   "docs/PROGRESS.md": {
-    "mtime": 1794648338.0716102,
-    "seen": 1794648819.1441128,
-    "ast_hash": "e6d1e7d2da47c186e127e915520a43da",
-    "semantic_hash": "e6d1e7d2da47c186e127e915520a43da"
+    "mtime": 1794652732.1249864,
+    "seen": 1794653221.431151,
+    "ast_hash": "159de07b4a00d46df453cd3441d17d8b",
+    "semantic_hash": "159de07b4a00d46df453cd3441d17d8b"
   },
   "docs/design/mockups/overview.dc.html": {
     "mtime": 1794595111.0,
@@ -1218,10 +1218,10 @@
     "semantic_hash": "d49a69e260792ff53ee0c492d4cc72a5"
   },
   "src/DevOpsAgent.Web/wwwroot/js/graph.js": {
-    "mtime": 1794629056.3764381,
-    "seen": 1794636818.9236317,
-    "ast_hash": "14e38cc33f7203d26ab1d034e9ebb1aa",
-    "semantic_hash": "14e38cc33f7203d26ab1d034e9ebb1aa"
+    "mtime": 1794652427.9994392,
+    "seen": 1794653221.4310412,
+    "ast_hash": "2d3d5a708f72f28b2ab87e00f1173af7",
+    "semantic_hash": "2d3d5a708f72f28b2ab87e00f1173af7"
   },
   "src/DevOpsAgent.Web/wwwroot/lib/cytoscape-elk/cytoscape-elk.js": {
     "mtime": 1794626218.1559806,
@@ -1450,5 +1450,251 @@
     "seen": 1794648819.1440537,
     "ast_hash": "f26bfe22e7cb0ba42f4791b95c55e535",
     "semantic_hash": "f26bfe22e7cb0ba42f4791b95c55e535"
+  },
+  "src/DevOpsAgent.Application/Abstractions/IAlertRepository.cs": {
+    "mtime": 1794651741.4598517,
+    "seen": 1794653221.4305367,
+    "ast_hash": "104fe0df9326f05319032dcfbff8f015",
+    "semantic_hash": "104fe0df9326f05319032dcfbff8f015"
+  },
+  "src/DevOpsAgent.Application/Abstractions/IHealthCheckRepository.cs": {
+    "mtime": 1794650937.7964284,
+    "seen": 1794653221.4305544,
+    "ast_hash": "195ba97519c7ac3f5dbb4ad7a91d7a75",
+    "semantic_hash": "195ba97519c7ac3f5dbb4ad7a91d7a75"
+  },
+  "src/DevOpsAgent.Application/Abstractions/IMetricRepository.cs": {
+    "mtime": 1794650795.310039,
+    "seen": 1794653221.4305594,
+    "ast_hash": "61a952ded62ada64c833a350d6dd22a9",
+    "semantic_hash": "61a952ded62ada64c833a350d6dd22a9"
+  },
+  "src/DevOpsAgent.Application/Monitoring/AlertContracts.cs": {
+    "mtime": 1794651741.4598517,
+    "seen": 1794653221.430657,
+    "ast_hash": "d3f71ae0b0f70cbc94147b7406d00dbb",
+    "semantic_hash": "d3f71ae0b0f70cbc94147b7406d00dbb"
+  },
+  "src/DevOpsAgent.Application/Monitoring/AlertService.cs": {
+    "mtime": 1794651922.457952,
+    "seen": 1794653221.4306593,
+    "ast_hash": "4c48838ca346121dcbc0dcbda120e995",
+    "semantic_hash": "4c48838ca346121dcbc0dcbda120e995"
+  },
+  "src/DevOpsAgent.Application/Monitoring/HealthCheckContracts.cs": {
+    "mtime": 1794650937.7964284,
+    "seen": 1794653221.4306614,
+    "ast_hash": "c87f6a2619462f643fbd420bc5ed0014",
+    "semantic_hash": "c87f6a2619462f643fbd420bc5ed0014"
+  },
+  "src/DevOpsAgent.Application/Monitoring/HealthCheckService.cs": {
+    "mtime": 1794651080.6058166,
+    "seen": 1794653221.430663,
+    "ast_hash": "9ad71232778a455d49cc77cc8083c700",
+    "semantic_hash": "9ad71232778a455d49cc77cc8083c700"
+  },
+  "src/DevOpsAgent.Application/Monitoring/MetricService.cs": {
+    "mtime": 1794649790.1957421,
+    "seen": 1794653221.4306653,
+    "ast_hash": "ab0e9e0cc54b8d5e50a5a9fba9c0230d",
+    "semantic_hash": "ab0e9e0cc54b8d5e50a5a9fba9c0230d"
+  },
+  "src/DevOpsAgent.Application/Monitoring/MetricsContracts.cs": {
+    "mtime": 1794649649.1601958,
+    "seen": 1794653221.4306667,
+    "ast_hash": "b860ed5ca4543a55f4f2a81f71a284b7",
+    "semantic_hash": "b860ed5ca4543a55f4f2a81f71a284b7"
+  },
+  "src/DevOpsAgent.Application/Monitoring/MetricsParser.cs": {
+    "mtime": 1794651975.0066907,
+    "seen": 1794653221.430669,
+    "ast_hash": "f1ae03e853ccd82c151acac4eaac78b8",
+    "semantic_hash": "f1ae03e853ccd82c151acac4eaac78b8"
+  },
+  "src/DevOpsAgent.Application/Monitoring/RollupService.cs": {
+    "mtime": 1794650795.310039,
+    "seen": 1794653221.4306712,
+    "ast_hash": "6925a39b5bbbcfddc12981446f6f72cb",
+    "semantic_hash": "6925a39b5bbbcfddc12981446f6f72cb"
+  },
+  "src/DevOpsAgent.Domain/Monitoring/Alert.cs": {
+    "mtime": 1794651741.4598517,
+    "seen": 1794653221.430728,
+    "ast_hash": "3c4527c918ea028182eb4361d3641b23",
+    "semantic_hash": "3c4527c918ea028182eb4361d3641b23"
+  },
+  "src/DevOpsAgent.Domain/Monitoring/HealthCheck.cs": {
+    "mtime": 1794650937.7954285,
+    "seen": 1794653221.4307299,
+    "ast_hash": "a6d5559af80af67b90a8c433d670d241",
+    "semantic_hash": "a6d5559af80af67b90a8c433d670d241"
+  },
+  "src/DevOpsAgent.Domain/Monitoring/MetricRollup.cs": {
+    "mtime": 1794649649.1597824,
+    "seen": 1794653221.4307318,
+    "ast_hash": "16e6f37d5c082580153350cee6417096",
+    "semantic_hash": "16e6f37d5c082580153350cee6417096"
+  },
+  "src/DevOpsAgent.Domain/Monitoring/MetricSample.cs": {
+    "mtime": 1794649649.1594234,
+    "seen": 1794653221.4307337,
+    "ast_hash": "b7209951b8e7a576519718b4861df705",
+    "semantic_hash": "b7209951b8e7a576519718b4861df705"
+  },
+  "src/DevOpsAgent.Infrastructure/Migrations/20261114095008_AddMetricSamples.Designer.cs": {
+    "mtime": 1794649808.3669708,
+    "seen": 1794653221.4308498,
+    "ast_hash": "72d01d91f0e3eacaa782db7a9abd9686",
+    "semantic_hash": "72d01d91f0e3eacaa782db7a9abd9686"
+  },
+  "src/DevOpsAgent.Infrastructure/Migrations/20261114095008_AddMetricSamples.cs": {
+    "mtime": 1794649808.3667076,
+    "seen": 1794653221.4308522,
+    "ast_hash": "4d7b0b83d36ec12b1d83e0622a3e213d",
+    "semantic_hash": "4d7b0b83d36ec12b1d83e0622a3e213d"
+  },
+  "src/DevOpsAgent.Infrastructure/Migrations/20261114101159_AddHealthChecks.Designer.cs": {
+    "mtime": 1794651119.9419131,
+    "seen": 1794653221.4308538,
+    "ast_hash": "473b423de0647f4e3a4ccb103054cea6",
+    "semantic_hash": "473b423de0647f4e3a4ccb103054cea6"
+  },
+  "src/DevOpsAgent.Infrastructure/Migrations/20261114101159_AddHealthChecks.cs": {
+    "mtime": 1794651119.940648,
+    "seen": 1794653221.430856,
+    "ast_hash": "6f0568c5b6ef35e2251251401c26d9bd",
+    "semantic_hash": "6f0568c5b6ef35e2251251401c26d9bd"
+  },
+  "src/DevOpsAgent.Infrastructure/Migrations/20261114103030_AddAlerts.Designer.cs": {
+    "mtime": 1794652230.2098029,
+    "seen": 1794653221.4308577,
+    "ast_hash": "338b1730237cb06c1f2bf755c0389c4d",
+    "semantic_hash": "338b1730237cb06c1f2bf755c0389c4d"
+  },
+  "src/DevOpsAgent.Infrastructure/Migrations/20261114103030_AddAlerts.cs": {
+    "mtime": 1794652230.2095764,
+    "seen": 1794653221.4308598,
+    "ast_hash": "18f13688d4f46bdd6f1d47fa6daddefe",
+    "semantic_hash": "18f13688d4f46bdd6f1d47fa6daddefe"
+  },
+  "src/DevOpsAgent.Infrastructure/Monitoring/AlertSignalSource.cs": {
+    "mtime": 1794652204.8385484,
+    "seen": 1794653221.4308639,
+    "ast_hash": "58ba4f1f7ecabbe4fc181eb753b1f857",
+    "semantic_hash": "58ba4f1f7ecabbe4fc181eb753b1f857"
+  },
+  "src/DevOpsAgent.Infrastructure/Monitoring/HealthProbe.cs": {
+    "mtime": 1794651051.3930175,
+    "seen": 1794653221.430866,
+    "ast_hash": "6a032c54d6057536199c9c0c519993ee",
+    "semantic_hash": "6a032c54d6057536199c9c0c519993ee"
+  },
+  "src/DevOpsAgent.Infrastructure/Monitoring/RemoteServiceStatusParser.cs": {
+    "mtime": 1794652159.432774,
+    "seen": 1794653221.4308677,
+    "ast_hash": "c6900ef96e4f56e1de70ef28000c7e28",
+    "semantic_hash": "c6900ef96e4f56e1de70ef28000c7e28"
+  },
+  "src/DevOpsAgent.Infrastructure/Persistence/AlertRepository.cs": {
+    "mtime": 1794652347.4798393,
+    "seen": 1794653221.4308748,
+    "ast_hash": "9ed252f123f1dbbdb0f606a00f3b2220",
+    "semantic_hash": "9ed252f123f1dbbdb0f606a00f3b2220"
+  },
+  "src/DevOpsAgent.Infrastructure/Persistence/HealthCheckRepository.cs": {
+    "mtime": 1794651051.3919418,
+    "seen": 1794653221.430886,
+    "ast_hash": "97f63817a83ef5404ff7eb18021b2628",
+    "semantic_hash": "97f63817a83ef5404ff7eb18021b2628"
+  },
+  "src/DevOpsAgent.Infrastructure/Persistence/MetricRepository.cs": {
+    "mtime": 1794650795.311039,
+    "seen": 1794653221.4308908,
+    "ast_hash": "b7dd4eed4f360701386f169db4985f94",
+    "semantic_hash": "b7dd4eed4f360701386f169db4985f94"
+  },
+  "src/DevOpsAgent.Web/Components/Pages/ServerDetail.razor": {
+    "mtime": 1794651212.88325,
+    "seen": 1794653221.4309583,
+    "ast_hash": "29c50267483fed573c738067d0b74592",
+    "semantic_hash": "29c50267483fed573c738067d0b74592"
+  },
+  "src/DevOpsAgent.Web/Hosted/AlertEngineHostedService.cs": {
+    "mtime": 1794651833.0133965,
+    "seen": 1794653221.4310088,
+    "ast_hash": "be08ef4061b9c14b61700949fbf5a201",
+    "semantic_hash": "be08ef4061b9c14b61700949fbf5a201"
+  },
+  "src/DevOpsAgent.Web/Hosted/HealthCheckHostedService.cs": {
+    "mtime": 1794651069.9478624,
+    "seen": 1794653221.431013,
+    "ast_hash": "f403410380dbeed57cc699bd6be9a045",
+    "semantic_hash": "f403410380dbeed57cc699bd6be9a045"
+  },
+  "src/DevOpsAgent.Web/Hosted/MetricPollerService.cs": {
+    "mtime": 1794649731.7540245,
+    "seen": 1794653221.431015,
+    "ast_hash": "0f70cf491fe2f0043dd180a4f0f917ee",
+    "semantic_hash": "0f70cf491fe2f0043dd180a4f0f917ee"
+  },
+  "src/DevOpsAgent.Web/Hosted/MetricRollupHostedService.cs": {
+    "mtime": 1794649731.7540245,
+    "seen": 1794653221.4310167,
+    "ast_hash": "6681a98179a18f081e6e7cfd3b6f0fc1",
+    "semantic_hash": "6681a98179a18f081e6e7cfd3b6f0fc1"
+  },
+  "tests/DevOpsAgent.Tests/AlertServiceTests.cs": {
+    "mtime": 1794651922.458952,
+    "seen": 1794653221.4310577,
+    "ast_hash": "7412c42b643cee81d84003cc79f18181",
+    "semantic_hash": "7412c42b643cee81d84003cc79f18181"
+  },
+  "tests/DevOpsAgent.Tests/HealthCheckServiceTests.cs": {
+    "mtime": 1794651291.1619146,
+    "seen": 1794653221.4310896,
+    "ast_hash": "e6878e540b5b075f48f7b83ec1f2a193",
+    "semantic_hash": "e6878e540b5b075f48f7b83ec1f2a193"
+  },
+  "tests/DevOpsAgent.Tests/MetricRepositoryTests.cs": {
+    "mtime": 1794650795.311039,
+    "seen": 1794653221.4311013,
+    "ast_hash": "331e748785b85adf0ca4cdc1e2187420",
+    "semantic_hash": "331e748785b85adf0ca4cdc1e2187420"
+  },
+  "tests/DevOpsAgent.Tests/MetricServiceTests.cs": {
+    "mtime": 1794650077.0473568,
+    "seen": 1794653221.4311035,
+    "ast_hash": "3ed0e6c5bc5d888ea2e1a876c3ba1a6a",
+    "semantic_hash": "3ed0e6c5bc5d888ea2e1a876c3ba1a6a"
+  },
+  "tests/DevOpsAgent.Tests/MetricsParserTests.cs": {
+    "mtime": 1794651997.3765795,
+    "seen": 1794653221.4311054,
+    "ast_hash": "29bce262ac81103471bcbfe5714ea394",
+    "semantic_hash": "29bce262ac81103471bcbfe5714ea394"
+  },
+  "tests/DevOpsAgent.Tests/RemoteServiceStatusParserTests.cs": {
+    "mtime": 1794652191.1946163,
+    "seen": 1794653221.43111,
+    "ast_hash": "50cc204e7ef19ba3584c467cd0ee6515",
+    "semantic_hash": "50cc204e7ef19ba3584c467cd0ee6515"
+  },
+  "tests/DevOpsAgent.Tests/Fixtures/metrics-sample-1.txt": {
+    "mtime": 1794651997.3755796,
+    "seen": 1794653221.431184,
+    "ast_hash": "c9dee7b14282da27b1767d01c43b0df7",
+    "semantic_hash": "c9dee7b14282da27b1767d01c43b0df7"
+  },
+  "tests/DevOpsAgent.Tests/Fixtures/metrics-sample-2.txt": {
+    "mtime": 1794651997.3765795,
+    "seen": 1794653221.4311864,
+    "ast_hash": "a8aa1afac829c9c0edaf60beeb3f6df3",
+    "semantic_hash": "a8aa1afac829c9c0edaf60beeb3f6df3"
+  },
+  "tests/DevOpsAgent.Tests/Fixtures/remote-service-status.txt": {
+    "mtime": 1794652191.1946163,
+    "seen": 1794653221.431191,
+    "ast_hash": "04c2ba42a94626d565cd594bc7ca3264",
+    "semantic_hash": "04c2ba42a94626d565cd594bc7ca3264"
   }
 }
