@@ -62,6 +62,16 @@ public sealed class JsonToolProtocolTests
     [InlineData("Authorization: ApiKey k3y-value-12345", "k3y-value-12345")]
     [InlineData("authorization: apikey k3y-value-12345", "k3y-value-12345")]
     [InlineData("Authorization: Digest username=\"bob\", realm=\"r\", response=\"6629fae49393a05397450978507c4ef1\"", "6629fae49393a05397450978507c4ef1")]
+    [InlineData("dbpassword=hunter2pw", "hunter2pw")]
+    [InlineData("accesstoken: tok_abcdef123", "tok_abcdef123")]
+    [InlineData("SECRETKEY=wJalrXUtnFEMI", "wJalrXUtnFEMI")]
+    [InlineData("privatekey=abcDEF123456", "abcDEF123456")]
+    [InlineData("db_pass=s3cr3tpw", "s3cr3tpw")]
+    [InlineData("pass: s3cr3tpw", "s3cr3tpw")]
+    [InlineData("dbPass=s3cr3tpw", "s3cr3tpw")]
+    [InlineData("passphrase=correct-horse", "correct-horse")]
+    [InlineData("DATABASE_URL=postgres://app:s3cr3tpw@db.internal:5432/app", "s3cr3tpw")]
+    [InlineData("git clone https://ci:ghp_abcdef123456@github.com/org/repo.git", "ghp_abcdef123456")]
     [InlineData("X-Api-Token: tok_live_123456", "tok_live_123456")]
     [InlineData("{\"clientSecret\": \"it's a \\\"quoted\\\" secret\"}", "quoted")]
     [InlineData("{\"apiKey\": 123456789}", "123456789")]
@@ -91,6 +101,8 @@ public sealed class JsonToolProtocolTests
     [InlineData("Basic monitoring is enabled; the Bearer of bad news arrived")]
     [InlineData("The token count is high and the password policy is documented")]
     [InlineData("keyboard=us monkey=banana author=ops")]
+    [InlineData("compass=north bypass=true token2=abc123 tokens=12 PWD=/srv")]
+    [InlineData("clone https://github.com/org/repo.git or ssh://git@github.com/org/repo.git")]
     public void LeavesNamesAndProseThatOnlyContainSecretWordsAlone(string input) =>
         Assert.Equal(input, ChatContentRedactor.Redact(input));
 

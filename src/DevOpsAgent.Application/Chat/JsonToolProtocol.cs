@@ -43,6 +43,11 @@ public static partial class ChatContentRedactor
         "secret", "secrets", "token", "password", "passwd", "passphrase", "credential", "credentials", "authorization", "apikey"
     };
 
+    // Compound names that run the words together (dbpassword, accesstoken, secretkey, privatekey) end with a secret word.
+    // "pass" only counts as a whole name or a final segment (db_pass), so compass or bypass are left alone; "tokens" is not "token".
+    private static readonly string[] SecretSuffixes =
+        ["password", "passwd", "passphrase", "token", "secret", "apikey", "privatekey", "accesskey", "secretkey", "credential", "credentials"];
+
     private static readonly (string First, string Second)[] SecretPairs =
         [("api", "key"), ("access", "key"), ("private", "key"), ("secret", "key")];
 
@@ -61,6 +66,11 @@ public static partial class ChatContentRedactor
     private static partial Regex BearerToken();
 
     // Digest credentials are a list of quoted parameters, so the rest of the header line is masked.
+    // scheme://user:password@host -> scheme://user:[REDACTED]@host (connection strings, clone URLs).
+    [GeneratedRegex("(?<prefix>[A-Za-z][A-Za-z0-9+.\\-]{0,31}://[^\\s:/@]{0,256}):[^\\s@/]{1,256}@",
+        RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 2000)]
+    private static partial Regex UrlUserInfo();
+
     [GeneratedRegex("(?<head>Authorization[ \\t]{0,8}[:=][ \\t]{0,8}\\\"?Digest)[ \\t]{1,8}[^\\r\\n]{1,4096}",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 2000)]
     private static partial Regex DigestHeader();
@@ -77,6 +87,7 @@ public static partial class ChatContentRedactor
         try
         {
             value = PrivateKey().Replace(value, "[REDACTED PRIVATE KEY]");
+            value = UrlUserInfo().Replace(value, "${prefix}:[REDACTED]@");
             value = DigestHeader().Replace(value, "${head} [REDACTED]");
             value = BearerToken().Replace(value, "${scheme} [REDACTED]");
             return Assignment().Replace(value, Mask);
@@ -112,6 +123,8 @@ public static partial class ChatContentRedactor
     private static bool IsSecretName(string name)
     {
         var tokens = NameSegments().Split(name).Where(token => token.Length > 0).ToArray();
+        if (tokens.Length > 0 && tokens[^1].Equals("pass", StringComparison.OrdinalIgnoreCase)) return true;
+        if (SecretSuffixes.Any(suffix => name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))) return true;
         for (var index = 0; index < tokens.Length; index++)
         {
             if (SecretSegments.Contains(tokens[index])) return true;
