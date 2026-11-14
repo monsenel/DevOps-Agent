@@ -6,13 +6,13 @@
 
 ## Current
 
-- **Task:** T6.3 Agent chat with tools
-- **Status:** done
+- **Task:** Owner-requested fixed full-height sidebar
+- **Status:** in-progress
 - **Last updated:** 2026-11-14 by Codex
 
 ## WIP notes
 
-T6.3/J4 is complete: OpenRouter and Ollama both streamed tool results; `list_servers` was visible in chat and `run_shell` required an explicit approval card. The approved harmless `printf` command succeeded with exit 0 under both providers and both entries appeared in Action log. The streamed JSON fallback now dispatches calls when `assistant.Text` is empty; build passed with 0 warnings/errors and 79/79 tests. M5 remains deferred, so live alert/metrics context is unavailable. Owner-requested sidebar layout change is next; after that remove temporary app/SSH/Ollama state and update Graphify. T5.1–T5.5 remain deferred at the owner's direction. T6.4 depends on deferred T5.3; T6.6 remains blocked by unresolved T6.4 and earlier acceptance.
+T6.3/J4 is complete: OpenRouter and Ollama both streamed tool results; `list_servers` was visible in chat and `run_shell` required an explicit approval card. The approved harmless `printf` command succeeded with exit 0 under both providers and both entries appeared in Action log. The streamed JSON fallback now dispatches calls when `assistant.Text` is empty; build passed with 0 warnings/errors and 79/79 tests. M5 remains deferred, so live alert/metrics context is unavailable. Owner requested a fixed sidebar at full viewport height. The existing design spec prohibits this, so supersede that layout rule and implement a fixed desktop sidebar with a full-height viewport; keep the compact stacked mobile layout. Exact next step: update CSS, DESIGN.md, and DECISIONS.md, then inspect desktop/mobile in both themes; clean temporary test services and update Graphify. T5.1–T5.5 remain deferred; T6.4 remains blocked by T5.3 and T6.6 by unresolved prerequisites.
 
 ## Blockers
 
@@ -84,7 +84,8 @@ One line per session: date · tool/model · tasks touched · result.
 
 - 2026-11-14 · Codex / GPT-6 · started T0.8 · owner supplied an OpenRouter key; checking local Ollama and resuming live basic-chat acceptance in temporary app storage
 - 2026-11-14 · Codex / GPT-6 · T0.8 · fixed native tool schema lifetime; build passed with 0 warnings/errors and 78/78 tests; qwen2.5:0.5b and OpenRouter free route streamed replies and survived reload
-- 2026-11-14 · Codex / GPT-6 · T6.3 · fixed streamed JSON fallback dispatch; build passed with 0 warnings/errors and 79/79 tests; J4 tool calls and explicit approval passed with OpenRouter and Ollama; next owner-requested fixed full-height sidebar change
+- 2026-11-14 · Codex / GPT-6 · T6.3 · fixed streamed JSON fallback dispatch; build passed with 0 warnings/errors and 79/79 tests; J4 tool calls and explicit approval passed with OpenRouter and Ollama
+- 2026-11-14 · Codex / GPT-6 · started owner-requested sidebar layout · desktop sidebar must be fixed/full-viewport-height; preserve mobile stacking and reconcile DESIGN.md rule
 
 - 2026-11-14 · Codex / GPT-6 · T6.5 · J6 steps 1–3 passed on disposable Debian apt target; security and standard updates classified, explicit approval executed both, report exit 0/no restarts/reboot false, follow-up scan showed 0 pending; temporary test environment removed
 
