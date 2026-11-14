@@ -2,7 +2,11 @@ namespace DevOpsAgent.Application.Discovery;
 
 public sealed record NginxDiscoveryResult(
     IReadOnlyList<NginxServerInfo> Servers,
-    IReadOnlyList<NginxUpstreamInfo> Upstreams);
+    IReadOnlyList<NginxUpstreamInfo> Upstreams)
+{
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> NameResolutions { get; init; } =
+        new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+}
 
 public sealed record NginxServerInfo(
     string Context,

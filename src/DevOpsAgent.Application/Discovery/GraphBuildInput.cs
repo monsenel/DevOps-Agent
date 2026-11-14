@@ -7,7 +7,8 @@ public sealed record ServerDiscoveryData(
     HostDiscoveryResult? Host,
     ListenerDiscoveryResult? Listeners,
     DockerDiscoveryResult? Docker,
-    SystemdDiscoveryResult? Systemd);
+    SystemdDiscoveryResult? Systemd,
+    NginxDiscoveryResult? Nginx = null);
 
 public sealed record GraphBuildResult(
     IReadOnlyList<DevOpsAgent.Domain.Graph.GraphNode> Nodes,

@@ -16,10 +16,16 @@ What is done so far:
 - T2.7 is implemented and committed as `4d053ee`; synthetic two-host browser verification passed, but its real SSH acceptance remains blocked until authorized hosts and pinned keys are available.
 - T3.1 is complete and committed as `f1dd838`; all 33 tests pass.
 - T3.2's plan, PRD resolution order, graph builder, discovery records, and nginx parse result are reviewed.
+- T3.2 checkpoint: added `NginxCollector`, read-only config collection, and source-server `getent hosts` enrichment; added nginx data to graph-build input and DI. Build passes with zero warnings/errors.
 What is next (exact next step):
-- Define the resolver input and output, then add domain nodes, declared edges, and source evidence to the graph build with tests for each resolution path.
+- Implement `EdgeResolver` for upstream expansion, shared Docker DNS, `/etc/hosts`, `getent`, IP ownership, listeners/published ports, and Unknown fallback; then integrate domain and declared-edge evidence in `GraphBuilder`.
 Files touched:
 - `docs/PROGRESS.md`
+- `src/DevOpsAgent.Application/Discovery/DiscoveryService.cs`
+- `src/DevOpsAgent.Application/Discovery/GraphBuildInput.cs`
+- `src/DevOpsAgent.Application/Discovery/NginxDiscoveryResult.cs`
+- `src/DevOpsAgent.Infrastructure/Collectors/NginxCollector.cs`
+- `src/DevOpsAgent.Infrastructure/Persistence/PersistenceServiceCollectionExtensions.cs`
 Gotchas found:
 - T1.2 live direct/jump SSH verification remains deferred by owner direction; its status stays blocked.
 - T2.7's real two-server discovery criterion cannot be verified until authorized targets and pinned keys are configured; the browser check used a temporary synthetic persisted graph.
