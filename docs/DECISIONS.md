@@ -81,3 +81,8 @@ Format: `D-<number> · <date> · <title>` then Decision / Why / Consequences.
 - **Decision:** Proceed with T2.1 using the implemented SSH abstractions and automated tests while deferring T1.2's live direct-host and jump-host checks.
 - **Why:** No authorized test hosts, identity keys, or pinned `known_hosts` entries are available, and the owner directed that work continue.
 - **Consequences:** Keep T1.2 marked blocked until both live paths are tested; do not treat automated tests as proof of live connectivity.
+
+### D-020 · 2026-11-14 · Vendor Cytoscape graph runtime and ELK layout
+- **Decision:** Vendor Cytoscape.js 3.35.0 (MIT), cytoscape-elk 2.4.0 (MIT), and elkjs 0.12.1 (EPL-2.0 OR GPL-3.0-or-later) under `src/DevOpsAgent.Web/wwwroot/lib`.
+- **Why:** T2.7 requires an offline-capable compound graph with ELK layered layout; the versions were checked against the package manifests and adapter README.
+- **Consequences:** Keep each package's license text beside its browser bundle. The app does not add a runtime npm install or package manifest.

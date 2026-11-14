@@ -14,11 +14,13 @@
 
 What is done so far:
 - T2.6 is complete and committed as `95a461a`; discovery now persists stable graph nodes, network attachments, listeners, and evidence, with service/network JSON views.
-- Build passes with zero warnings/errors; all 31 tests pass; topology migration applied to a temporary SQLite database.
+- Resume baseline: `dotnet build DevOpsAgent.slnx` passed with zero warnings/errors and `dotnet test DevOpsAgent.slnx` passed all 31 tests.
+- Topology design and theme requirements and current graph/discovery contracts are reviewed; vendored package versions and licenses are being recorded before implementation.
 What is next (exact next step):
-- Read `docs/DESIGN.md` topology and theme guidance, then vendor Cytoscape and ELK and implement the topology toolbar, graph interop, search/filter/detail interactions, and run-discovery progress UI.
+- Record T2.7's vendored Cytoscape/ELK package versions and licenses in `docs/DECISIONS.md`, then vendor their browser bundles and implement graph interop.
 Files touched:
 - `docs/PROGRESS.md`
+- `docs/DECISIONS.md`
 Gotchas found:
 - T1.2 live direct/jump SSH verification remains deferred by owner direction; its status stays blocked.
 
@@ -120,3 +122,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T2.6 · started
 - 2026-11-14 · Codex / GPT-6 · T2.6 · graph entities/migration, stable-key builder and IP index, discovery integration, Cytoscape-compatible service/network API; migration applied to temp SQLite; build/test pass (31/31)
 - 2026-11-14 · Codex / GPT-6 · T2.7 · started
+- 2026-11-14 · Codex / GPT-6 · resumed T2.7 · clean working tree; build passed with zero warnings/errors and tests passed (31/31); reviewed topology UI requirements and implementation contracts
