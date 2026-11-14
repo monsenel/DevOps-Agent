@@ -96,7 +96,14 @@ public sealed class ExecutionModeService(
                 return Unreadable();
             var policies = new Dictionary<string, ExecutionModePolicy>(StringComparer.OrdinalIgnoreCase);
             foreach (var (group, policy) in values)
-                policies[group] = policy with { AllowedTools = policy.AllowedTools ?? [] };
+            {
+                // Keys are normalised like lookups are (trim + lower). Two keys that collapse to one group would make the
+                // winner arbitrary (possibly the weaker mode), so a collision, like a blank key, is treated as corrupt.
+                var normalized = group.Trim().ToLowerInvariant();
+                if (normalized.Length == 0 || !policies.TryAdd(normalized, policy with { Group = normalized, AllowedTools = policy.AllowedTools ?? [] }))
+                    return Unreadable();
+            }
+
             return (policies, false);
         }
         catch (JsonException)

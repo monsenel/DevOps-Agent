@@ -296,6 +296,39 @@ public sealed class AgentToolPolicyTests
     }
 
     [Fact]
+    public async Task StoredKeysAreNormalisedOnReadSoMixedCaseKeysStillApply()
+    {
+        await using var database = await CreateDatabaseAsync();
+        await AddServerAsync(database.Context, "prod");
+        var settings = new AppSettingRepository(database.Context);
+        await settings.SetAsync("agent.execution-modes",
+            "{\" Prod \":{\"group\":\" Prod \",\"mode\":0,\"allowedTools\":[]}}", CancellationToken.None);
+        var service = new ExecutionModeService(settings, new ServerRepository(database.Context), new ToolRegistry(), NullLogger<ExecutionModeService>.Instance);
+
+        Assert.False(await service.IsStoredSettingUnreadableAsync(CancellationToken.None));
+        Assert.Equal(ExecutionMode.ReadOnly, (await service.GetForGroupAsync("prod", CancellationToken.None)).Mode);
+        Assert.Equal(ExecutionMode.ReadOnly, (await service.GetForGroupAsync("PROD", CancellationToken.None)).Mode);
+        Assert.Equal("prod", Assert.Single(await service.ListAsync(CancellationToken.None)).Group);
+    }
+
+    [Theory]
+    [InlineData("{\"prod\":{\"group\":\"prod\",\"mode\":0,\"allowedTools\":[]},\"PROD\":{\"group\":\"PROD\",\"mode\":2,\"allowedTools\":[]}}")]
+    [InlineData("{\"prod\":{\"group\":\"prod\",\"mode\":0,\"allowedTools\":[]},\" prod\":{\"group\":\"prod\",\"mode\":1,\"allowedTools\":[]}}")]
+    [InlineData("{\"  \":{\"group\":\"x\",\"mode\":1,\"allowedTools\":[]}}")]
+    public async Task CollidingOrBlankNormalisedKeysAreTreatedAsCorrupt(string stored)
+    {
+        await using var database = await CreateDatabaseAsync();
+        await AddServerAsync(database.Context, "prod");
+        var settings = new AppSettingRepository(database.Context);
+        await settings.SetAsync("agent.execution-modes", stored, CancellationToken.None);
+        var service = new ExecutionModeService(settings, new ServerRepository(database.Context), new ToolRegistry(), NullLogger<ExecutionModeService>.Instance);
+
+        Assert.True(await service.IsStoredSettingUnreadableAsync(CancellationToken.None));
+        // Fail closed: the weaker colliding entry must not win.
+        Assert.Equal(ExecutionMode.ReadOnly, (await service.GetForGroupAsync("prod", CancellationToken.None)).Mode);
+    }
+
+    [Fact]
     public async Task AutomaticModeRequiresToolAllowlistAndReadOnlyGroupBlocksChanges()
     {
         await using var database = await CreateDatabaseAsync();
