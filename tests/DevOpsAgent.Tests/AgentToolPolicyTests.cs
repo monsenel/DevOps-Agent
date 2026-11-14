@@ -72,6 +72,13 @@ public sealed class AgentToolPolicyTests
     [InlineData("read_file", "/etc/nginx/.htpasswd")]
     [InlineData("read_file", "/etc/letsencrypt/live/example.com/privkey.pem")]
     [InlineData("read_file", "/etc/pki/tls/server-key.pem")]
+    [InlineData("read_file", "/etc/nginx/tls/server.pem")]
+    [InlineData("read_file", "/etc/nginx/tls/combined.pem")]
+    [InlineData("read_file", "/srv/app/tls.PEM")]
+    [InlineData("read_file", "/srv/app/identity.p12")]
+    [InlineData("read_file", "/srv/app/identity.PFX")]
+    [InlineData("read_file", "/srv/app/truststore.jks")]
+    [InlineData("read_file", "/srv/app/app.keystore")]
     public void FileToolsRejectSensitivePaths(string tool, string path)
     {
         var registry = new ToolRegistry();
@@ -88,6 +95,10 @@ public sealed class AgentToolPolicyTests
     [InlineData("read_file", "/home/deploy/ssh-notes.txt")]
     [InlineData("read_file", "/etc/letsencrypt/live/example.com/fullchain.pem")]
     [InlineData("read_file", "/etc/letsencrypt/live/example.com/cert.pem")]
+    [InlineData("read_file", "/etc/letsencrypt/live/example.com/chain.pem")]
+    [InlineData("read_file", "/etc/ssl/certs/ca.pem")]
+    [InlineData("read_file", "/etc/ssl/certs/ca-bundle.pem")]
+    [InlineData("read_file", "/etc/ssl/certs/site.crt")]
     [InlineData("read_file", "/etc/ssh/ssh_host_ed25519_key.pub")]
     [InlineData("read_file", "/etc/ssh/sshd_config")]
     [InlineData("read_file", "/proc/cpuinfo")]

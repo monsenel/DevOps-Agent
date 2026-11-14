@@ -39,6 +39,7 @@ public static class SensitivePathPolicy
         if (KeyFilePrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             || name.EndsWith(".key", StringComparison.OrdinalIgnoreCase)
             || IsPrivateKeyPem(name)
+            || IsKeyContainer(name)
             || name.StartsWith("ssh_host_", StringComparison.Ordinal) && name.EndsWith("_key", StringComparison.Ordinal))
             return "Reading private key files is not allowed.";
 
@@ -74,10 +75,17 @@ public static class SensitivePathPolicy
         return null;
     }
 
-    // Public certificates (fullchain.pem, cert.pem, chain.pem) stay readable; only key-looking PEM names are blocked.
+    // PEM files may hold private keys (or key + certificate bundles), so every .pem is blocked except well-known public names.
+    // *.crt stays readable. Keystore containers always hold private keys.
+    private static readonly string[] PublicPemNames = ["fullchain.pem", "cert.pem", "chain.pem", "ca.pem", "ca-bundle.pem"];
+    private static readonly string[] KeyContainerSuffixes = [".p12", ".pfx", ".jks", ".keystore"];
+
     private static bool IsPrivateKeyPem(string name) =>
         name.EndsWith(".pem", StringComparison.OrdinalIgnoreCase)
-        && (name.StartsWith("privkey", StringComparison.OrdinalIgnoreCase) || name.Contains("key", StringComparison.OrdinalIgnoreCase));
+        && !PublicPemNames.Contains(name, StringComparer.OrdinalIgnoreCase);
+
+    private static bool IsKeyContainer(string name) =>
+        KeyContainerSuffixes.Any(suffix => name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
 
     public static void EnsureAllowed(string? path)
     {
