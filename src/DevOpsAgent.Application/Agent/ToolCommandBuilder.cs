@@ -15,6 +15,7 @@ public sealed class ToolCommandBuilder(ToolRegistry tools)
         return typed switch
         {
             RestartServiceArgs value => new($"systemctl restart -- {Quote(value.Unit)}", true),
+            RestartContainerArgs value => new($"docker restart -- {Quote(value.Container)}", false),
             ApplyUpdatesArgs value => new(BuildApplyUpdates(value), true),
             BlockIpArgs value => new(BuildBlockIp(value), true),
             UnblockIpArgs value => new(BuildUnblockIp(value), true),
@@ -35,8 +36,10 @@ public sealed class ToolCommandBuilder(ToolRegistry tools)
             ("docker_logs", DockerLogsArgs value) => new($"docker logs --tail {value.Tail} {Quote(value.Container)} 2>&1", false),
             ("tail_log", TailLogArgs value) => new($"tail -n {value.Lines} -- {Quote(value.Path)}", false),
             ("read_file", ReadFileArgs value) => new($"head -c {value.MaxBytes} -- {Quote(value.Path)}", false),
-            ("disk_usage", DiskUsageArgs { Path: not null } value) => new($"df -P -- {Quote(value.Path)}", false),
-            ("disk_usage", DiskUsageArgs) => new("df -P", false),
+            ("disk_usage", DiskUsageArgs { Path: not null } value) => new(
+                $"df -P -- {Quote(value.Path)}; printf '%s\\n' 'Top-level disk usage:'; timeout 90s du -x -h --max-depth=1 -- {Quote(value.Path)} 2>/dev/null | sort -hr | head -20", true),
+            ("disk_usage", DiskUsageArgs) => new(
+                "df -P; printf '%s\\n' 'Top-level disk usage:'; timeout 90s du -x -h --max-depth=1 / 2>/dev/null | sort -hr | head -20", true),
             ("list_updates", ListUpdatesArgs) => new(
                 "if command -v apt >/dev/null 2>&1; then apt list --upgradable 2>/dev/null; "
                 + "elif command -v dnf >/dev/null 2>&1; then dnf check-update; "

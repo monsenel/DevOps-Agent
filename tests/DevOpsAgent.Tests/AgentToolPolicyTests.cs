@@ -15,9 +15,9 @@ public sealed class AgentToolPolicyTests
     {
         var registry = new ToolRegistry();
 
-        Assert.Equal(16, registry.Tools.Count);
+        Assert.Equal(17, registry.Tools.Count);
         Assert.Equal(
-            new[] { "apply_updates", "block_ip", "restart_service", "run_shell", "unblock_ip" },
+            new[] { "apply_updates", "block_ip", "restart_container", "restart_service", "run_shell", "unblock_ip" },
             registry.Tools.Where(tool => tool.Access == ToolAccess.Mutating).Select(tool => tool.Name).Order().ToArray());
         Assert.True(registry.TryGet("run_shell", out var shell));
         Assert.True(shell.RequiresApproval);
@@ -33,6 +33,7 @@ public sealed class AgentToolPolicyTests
         Assert.Throws<ArgumentException>(() => registry.ValidateArguments("restart_service", Json("{\"unit\":\"nginx; reboot\"}")));
         Assert.Throws<ArgumentException>(() => registry.ValidateArguments("block_ip", Json("{\"address\":\"10.0.0.1; reboot\"}")));
         Assert.Throws<ArgumentException>(() => registry.ValidateArguments("apply_updates", Json("{\"packages\":[\"nginx; reboot\"]}")));
+        Assert.Throws<ArgumentException>(() => registry.ValidateArguments("restart_container", Json("{\"container\":\"web; reboot\"}")));
         Assert.Throws<ArgumentException>(() => registry.ValidateArguments("missing_tool", Json("{}")));
         Assert.Equal("nginx", Assert.IsType<ServiceStatusArgs>(registry.ValidateArguments(
             "service_status", Json("{\"unit\":\"nginx\"}"))).Unit);
@@ -70,6 +71,22 @@ public sealed class AgentToolPolicyTests
         Assert.False(command.UseSudo);
         Assert.Contains("docker ps", command.Command, StringComparison.Ordinal);
         Assert.Throws<ArgumentException>(() => registry.ValidateArguments("docker_ps", Json("{\"serverIds\":[]}")));
+    }
+
+    [Fact]
+    public void DiskInspectionIsReadOnlyAndContainerRestartBuildsOneExactCommand()
+    {
+        var registry = new ToolRegistry();
+        var builder = new ToolCommandBuilder(registry);
+        var disk = builder.BuildReadOnly("disk_usage", new DiskUsageArgs());
+        var restart = builder.Build(new ActionRecord("restart_container", "staging", "[]",
+            "{\"container\":\"web\"}", null, DateTimeOffset.UtcNow));
+
+        Assert.True(disk.UseSudo);
+        Assert.Contains("df -P", disk.Command, StringComparison.Ordinal);
+        Assert.Contains("du -x -h --max-depth=1 /", disk.Command, StringComparison.Ordinal);
+        Assert.False(restart.UseSudo);
+        Assert.Equal("docker restart -- 'web'", restart.Command);
     }
 
     [Fact]

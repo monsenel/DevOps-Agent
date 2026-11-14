@@ -35,6 +35,7 @@ public sealed class ToolRegistry
             Define<RunDiscoveryArgs>("run_discovery", "Run read-only discovery and save a snapshot.", ToolAccess.ReadOnly, requiresServer: false),
             Define<ServiceStatusArgs>("service_status", "Read the state of a systemd unit.", ToolAccess.ReadOnly),
             Define<RestartServiceArgs>("restart_service", "Restart a systemd unit.", ToolAccess.Mutating),
+            Define<RestartContainerArgs>("restart_container", "Restart a Docker container. Always requires explicit approval.", ToolAccess.Mutating),
             Define<DockerPsArgs>("docker_ps", "List Docker containers.", ToolAccess.ReadOnly),
             Define<DockerLogsArgs>("docker_logs", "Read recent Docker container logs.", ToolAccess.ReadOnly),
             Define<TailLogArgs>("tail_log", "Read the end of a log file.", ToolAccess.ReadOnly),
@@ -130,6 +131,9 @@ public sealed record ReadFileArgs(
     [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 
 public sealed record DiskUsageArgs([property: StringLength(1024)] string? Path = null,
+    [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
+public sealed record RestartContainerArgs(
+    [property: Required, StringLength(128, MinimumLength = 1), RegularExpression("^[A-Za-z0-9][A-Za-z0-9_.-]*$")] string Container,
     [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 public sealed record ListUpdatesArgs([property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 

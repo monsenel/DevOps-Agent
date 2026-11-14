@@ -1,13 +1,16 @@
 using System.Text.Json;
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Discovery;
+using DevOpsAgent.Domain.Monitoring;
 
 namespace DevOpsAgent.Application.Agent;
 
 public sealed class AgentContextBuilder(
     IServerRepository servers,
     ISnapshotRepository snapshots,
-    IGraphRepository graphs)
+    IGraphRepository graphs,
+    IAlertRepository alerts,
+    IMetricRepository metrics)
 {
     public async Task<string> BuildAsync(string prompt, CancellationToken cancellationToken)
     {
@@ -39,12 +42,41 @@ public sealed class AgentContextBuilder(
             }
         }
 
+        var serverNames = inventory.ToDictionary(server => server.Id, server => server.Name);
+        var activeAlerts = await alerts.ListActiveAsync(cancellationToken);
+        var alertContext = activeAlerts.Select(alert => new
+        {
+            alert.Rule,
+            severity = alert.Severity.ToString(),
+            state = alert.State.ToString(),
+            server = alert.ServerId is Guid serverId && serverNames.TryGetValue(serverId, out var name) ? name : null,
+            alert.Target,
+            alert.Title,
+            alert.Details,
+            alert.LastSeenAtUtc
+        }).ToArray();
+        var metricContext = new List<object>();
+        foreach (var server in matches)
+        {
+            var latestSamples = await metrics.GetLatestAsync(server.Id, cancellationToken);
+            if (latestSamples.Count == 0) continue;
+            var sampledAt = latestSamples.Max(sample => sample.AtUtc);
+            metricContext.Add(new
+            {
+                server = server.Name,
+                sampledAt,
+                values = latestSamples.Where(sample => !sample.Metric.StartsWith('_'))
+                    .OrderBy(sample => sample.Metric, StringComparer.Ordinal)
+                    .Select(sample => new { metric = sample.Metric, sample.Value })
+            });
+        }
+
         return JsonSerializer.Serialize(new
         {
             servers = matches.Select(server => new { server.Id, server.Name, server.Host, server.Group, server.OsInfo }),
             graph = graphSummary,
-            alerts = "Alert context is unavailable because the monitoring phase is deferred.",
-            metrics = "Metric context is unavailable because the monitoring phase is deferred."
+            alerts = alertContext,
+            metrics = metricContext
         });
     }
 }
