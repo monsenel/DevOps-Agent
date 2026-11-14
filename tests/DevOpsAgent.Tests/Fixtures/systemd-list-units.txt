@@ -1,0 +1,4 @@
+nginx.service          loaded active running A high performance web server
+sshd.service           loaded active running OpenBSD Secure Shell server
+postgresql.service     loaded active running PostgreSQL RDBMS
+dbus.service            loaded active running D-Bus System Message Bus

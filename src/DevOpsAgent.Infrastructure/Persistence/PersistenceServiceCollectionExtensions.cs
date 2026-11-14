@@ -35,6 +35,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<ICollector, HostCollector>();
         services.AddSingleton<ICollector, ListenerCollector>();
         services.AddSingleton<ICollector, DockerCollector>();
+        services.AddSingleton<ICollector, SystemdCollector>();
         services.AddSingleton<IServerKeyStore, ServerKeyStore>();
         services.AddSingleton<SshConnectionPool>();
         services.AddSingleton<ISshConnectionPool>(serviceProvider => serviceProvider.GetRequiredService<SshConnectionPool>());

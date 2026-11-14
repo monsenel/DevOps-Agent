@@ -121,9 +121,19 @@ public sealed class DiscoveryService(
 
             var result = collector.Parse(output);
             return result.IsSuccess
-                ? CreateRun(CollectorRunStatus.Succeeded, output.ExitCode, null,
-                    result.Data is { } data ? JsonSerializer.Serialize(data) : null)
+                ? RecordSuccessfulResult()
                 : CreateRun(CollectorRunStatus.Failed, output.ExitCode, result.Error, null);
+
+            CollectorRun RecordSuccessfulResult()
+            {
+                if (result.Data is { } data)
+                {
+                    context.AddResult(collector.Name, data);
+                }
+
+                return CreateRun(CollectorRunStatus.Succeeded, output.ExitCode, null,
+                    result.Data is { } dataResult ? JsonSerializer.Serialize(dataResult) : null);
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

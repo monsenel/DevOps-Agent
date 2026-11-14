@@ -11,7 +11,27 @@ public interface ICollector
     CollectorResult Parse(CollectorOutput output);
 }
 
-public sealed record ServerContext(Server Server, ISshRunner SshRunner);
+public sealed class ServerContext(Server server, ISshRunner sshRunner)
+{
+    private readonly Dictionary<string, JsonElement> previousResults = new(StringComparer.Ordinal);
+
+    public Server Server { get; } = server;
+    public ISshRunner SshRunner { get; } = sshRunner;
+
+    public bool TryGetPreviousResult<T>(string collectorName, out T? result) where T : class
+    {
+        if (previousResults.TryGetValue(collectorName, out var json))
+        {
+            result = json.Deserialize<T>();
+            return result is not null;
+        }
+
+        result = null;
+        return false;
+    }
+
+    internal void AddResult(string collectorName, JsonElement result) => previousResults[collectorName] = result.Clone();
+}
 
 public sealed record CollectorOutput(
     string StandardOutput,
