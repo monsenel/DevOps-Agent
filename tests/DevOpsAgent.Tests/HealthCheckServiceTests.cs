@@ -40,6 +40,25 @@ public sealed class HealthCheckServiceTests
     }
 
     [Fact]
+    public async Task ChecksOfAServerInSshBackoffAreSkippedAndKeepTheirLastResult()
+    {
+        var fixture = new ServiceFixture();
+        _ = await fixture.Service.CreateAsync(fixture.Server.Id,
+            new HealthCheckInput("Web", HealthCheckType.Http, "http://app.example.test/health", 60), CancellationToken.None);
+        await fixture.Service.RunDueAsync(CancellationToken.None);
+
+        // The check is due again (interval 60 s) while the host's first backoff minute has just started.
+        fixture.Clock.Set(fixture.Clock.GetUtcNow().AddSeconds(61));
+        fixture.Reachability.RecordFailure(fixture.Server.Id, new System.Net.Sockets.SocketException());
+        await fixture.Service.RunDueAsync(CancellationToken.None);
+
+        var item = Assert.Single(await fixture.Service.ListAsync(fixture.Server.Id, CancellationToken.None));
+        Assert.Equal(HealthCheckStatus.Healthy, item.Status);
+        Assert.Null(item.Error);
+        Assert.Equal(1, fixture.Probe.Count);
+    }
+
+    [Fact]
     public async Task ScheduledChecksRunOnlyWhenTheirIntervalIsDue()
     {
         var fixture = new ServiceFixture();
@@ -73,13 +92,15 @@ public sealed class HealthCheckServiceTests
         public MutableTimeProvider Clock { get; } = new(DateTimeOffset.UtcNow);
         public FakeProbe Probe { get; } = new();
         public HealthCheckService Service { get; }
+        public DevOpsAgent.Application.Servers.HostReachabilityTracker Reachability { get; }
 
         public ServiceFixture(bool includeGraph = false)
         {
             var snapshots = new FakeSnapshotRepository(includeGraph ? new Snapshot([Server.Id], Clock.GetUtcNow()) : null);
             var graph = includeGraph ? CreateGraph(Server.Id, snapshots.Snapshot!.Id) : null;
+            Reachability = new DevOpsAgent.Application.Servers.HostReachabilityTracker(Clock);
             Service = new HealthCheckService(_checkRepository, new FakeServerRepository(Server), snapshots,
-                new FakeGraphRepository(graph), Probe, new DevOpsAgent.Application.Servers.HostReachabilityTracker(Clock), Clock);
+                new FakeGraphRepository(graph), Probe, Reachability, Clock);
         }
     }
 

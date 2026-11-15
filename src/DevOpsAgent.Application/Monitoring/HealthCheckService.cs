@@ -103,17 +103,11 @@ public sealed class HealthCheckService(
         var enabled = await checks.ListEnabledAsync(cancellationToken);
         var due = enabled.Where(item => item.LastCheckedAtUtc is null ||
             item.LastCheckedAtUtc.Value.AddSeconds(item.IntervalSeconds) <= now).ToArray();
-        var names = (await servers.ListAsync(cancellationToken)).ToDictionary(server => server.Id, server => server.Name);
         using var semaphore = new SemaphoreSlim(MaxParallelProbes);
-        var results = await Task.WhenAll(due.Select(async item =>
+        // A server in SSH backoff is not probed this cycle (T7.R1), and its checks keep their last result: "not probed" is
+        // not a failure, so it must not open a health-check alert for a site that may be fine (the unreachable alert covers the host).
+        var results = await Task.WhenAll(due.Where(item => !reachability.IsBlocked(item.ServerId, out _)).Select(async item =>
         {
-            // A server in SSH backoff is not probed this cycle (T7.R1): the check reports why instead of waiting on a dead host.
-            if (reachability.IsBlocked(item.ServerId, out var backoff))
-            {
-                return (Item: item, Result: new HealthProbeResult(false, null, null,
-                    "Not probed: " + HostUnreachableException.Describe(names.GetValueOrDefault(item.ServerId, "The server"), backoff!)));
-            }
-
             await semaphore.WaitAsync(cancellationToken);
             try
             {
