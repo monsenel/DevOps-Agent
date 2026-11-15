@@ -5,12 +5,19 @@ namespace DevOpsAgent.Application.Servers;
 
 /// <summary>
 /// In-memory per-host backoff: 1 minute after the first failure, doubling per further failure up to 15 minutes. Connection
-/// failures and repeated command timeouts (T7.R17) share the same schedule.
+/// failures and repeated command timeouts (T7.R17) share the same schedule. Login failures (T7.R19) are a state of their
+/// own with a constant 1 minute retry.
 /// </summary>
 public sealed class HostReachabilityTracker(TimeProvider timeProvider) : IHostReachability
 {
     public static readonly TimeSpan InitialBackoff = TimeSpan.FromMinutes(1);
     public static readonly TimeSpan MaximumBackoff = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// A failed login is retried every minute, never less often (T7.R19): it is a configuration problem the owner is about
+    /// to fix, not an outage to be left alone, and each retry is a single cheap handshake.
+    /// </summary>
+    public static readonly TimeSpan AuthFailedBackoff = TimeSpan.FromMinutes(1);
 
     private readonly ConcurrentDictionary<Guid, HostReachabilityState> _states = new();
     // Consecutive command timeouts per host. They outlive a recycled client: the count only ends with a successful command.
@@ -48,7 +55,8 @@ public sealed class HostReachabilityTracker(TimeProvider timeProvider) : IHostRe
         lock (_gate)
         {
             if (!_states.TryGetValue(serverId, out var state)) return;
-            if (state.Kind == HostFailureKind.Connect)
+            // A connection includes the login, so it ends a connection failure and a login failure alike.
+            if (state.Kind is HostFailureKind.Connect or HostFailureKind.AuthFailed)
             {
                 _states.TryRemove(serverId, out _);
                 _timeouts.TryRemove(serverId, out _);
@@ -62,16 +70,22 @@ public sealed class HostReachabilityTracker(TimeProvider timeProvider) : IHostRe
         }
     }
 
-    public HostReachabilityState RecordFailure(Guid serverId, Exception failure)
+    public HostReachabilityState RecordFailure(Guid serverId, Exception failure, string? cause = null)
     {
         ArgumentNullException.ThrowIfNull(failure);
         lock (_gate)
         {
             var now = timeProvider.GetUtcNow();
-            var failures = _states.TryGetValue(serverId, out var previous) ? previous.ConsecutiveFailures + 1 : 1;
+            var kind = failure is SshAuthFailedException ? HostFailureKind.AuthFailed : HostFailureKind.Connect;
+            _states.TryGetValue(serverId, out var previous);
+            // A change between "cannot connect" and "cannot log in" is a new situation: its count and its "since" start over,
+            // so a login failure never inherits the long backoff of an outage (and the other way round).
+            var continuing = previous is not null && (previous.Kind == HostFailureKind.AuthFailed) == (kind == HostFailureKind.AuthFailed);
+            var failures = continuing ? previous!.ConsecutiveFailures + 1 : 1;
             // A host that cannot even be connected to is now unreachable, whatever it was before.
-            return _states[serverId] = new HostReachabilityState(serverId, previous?.UnreachableSinceUtc ?? now,
-                now + BackoffFor(failures), failures, failure.Message, RetryInProgress: false, failure, HostFailureKind.Connect);
+            return _states[serverId] = new HostReachabilityState(serverId, continuing ? previous!.UnreachableSinceUtc : now,
+                now + BackoffFor(kind, failures), failures, failure.Message, RetryInProgress: false, failure, kind,
+                cause ?? (failure is SshAuthFailedException auth ? SshAuthFailedException.Describe(auth.Reason) : null));
         }
     }
 
@@ -83,9 +97,9 @@ public sealed class HostReachabilityTracker(TimeProvider timeProvider) : IHostRe
             var now = timeProvider.GetUtcNow();
             if (_states.TryGetValue(serverId, out var previous))
             {
-                // A connection failure already explains the host; a timeout that was already running when the backoff
-                // began (or when this retry was claimed by another caller) must not escalate it a second time.
-                if (previous.Kind == HostFailureKind.Connect) return null;
+                // A connection or login failure already explains the host; a timeout that was already running when the
+                // backoff began (or when this retry was claimed by another caller) must not escalate it a second time.
+                if (previous.Kind is HostFailureKind.Connect or HostFailureKind.AuthFailed) return null;
                 if (!force && now < previous.NextRetryUtc) return null;
 
                 var failures = previous.ConsecutiveFailures + 1;
@@ -140,6 +154,10 @@ public sealed class HostReachabilityTracker(TimeProvider timeProvider) : IHostRe
             _timeouts.TryRemove(serverId, out _);
         }
     }
+
+    /// <summary>The wait after the <paramref name="consecutiveFailures"/>th failure of the given kind.</summary>
+    public static TimeSpan BackoffFor(HostFailureKind kind, int consecutiveFailures) =>
+        kind == HostFailureKind.AuthFailed ? AuthFailedBackoff : BackoffFor(consecutiveFailures);
 
     public static TimeSpan BackoffFor(int consecutiveFailures)
     {

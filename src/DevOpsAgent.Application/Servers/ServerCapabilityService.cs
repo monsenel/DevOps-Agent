@@ -54,9 +54,14 @@ public sealed class ServerCapabilityService(
         }
         catch (HostUnreachableException exception)
         {
-            // "Test connection" always attempts the route; this is the failure it just recorded, with the new backoff.
+            // "Test connection" always attempts the route; this is the failure it just recorded, with the new backoff and
+            // its real cause (T7.R19): a bad key is reported as a bad key, not as an unreachable host.
+            return new ServerCapabilityResult(serverId, false, null, null, null, [], DescribeFailure(exception), testedAt);
+        }
+        catch (SshAuthFailedException exception)
+        {
             return new ServerCapabilityResult(serverId, false, null, null, null, [],
-                $"{exception.Message} Check the host, identity key, jump server, and pinned host key.", testedAt);
+                $"Authentication failed ({exception.Message}). {AuthHint}", testedAt);
         }
         catch (SshHostKeyMismatchException exception)
         {
@@ -69,6 +74,17 @@ public sealed class ServerCapabilityService(
             return new ServerCapabilityResult(serverId, false, null, null, null, [],
                 "Connection test failed. Check the host, identity key, jump server, and pinned host key.", testedAt);
         }
+    }
+
+    private const string AuthHint = "Check the identity key file, its passphrase, and that the key is authorised for the user on the server.";
+    private const string ConnectHint = "Check the host, identity key, jump server, and pinned host key.";
+
+    // Only safe text: the exception's message is built by the pool from fixed wording and the cause comes from a fixed list.
+    private static string DescribeFailure(HostUnreachableException exception)
+    {
+        if (exception.IsAuthFailure) return $"{exception.Message} {AuthHint}";
+        var cause = string.IsNullOrWhiteSpace(exception.Cause) ? string.Empty : $" Cause: {exception.Cause}.";
+        return $"{exception.Message}{cause} {ConnectHint}";
     }
 
     public static string? ParseOsInfo(string output)

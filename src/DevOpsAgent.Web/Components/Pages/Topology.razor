@@ -135,7 +135,7 @@
                 && StaleCarryForward.Badge(staleAttributes) is string staleBadge)
             {
                 <p class="topology-stale-note"><span class="ui-badge warn">@staleBadge</span>
-                    <span class="muted">The server was unreachable at the last discovery; this is its last known state.</span></p>
+                    <span class="muted">The server could not be reached or logged into at the last discovery (see Servers for the cause); this is its last known state.</span></p>
             }
             <dl class="topology-detail-list">
                 <dt>Kind</dt><dd>@ReadString(selected, "kind")</dd>

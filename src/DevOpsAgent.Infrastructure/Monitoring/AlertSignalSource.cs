@@ -85,6 +85,17 @@ public sealed class AlertSignalSource(
                     $"The host key of {hostKeyMismatch.Host}:{hostKeyMismatch.Port} does not match the pinned key; the connection was refused. "
                     + $"Presented fingerprint: {hostKeyMismatch.Fingerprint ?? "unknown"}. Verify the server before trusting the new key."));
             }
+            else if (remoteStatus is null && unreachable is { IsAuthFailure: true })
+            {
+                // T7.R19: a failed login keeps the connectivity rule (same key, severity and lifecycle) but says what it is, so
+                // the owner fixes the key instead of hunting for a network problem. The text is the pool's fixed wording: no key
+                // file, path, passphrase or user name.
+                result.Add(Condition("server-unreachable", server.Id.ToString("N"), AlertSeverity.High, server.Id, server.Host,
+                    unreachable.ViaJumpServerName is null
+                        ? $"{server.Name}: SSH authentication failed"
+                        : $"{server.Name}: SSH authentication failed on jump host {unreachable.ViaJumpServerName}",
+                    unreachable.Message));
+            }
             else if (remoteStatus is null)
             {
                 result.Add(Condition("server-unreachable", server.Id.ToString("N"), AlertSeverity.High, server.Id, server.Host,

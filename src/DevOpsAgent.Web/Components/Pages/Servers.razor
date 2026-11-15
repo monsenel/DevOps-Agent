@@ -77,8 +77,9 @@
                                     }
                                     else
                                     {
-                                        <span class="ui-badge warn">Unreachable</span>
-                                        <span class="server-reachability">@unreachable</span>
+                                        @* A failed login says so: a bad key is not an unreachable host (T7.R19). *@
+                                        <span class="ui-badge warn">@unreachable.Badge</span>
+                                        <span class="server-reachability">@unreachable.Text</span>
                                     }
                                 </td>
                                 <td>
@@ -436,7 +437,7 @@
 
     private void CloseForm() => _formOpen = false;
 
-    private string? Unreachable(Guid serverId) => ServerReachability.Describe(serverId,
+    private ServerReachabilityStatus? Unreachable(Guid serverId) => ServerReachability.Status(serverId,
         _servers.ToDictionary(server => server.Id, server => (server.Name, server.JumpServerId)), Reachability);
 
     private async Task TestConnectionAsync(Guid id)

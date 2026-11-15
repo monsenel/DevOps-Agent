@@ -37,6 +37,8 @@ public sealed class SshNetTransportFactory(
         string? rejectedFingerprint = null;
         try
         {
+            // The key first: a missing or unusable key is a login failure that needs no tunnel and no network at all.
+            privateKey = LoadPrivateKey(server);
             var host = server.Host;
             var port = server.Port;
             if (jumpTransport is not null)
@@ -53,11 +55,6 @@ public sealed class SshNetTransportFactory(
                 port = checked((int)tunnel.BoundPort);
             }
 
-            var keyPath = keyStore.GetFullPath(server.KeyFile);
-            var passphrase = string.IsNullOrEmpty(server.ProtectedKeyPassphrase)
-                ? null
-                : secretProtector.Unprotect(server.ProtectedKeyPassphrase);
-            privateKey = new PrivateKeyFile(keyPath, passphrase);
             var authentication = new PrivateKeyAuthenticationMethod(server.User, privateKey);
             var connectionInfo = new ConnectionInfo(host, port, server.User, authentication)
             {
@@ -106,6 +103,13 @@ public sealed class SshNetTransportFactory(
             CleanUp();
             throw new SshHostKeyMismatchException(server.Host, server.Port, rejectedFingerprint);
         }
+        catch (Exception exception) when (exception is SshAuthenticationException or SshAuthFailedException)
+        {
+            // The server answered and refused the key (or the key could not be used): a login failure, not an outage. The
+            // library's message is dropped on purpose; only the fixed wording of the reason travels on.
+            CleanUp();
+            throw SshFailureClassifier.AsAuthFailure(exception)!;
+        }
         catch (Exception exception)
         {
             // Disposing an SshClient that is still connecting blocks until its socket gives up (the connect timeout, for a
@@ -128,6 +132,30 @@ public sealed class SshNetTransportFactory(
             {
                 // Best effort: the attempt is over either way and nothing is waiting for the cleanup.
             }
+        }
+    }
+
+    /// <summary>
+    /// Loads the server's identity file. Every way this can fail is a login failure with fixed wording (missing file,
+    /// unreadable file, passphrase needed, wrong passphrase or not a key); the exceptions themselves, which can name the
+    /// file, are not passed on.
+    /// </summary>
+    private PrivateKeyFile LoadPrivateKey(Server server)
+    {
+        try
+        {
+            var keyPath = keyStore.GetFullPath(server.KeyFile);
+            var passphrase = string.IsNullOrEmpty(server.ProtectedKeyPassphrase)
+                ? null
+                : secretProtector.Unprotect(server.ProtectedKeyPassphrase);
+            return new PrivateKeyFile(keyPath, passphrase);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            throw SshFailureClassifier.AsAuthFailure(exception)
+                ?? new SshAuthFailedException(exception is IOException
+                    ? SshAuthFailure.KeyFileUnreadable
+                    : SshAuthFailure.KeyInvalidOrWrongPassphrase);
         }
     }
 }
@@ -159,11 +187,18 @@ public sealed class SshNetTransport(
         return new RemoteCommandResult(sshCommand.ExitStatus, sshCommand.Result, sshCommand.Error, stopwatch.Elapsed);
     }
 
+    private int _disposed;
+
+    /// <summary>
+    /// Closes the client, the tunnel it runs through and the key. Safe to call twice and from several threads, and it never
+    /// throws: it runs during shutdown, where nothing can be done about a failure anyway (T7.R19).
+    /// </summary>
     public void Dispose()
     {
-        Client.Dispose();
-        ReleaseTunnel(tunnel, jump);
-        privateKey.Dispose();
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        try { Client.Dispose(); } catch (Exception) { /* closing a dead connection */ }
+        try { ReleaseTunnel(tunnel, jump); } catch (Exception) { /* the tunnel is gone either way */ }
+        try { privateKey.Dispose(); } catch (Exception) { /* nothing left to release */ }
     }
 
     // Stops the tunnel and detaches it from the jump client, which would otherwise keep every dead tunnel registered.

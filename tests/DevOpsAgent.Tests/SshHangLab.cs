@@ -119,6 +119,8 @@ internal sealed class HostScript
     /// <summary>A connect that outlasts <see cref="ConnectDelay"/>'s token only when it honours cancellation.</summary>
     public bool ConnectHonoursToken { get; set; } = true;
     public bool ConnectNeverEnds { get; set; }
+    /// <summary>When set, a connect fails with this exception once <see cref="ConnectDelay"/> has passed (T7.R19).</summary>
+    public Func<Exception>? ConnectFails { get; set; }
     public CommandMode Commands { get; set; } = CommandMode.Ok;
 }
 
@@ -144,6 +146,7 @@ internal sealed class ScriptedTransports : ISshTransportFactory
         var token = script.ConnectHonoursToken ? cancellationToken : CancellationToken.None;
         if (script.ConnectNeverEnds) await Task.Delay(Timeout.Infinite, token);
         else if (script.ConnectDelay > TimeSpan.Zero) await Task.Delay(script.ConnectDelay, token);
+        if (script.ConnectFails is { } failure) throw failure();
 
         var transport = new ScriptedTransport(this, server.Host, script);
         _created.Enqueue(transport);
