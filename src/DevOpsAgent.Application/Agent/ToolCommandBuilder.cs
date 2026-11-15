@@ -1,4 +1,5 @@
 using System.Text.Json;
+using DevOpsAgent.Application.Updates;
 using DevOpsAgent.Domain.Agent;
 
 namespace DevOpsAgent.Application.Agent;
@@ -41,10 +42,14 @@ public sealed class ToolCommandBuilder(ToolRegistry tools)
                 $"df -P -- {Quote(value.Path)} 2>&1; printf '%s\\n' 'Top-level disk usage:'; timeout 90s du -x -h --max-depth=1 -- {Quote(value.Path)} 2>/dev/null | sort -hr | head -20", true),
             ("disk_usage", DiskUsageArgs) => new(
                 "df -P -- / /var/lib/docker 2>&1; printf '%s\\n' 'Top-level directory usage:'; for path in / /var/lib/docker; do if [ -d \"$path\" ]; then printf '\\n%s\\n' \"$path\"; timeout 90s du -x -h --max-depth=1 -- \"$path\" 2>/dev/null | sort -hr | head -20; fi; done", true),
+            // Read-only on every group: apt reads its cache and dnf runs cache-only (-C), so nothing is refreshed or written.
             ("list_updates", ListUpdatesArgs) => new(
-                "if command -v apt >/dev/null 2>&1; then apt list --upgradable 2>/dev/null; "
-                + "elif command -v dnf >/dev/null 2>&1; then dnf check-update; "
-                + "else printf '%s\\n' 'No supported package manager found.' >&2; exit 127; fi", false),
+                "if command -v apt >/dev/null 2>&1; then apt list --upgradable 2>/dev/null; rc=$?; "
+                + "elif command -v dnf >/dev/null 2>&1; then dnf -C check-update; rc=$?; "
+                + "else printf '%s\\n' 'No supported package manager found.' >&2; exit 127; fi; "
+                + "ts=$(" + PackageListProbe.Command + "); ts=${ts%%.*}; "
+                + "if [ -n \"$ts\" ]; then printf 'Package lists last refreshed: %s\\n' \"$(date -u -d \"@$ts\" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || printf '%s' \"$ts\")\"; "
+                + "else printf '%s\\n' 'Package lists last refreshed: unknown'; fi; exit \"$rc\"", false),
             ("list_bans", ListBansArgs) => new(
                 "if command -v fail2ban-client >/dev/null 2>&1 && fail2ban-client status sshd >/dev/null 2>&1; then fail2ban-client status sshd; "
                 + "elif command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then ufw status numbered; "

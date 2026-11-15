@@ -118,3 +118,8 @@ Format: `D-<number> · <date> · <title>` then Decision / Why / Consequences.
 - **Why:** Owner decision 2026-11-15. Server output is untrusted text and can carry prompt injection; letting a model-chosen tool call run without a human approving the exact command is an unacceptable risk for the MVP.
 - **Consequences:** `ExecutionMode` has no Auto member and `ExecutionModePolicy` has no allowlist. Data written earlier keeps working (Auto becomes Confirm). "Auto within allowlist" moves to the v2 backlog and needs its own design (command pinning, per-tool scopes) before returning.
 
+
+### D-027 · 2026-11-15 · Read-only groups never write on the server
+- **Decision:** `ReadOnly` means no writes on the server at all, including refreshing package metadata. Update scans for servers in a read-only group (or when the execution-mode setting is unreadable and fails closed) run `apt list --upgradable` / `dnf -C check-update` / `dnf -C updateinfo list security` without sudo, and never `apt-get update`. The agent's read-only `list_updates` tool is cache-only on every group. Each scan records when the package lists were last refreshed (newest mtime under `/var/lib/apt/lists`, or the dnf solv cache), and the Updates page shows it, labelled "cached lists only" for read-only groups. Non-read-only groups keep refreshing lists with sudo during scans (T6.5).
+- **Why:** Owner decision 2026-11-15. `apt-get update` rewrites the package cache; a read-only group must not be modified by the app.
+- **Consequences:** Read-only scans can be stale; the last-refreshed time makes that visible. `UpdateScans` gains `CacheOnly` and `PackageListsRefreshedAtUtc` (migration `AddUpdateScanCacheInfo`, additive).

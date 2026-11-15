@@ -343,6 +343,34 @@ public sealed class AgentToolPolicyTests
     }
 
     [Fact]
+    public async Task PackageUpdatesAreDeniedOnReadOnlyGroups()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var server = await AddServerAsync(database.Context, "prod");
+        var executionModes = new ExecutionModeService(new AppSettingRepository(database.Context), new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
+        await executionModes.SaveAsync(new ExecutionModePolicy("prod", ExecutionMode.ReadOnly), CancellationToken.None);
+        var service = new ApprovalService(new ToolRegistry(), executionModes, new ServerRepository(database.Context),
+            new ActionRecordRepository(database.Context), TimeProvider.System);
+
+        var result = await service.EvaluateAsync(new ToolApprovalRequest("apply_updates",
+            Json($"{{\"packages\":[\"nginx\"],\"serverIds\":[\"{server.Id}\"]}}"), [server.Id]), CancellationToken.None);
+
+        Assert.Equal(ToolApprovalState.Denied, result.State);
+        Assert.Empty(await database.Context.ActionRecords.ToListAsync());
+    }
+
+    [Fact]
+    public void ListUpdatesToolNeverRefreshesPackageMetadata()
+    {
+        var command = new ToolCommandBuilder(new ToolRegistry()).BuildReadOnly("list_updates", new ListUpdatesArgs());
+
+        Assert.False(command.UseSudo);
+        Assert.DoesNotContain("apt-get", command.Command, StringComparison.Ordinal);
+        Assert.Contains("dnf -C check-update", command.Command, StringComparison.Ordinal);
+        Assert.Contains("Package lists last refreshed", command.Command, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task StoredKeysAreNormalisedOnReadSoMixedCaseKeysStillApply()
     {
         await using var database = await CreateDatabaseAsync();

@@ -783,11 +783,17 @@ namespace DevOpsAgent.Infrastructure.Migrations
                     b.Property<Guid>("ServerId")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("CacheOnly")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTimeOffset>("CheckedAtUtc")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Error")
                         .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("PackageListsRefreshedAtUtc")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("PackageManager")

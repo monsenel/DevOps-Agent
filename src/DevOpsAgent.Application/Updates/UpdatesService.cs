@@ -23,7 +23,8 @@ public sealed class UpdatesService(
             return new ServerUpdateStatus(server.Id, server.Name, server.Group,
                 Enum.TryParse<PackageManagerKind>(scan?.PackageManager, true, out var manager) ? manager : null,
                 scan?.CheckedAtUtc,
-                items.Select(item => new UpdatePackageDto(item.Name, item.CurrentVersion, item.CandidateVersion, item.Repository, item.IsSecurity)).ToArray(), scan?.Error);
+                items.Select(item => new UpdatePackageDto(item.Name, item.CurrentVersion, item.CandidateVersion, item.Repository, item.IsSecurity)).ToArray(), scan?.Error,
+                scan?.PackageListsRefreshedAtUtc, scan?.CacheOnly ?? false);
         }).ToArray();
     }
 
@@ -57,8 +58,10 @@ public sealed class UpdatesService(
             }
             await packages.ReplaceForServerAsync(item.Server.Id, item.Rows.Select(row => new UpdatePackage(item.Server.Id,
                 row.Name, row.CurrentVersion, row.CandidateVersion, row.Repository, row.IsSecurity, checkedAt)).ToArray(), cancellationToken);
-            await scans.SaveAsync(new UpdateScan(item.Server.Id, item.Collected.PackageManager.ToString(), checkedAt, null), cancellationToken);
-            results.Add(new ServerUpdateStatus(item.Server.Id, item.Server.Name, item.Server.Group, item.Collected.PackageManager, checkedAt, item.Rows, null));
+            await scans.SaveAsync(new UpdateScan(item.Server.Id, item.Collected.PackageManager.ToString(), checkedAt, null,
+                item.Collected.PackageListsRefreshedAtUtc, item.Collected.CacheOnly), cancellationToken);
+            results.Add(new ServerUpdateStatus(item.Server.Id, item.Server.Name, item.Server.Group, item.Collected.PackageManager, checkedAt, item.Rows, null,
+                item.Collected.PackageListsRefreshedAtUtc, item.Collected.CacheOnly));
         }
         return results.OrderBy(result => result.ServerName, StringComparer.OrdinalIgnoreCase).ToArray();
     }
