@@ -153,6 +153,7 @@
         <section class="updates-proposal" aria-labelledby="proposal-title">
             <h3 id="proposal-title">Proposed package update · @string.Join(", ", _pendingServers)</h3>
             <p>Review the exact command before approving. The action runs on one server only.</p>
+            <ActionImpact ActionId="pendingId" />
             @foreach (var preview in _pendingCommands)
             {
                 <CodeBlock Content="@preview" />

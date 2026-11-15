@@ -57,6 +57,7 @@
                                         {
                                             <div class="action-log-review">
                                                 <p>This action has not run. Review the exact command for every target before approving.</p>
+                                                <ActionImpact ActionId="action.Id" />
                                                 @foreach (var preview in entry.PendingCommandPreviews)
                                                 {
                                                     <section class="action-detail-section">

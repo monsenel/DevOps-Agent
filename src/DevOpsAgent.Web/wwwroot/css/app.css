@@ -3350,3 +3350,54 @@ p {
     white-space: normal;
     overflow-wrap: anywhere;
 }
+
+/* Impact section of approval cards (T8.7). */
+.action-impact {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    border-radius: var(--dva-radius-row);
+    background: var(--dva-card);
+}
+
+.action-impact-title {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+.action-impact-target {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.action-impact-warning {
+    padding: 6px 10px;
+    border-radius: var(--dva-radius-input);
+    background: var(--dva-warn-soft);
+    color: var(--dva-on-warn);
+}
+
+.action-impact-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.action-impact-list li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.action-impact-source {
+    font-size: 12px;
+}

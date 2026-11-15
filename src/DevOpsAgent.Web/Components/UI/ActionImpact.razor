@@ -1,0 +1,105 @@
+@using Microsoft.Extensions.DependencyInjection
+@inject IServiceScopeFactory Scopes
+
+@* T8.7: the "Impact" section of an approval card, from the latest discovery graph (own DI scope: it loads beside the page). *@
+<section class="action-impact" aria-label="Impact">
+    <h3 class="action-impact-title">Impact</h3>
+    @if (_previews is null)
+    {
+        <p class="muted">Reading the latest graph…</p>
+    }
+    else if (_previews.Count == 0)
+    {
+        <p class="muted">No target server.</p>
+    }
+    else
+    {
+        @foreach (var preview in _previews)
+        {
+            <div class="action-impact-target">
+                <p><span class="muted">Target:</span> <span class="mono">@preview.Target</span></p>
+                @foreach (var warning in preview.Warnings)
+                {
+                    <p class="action-impact-warning" role="note">@warning</p>
+                }
+                @if (preview.TargetFound)
+                {
+                    @if (preview.Domains.Count > 0)
+                    {
+                        <p><span class="muted">Domains routed to it through nginx:</span>
+                            @foreach (var domain in preview.Domains)
+                            {
+                                <span class="ui-badge neutral mono" @key="domain">@domain</span>
+                            }
+                        </p>
+                    }
+                    @if (preview.Dependents.Count == 0)
+                    {
+                        <p class="muted">Nothing in the graph connects to it.</p>
+                    }
+                    else
+                    {
+                        <ul class="action-impact-list">
+                            @foreach (var dependent in preview.Dependents)
+                            {
+                                <li>
+                                    <span class="ui-badge @(dependent.Level == 1 ? "warn" : "neutral")">@(dependent.Level == 1 ? "direct" : "via one hop")</span>
+                                    <span class="mono">@dependent.Name</span>
+                                    <span class="muted">@dependent.Kind@(dependent.Server is null ? " · outside the inventory" : $" · {dependent.Server}")</span>
+                                </li>
+                            }
+                        </ul>
+                    }
+                    @if (preview.Servers.Count > 0)
+                    {
+                        <p><span class="muted">Other servers that depend on it:</span> @string.Join(", ", preview.Servers)</p>
+                    }
+                }
+                @if (preview.Packages is { Count: > 0 } packages)
+                {
+                    <ul class="action-impact-list">
+                        @foreach (var package in packages)
+                        {
+                            <li>
+                                @if (package.RestartsDockerOrNginx)
+                                {
+                                    <span class="ui-badge warn">restarts @package.Effect</span>
+                                }
+                                else
+                                {
+                                    <span class="ui-badge neutral">@package.Effect</span>
+                                }
+                                <span class="mono">@package.Package</span>
+                                @if (package.Services.Count > 0)
+                                {
+                                    <span class="muted">touches @string.Join(", ", package.Services)</span>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+                @if (preview.GraphAtUtc is { } at)
+                {
+                    <p class="muted action-impact-source">From the discovery of @at.ToLocalTime().ToString("g").</p>
+                }
+            </div>
+        }
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public Guid ActionId { get; set; }
+
+    private Guid? _loadedFor;
+    private IReadOnlyList<ImpactPreview>? _previews;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedFor == ActionId) return;
+        _loadedFor = ActionId;
+        _previews = null;
+        await using var scope = Scopes.CreateAsyncScope();
+        var action = await scope.ServiceProvider.GetRequiredService<IActionRecordRepository>().GetAsync(ActionId, CancellationToken.None);
+        _previews = action is null ? [] : await scope.ServiceProvider.GetRequiredService<ImpactService>().ForActionAsync(action, CancellationToken.None);
+    }
+}

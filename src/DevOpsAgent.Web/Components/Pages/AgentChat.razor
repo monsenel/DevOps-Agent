@@ -81,6 +81,7 @@
                         <div class="chat-message-content">@proposal.Summary</div>
                         @if (proposal.ActionId is Guid actionId && _actionStatuses.GetValueOrDefault(actionId) == DevOpsAgent.Domain.Agent.ActionRecordStatus.Proposed)
                         {
+                            <ActionImpact ActionId="actionId" />
                             <div class="chat-proposal-actions">
                                 <button type="button" class="ui-button primary" disabled="@_busyActions.Contains(actionId)" @onclick="() => ReviewActionAsync(actionId, true)">Approve and run</button>
                                 <button type="button" class="ui-button secondary" disabled="@_busyActions.Contains(actionId)" @onclick="() => ReviewActionAsync(actionId, false)">Reject</button>
