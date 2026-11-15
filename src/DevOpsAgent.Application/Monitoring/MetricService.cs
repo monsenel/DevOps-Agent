@@ -7,6 +7,7 @@ public sealed class MetricService(
     IServerRepository servers,
     IMetricRepository metrics,
     ISshRunner sshRunner,
+    ContainerRestartMonitor containerRestarts,
     TimeProvider timeProvider)
 {
     public async Task PollAsync(CancellationToken cancellationToken)
@@ -39,17 +40,24 @@ public sealed class MetricService(
             {
                 var result = await sshRunner.RunAsync(server.Id, MetricsParser.CollectionCommand,
                     new SshRunOptions(TimeSpan.FromSeconds(30)), cancellationToken);
-                return (Server: server, Result: (RemoteCommandResult?)result, Error: (Exception?)null);
+                var containers = await TryReadContainersAsync(server, cancellationToken);
+                return (Server: server, Result: (RemoteCommandResult?)result, Error: (Exception?)null, Containers: containers);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                return (Server: server, Result: (RemoteCommandResult?)null, Error: (Exception?)exception);
+                return (Server: server, Result: (RemoteCommandResult?)null, Error: (Exception?)exception, Containers: (ContainerQuery?)null);
             }
             finally { semaphore.Release(); }
         }));
 
-        foreach (var (server, result, _) in collected)
+        foreach (var (server, result, _, containers) in collected)
         {
+            if (containers is { } query)
+            {
+                try { await containerRestarts.RecordAsync(server.Id, query.Containers, cancellationToken); }
+                catch (Exception exception) when (exception is not OperationCanceledException) { failures.Add(exception); }
+            }
+
             if (result is null || result.ExitCode != 0) continue;
 
             try
@@ -75,6 +83,26 @@ public sealed class MetricService(
         var firstError = collected.Select(item => item.Error).FirstOrDefault(error => error is not null and not HostUnreachableException)
             ?? failures.FirstOrDefault();
         if (firstError is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(firstError).Throw();
+    }
+
+    private sealed record ContainerQuery(IReadOnlyList<ContainerStatus>? Containers);
+
+    // T7.R3: container states and restart counts, read-only, in the same cycle. Docker usually works without sudo for the
+    // SSH user; only when it is refused and the server allows sudo is the identical query repeated with sudo.
+    private async Task<ContainerQuery?> TryReadContainersAsync(Domain.Servers.Server server, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var options = new SshRunOptions(TimeSpan.FromSeconds(20));
+            var response = await sshRunner.RunAsync(server.Id, ContainerStatusQuery.Command, options, cancellationToken);
+            if (response.ExitCode != 0 && server.SudoCapable == true)
+                response = await sshRunner.RunAsync(server.Id, ContainerStatusQuery.Command, options with { UseSudo = true }, cancellationToken);
+            return response.ExitCode == 0 ? new ContainerQuery(ContainerStatusQuery.Parse(response.StandardOutput)) : null;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return null;
+        }
     }
 
     public async Task<ServerMetrics?> GetServerMetricsAsync(Guid serverId, CancellationToken cancellationToken)

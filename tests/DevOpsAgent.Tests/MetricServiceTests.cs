@@ -22,14 +22,19 @@ public sealed class MetricServiceTests
         var time = new MutableTimeProvider(start);
         var runner = new FixtureSshRunner(server.Id);
         var repository = new MetricRepository(database.Context);
-        var service = new MetricService(new ServerRepository(database.Context), repository, runner, time);
+        var service = new MetricService(new ServerRepository(database.Context), repository, runner,
+            new ContainerRestartMonitor(new AppSettingRepository(database.Context), time), time);
 
         await service.PollAsync(CancellationToken.None);
         time.Set(start.AddSeconds(60));
         await service.PollAsync(CancellationToken.None);
 
-        Assert.Equal(2, runner.Commands.Count);
-        Assert.All(runner.Commands, command => Assert.Equal(MetricsParser.CollectionCommand, command));
+        // Each cycle: the one combined metrics command, then the read-only container status query (T7.R3).
+        Assert.Equal(new[]
+        {
+            MetricsParser.CollectionCommand, ContainerStatusQuery.Command,
+            MetricsParser.CollectionCommand, ContainerStatusQuery.Command
+        }, runner.Commands);
         var detail = await service.GetServerMetricsAsync(server.Id, CancellationToken.None);
         Assert.NotNull(detail);
         Assert.Equal(70, Assert.Single(detail.Latest, item => item.Name == "cpu_percent").Value);
@@ -48,8 +53,9 @@ public sealed class MetricServiceTests
         database.Context.Servers.AddRange(inventory);
         await database.Context.SaveChangesAsync();
         var runner = new DelayedSshRunner(inventory[3].Id);
+        var clock = new MutableTimeProvider(new DateTimeOffset(2026, 11, 14, 12, 0, 0, TimeSpan.Zero));
         var service = new MetricService(new ServerRepository(database.Context), new MetricRepository(database.Context), runner,
-            new MutableTimeProvider(new DateTimeOffset(2026, 11, 14, 12, 0, 0, TimeSpan.Zero)));
+            new ContainerRestartMonitor(new AppSettingRepository(database.Context), clock), clock);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.PollAsync(CancellationToken.None));
 
@@ -69,8 +75,9 @@ public sealed class MetricServiceTests
         await database.Context.SaveChangesAsync();
         var metrics = new FlakyMetricRepository(new MetricRepository(database.Context),
             readFailure: inventory[0].Id, writeFailure: inventory[2].Id);
+        var clock = new MutableTimeProvider(new DateTimeOffset(2026, 11, 14, 12, 0, 0, TimeSpan.Zero));
         var service = new MetricService(new ServerRepository(database.Context), metrics, new DelayedSshRunner(Guid.Empty),
-            new MutableTimeProvider(new DateTimeOffset(2026, 11, 14, 12, 0, 0, TimeSpan.Zero)));
+            new ContainerRestartMonitor(new AppSettingRepository(database.Context), clock), clock);
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PollAsync(CancellationToken.None));
 

@@ -26,6 +26,7 @@ builder.Services.AddScoped<AgentContextBuilder>();
 builder.Services.AddScoped<AgentToolDispatcher>();
 builder.Services.AddScoped<UpdatesService>();
 builder.Services.AddScoped<MetricService>();
+builder.Services.AddScoped<ContainerRestartMonitor>();
 builder.Services.AddScoped<RollupService>();
 builder.Services.AddScoped<HealthCheckService>();
 builder.Services.AddScoped<AlertService>();

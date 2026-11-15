@@ -171,7 +171,7 @@ public sealed class HostReachabilityTests
         public async Task<TimeSpan> PollAsync()
         {
             var stopwatch = Stopwatch.StartNew();
-            await new MetricService(Servers, Metrics, Runner, Time).PollAsync(CancellationToken.None);
+            await new MetricService(Servers, Metrics, Runner, new ContainerRestartMonitor(new MemorySettings(), Time), Time).PollAsync(CancellationToken.None);
             return stopwatch.Elapsed;
         }
     }
@@ -259,6 +259,13 @@ public sealed class HostReachabilityTests
             Task.FromResult<IReadOnlyList<MetricSample>>([]);
         public Task SaveRollupsAsync(IReadOnlyCollection<MetricRollup> rollups, DateTimeOffset rawPruneBeforeUtc, DateTimeOffset rollupPruneBeforeUtc, CancellationToken cancellationToken) =>
             Task.CompletedTask;
+    }
+
+    private sealed class MemorySettings : IAppSettingRepository
+    {
+        private readonly ConcurrentDictionary<string, string> _values = new(StringComparer.Ordinal);
+        public Task<string?> GetAsync(string key, CancellationToken cancellationToken) => Task.FromResult(_values.GetValueOrDefault(key));
+        public Task SetAsync(string key, string value, CancellationToken cancellationToken) { _values[key] = value; return Task.CompletedTask; }
     }
 
     private sealed class ManualTime : TimeProvider

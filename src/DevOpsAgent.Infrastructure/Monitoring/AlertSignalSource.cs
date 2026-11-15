@@ -14,6 +14,7 @@ public sealed class AlertSignalSource(
     ISshRunner sshRunner,
     IAuthLogScanSource authLogScanner,
     DriftService drift,
+    ContainerRestartMonitor containerRestarts,
     TimeProvider timeProvider) : IAlertSignalSource
 {
     private const int MaxParallelServers = 8;
@@ -44,6 +45,7 @@ public sealed class AlertSignalSource(
         foreach (var (server, (remoteStatus, hostKeyMismatch, unreachable), auth) in remote)
         {
             result.AddRange(auth);
+            result.AddRange(await containerRestarts.GetConditionsAsync(server.Id, server.Name, cancellationToken));
             // The exception names the host whose key mismatched. Behind a jump chain that can be the jump host, in which
             // case this server is merely unreachable (the jump host raises its own mismatch alert).
             var mismatchIsOwn = hostKeyMismatch is not null && hostKeyMismatch.Port == server.Port
@@ -69,7 +71,8 @@ public sealed class AlertSignalSource(
             }
             else
             {
-                foreach (var container in remoteStatus.Containers.Where(item => item.State != "running"))
+                // A container caught "restarting" is the restart-loop rule's (medium) business, not a stopped container.
+                foreach (var container in remoteStatus.Containers.Where(item => item.State is not ("running" or "restarting")))
                     result.Add(Condition("container-state", $"{server.Id:N}:{container.Name}", AlertSeverity.High, server.Id,
                         container.Name, $"Container {container.Name} is {container.State}", $"Latest read-only Docker status reports: {container.State}."));
                 foreach (var unit in remoteStatus.FailedUnits)
