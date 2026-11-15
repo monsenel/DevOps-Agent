@@ -12,8 +12,8 @@
 
 ## Current
 
-- **Task:** T7.R1–T7.R3, T7.R15 and T7.R17 done (R17 was done ahead of T7.R7 on the owner's order); next T7.R4
-- **Status:** —
+- **Task:** T7.R18 (restart-loop rule follow-ups); T7.R1–T7.R3, T7.R15 and T7.R17 done (R17 was done ahead of T7.R7 on the owner's order)
+- **Status:** in-progress
 - **Last updated:** 2026-11-15 by ZCode
 
 ## WIP notes
@@ -137,7 +137,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T7.R15 | SSH client leases | done | `feat(T7.R15): pooled SSH clients are leased and never closed under a running command` |
 | T7.R16 | Stale carry-forward correctness | todo | |
 | T7.R17 | Cycle deadlines and alert stalls | done | `feat(T7.R17): hung commands back a host off, one deadline per call, shutdown abandons SSH work` |
-| T7.R18 | Restart-loop rule follow-ups | todo | |
+| T7.R18 | Restart-loop rule follow-ups | in-progress | |
 | T7.R19 | SSH failure classification and reachability UI | todo | |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
@@ -147,6 +147,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 ## Session log
 
 One line per session: date · tool/model · tasks touched · result.
+
+- 2026-11-15 · ZCode / Claude · started T7.R18 · owner scope: container states (created/removing alert only after 10 min, paused Low, exited/dead unchanged), unreachable server keeps restart-loop alert open, partial `docker inspect` output, no `|| true` in the status probe plus sudo fallback, prune restart history older than 24 h and log corrupt history; not in scope: PLAN R18 (d) "store only restart>0/non-running containers", history of deleted servers, SQLite busy-timeout check; baseline build 0 warnings, 409/409 tests
 
 - 2026-11-15 · ZCode / Claude · T7.R17 done · D-037: four consecutive command timeouts per host (one more than the three that recycle a client) back it off like an unreachable host (1 min doubling to 15, Retry now/edit reset it, messages end in "could not connect" / "commands timed out"), the call timeout covers connect time, auth scan skipped after a failed status probe (saved scan state reported), metric/alert cycle deadlines 50 s/25 s, container query own 10 s budget, pool stopping token (new work refused, connects/commands in flight abandoned, no ObjectDisposedException), stopping signal re-delivered on a pool thread and abandoned SshClients disposed in the background, hosted services linked to ApplicationStopping, new /_blazor connections refused while stopping, compose `stop_grace_period: 40s`; live on the lab (isolated DB, published Release, :5199, srv-app unpaused at the end, verified): A) SIGTERM with the 192.0.2.1 connect in flight (metric and alert cycles) exit 0.22/0.11/0.11/0.11 s, during a scheduled discovery 0.17 s (snapshot Cancelled 3/0), during a UI-started discovery (CancellationToken.None, Blazor circuit open) 0.11 s, at the backoff-expiry retry 0.11/0.12 s, never a connect attempt after "Hosting stopping"; idle 0.11 s (0.17 s control; the earlier 5.9 s did not reproduce; what remains is host stop, Kestrel unbind and client disposal; an open browser tab made SIGTERM take 30.1 s on both builds because the tab reconnects its circuit while Kestrel is stopping and Kestrel waits for that WebSocket until the 30 s host timeout, with /_blazor refused once stopping 5/5 trials 0.11-0.12 s); B) `docker pause dva-srv-app`: metric cycles 15.0-15.1 s while a connect to it was attempted (otherwise 96-110 ms), alert evaluations 15.0-15.2 s then 161-204 ms, srv-edge/srv-db sampled every 60 s (one 74.9 s then 45.1 s gap from the cycle stamp), srv-app first showed three SSH.NET session timeouts (client recycled), then connect backoff 1, 2, 4 min ("could not connect", log `srv-app is unreachable (could not connect)`), skipped between retries; unpaused 13:26:57, reconnected at the next retry ~35 s later; C) alert evaluation with the paused host 15.2 s on this build versus 30.2/30.1 s on the control (status probe 15 s plus auth scan 15 s), unit test asserts no journalctl scan for a failed or timed-out probe; D) control 4bc4008: SIGTERM during the blackhole connect 28.8/29.1 s with a second connect attempt after "Hosting stopping"; live harness through the real pool/runner/SSH.NET (srv-edge and srv-app via jump, `sleep 60` with 3 s timeouts): 4th timeout -> CommandTimeout backoff 60 s, 5th call refused in 0.00 s "commands timed out", Retry now ok in 0.22 s clears it, 2 s call deadline on the blackhole ends at 2.00 s (connect timeout is 15 s), a 60 s command in flight ends 1 ms after the stop signal, Dispose 7 ms; build 0 warnings, 409/409 tests (30 new)
 
