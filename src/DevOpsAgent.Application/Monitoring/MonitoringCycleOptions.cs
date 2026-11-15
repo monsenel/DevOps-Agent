@@ -9,6 +9,12 @@ public sealed class MonitoringCycleOptions
 {
     public const string SectionName = "Monitoring";
 
+    /// <summary>Deadline of one metric command, connect time included (T7.R17).</summary>
+    public TimeSpan MetricCommandTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>Deadline of the alert engine's status probe, connect time included (T7.R17).</summary>
+    public TimeSpan AlertProbeTimeout { get; set; } = TimeSpan.FromSeconds(20);
+
     /// <summary>Deadline of the remote part of a metric cycle (interval 60 s).</summary>
     public TimeSpan MetricCycleDeadline { get; set; } = TimeSpan.FromSeconds(50);
 

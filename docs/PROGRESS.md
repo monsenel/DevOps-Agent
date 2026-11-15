@@ -18,7 +18,7 @@
 
 ## WIP notes
 
-None.
+T7.R17 (in progress, owner reordered it before T7.R7). Done and committed: command-timeout backoff (N = 4 consecutive timeouts per host, one more than the 3 that recycle a client), call deadline including connect time, pool stopping token (refuse new, abandon in flight, no ObjectDisposedException), cycle deadlines (metric 50 s, alert 25 s, container query 10 s), auth scan skipped after a failed status probe, "probe failed" text, hosted services linked to ApplicationStopping, compose `stop_grace_period: 40s`, 30 new tests (409 total). Next: live lab measurements A-D (isolated DB under /tmp, published Release build, port 5199; unpause dva-srv-app afterwards), then docs (D-037, PLAN, ARCHITECTURE), then `feat(T7.R17)`.
 
 The 2026-11-15 review fixed small issues in `fix(review): …` commits (build 0 warnings, 342/342 tests), applied the owner's decisions (D-026–D-031) and filed the larger findings as T7.R tasks in PLAN.md › M7.
 

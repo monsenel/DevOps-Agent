@@ -50,7 +50,7 @@ public sealed class MetricService(
                 try
                 {
                     var result = await sshRunner.RunAsync(server.Id, MetricsParser.CollectionCommand,
-                        new SshRunOptions(TimeSpan.FromSeconds(30)), cycleToken);
+                        new SshRunOptions(_cycle.MetricCommandTimeout), cycleToken);
                     var containers = await TryReadContainersAsync(server, cycleToken, cancellationToken);
                     return (Server: server, Result: (RemoteCommandResult?)result, Error: (Exception?)null, Containers: containers);
                 }

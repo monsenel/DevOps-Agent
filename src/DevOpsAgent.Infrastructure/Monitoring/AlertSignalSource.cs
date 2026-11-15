@@ -167,7 +167,7 @@ public sealed class AlertSignalSource(
             "printf '__DVA_SYSTEMD_FAILED__\\n'; systemctl --failed --type=service --no-legend --plain 2>/dev/null || true";
         try
         {
-            var response = await sshRunner.RunAsync(serverId, command, new SshRunOptions(TimeSpan.FromSeconds(20)), cycleToken);
+            var response = await sshRunner.RunAsync(serverId, command, new SshRunOptions(_cycle.AlertProbeTimeout), cycleToken);
             return response.ExitCode == 0
                 ? (RemoteServiceStatusParser.Parse(response.StandardOutput), null, null, null)
                 : (null, null, null, $"the status command exited with code {response.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown"}");
