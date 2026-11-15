@@ -46,7 +46,7 @@ public sealed class AlertSignalSource(
                 await throttle.WaitAsync(cycleToken);
                 try
                 {
-                    var status = await TryGetRemoteStatusAsync(server.Id, cycleToken, cancellationToken);
+                    var status = await TryGetRemoteStatusAsync(server, cycleToken, cancellationToken);
                     var auth = status.Status is null
                         ? await authLogScanner.GetCachedAsync(server, cancellationToken)
                         : await ScanOrCachedAsync(server, cycleToken, cancellationToken);
@@ -93,8 +93,18 @@ public sealed class AlertSignalSource(
             }
             else
             {
-                // A container caught "restarting" is the restart-loop rule's (medium) business, not a stopped container.
-                foreach (var container in remoteStatus.Containers.Where(item => item.State is not ("running" or "restarting")))
+                // A Docker permission failure must not look like "no containers" (T7.R18). The message is fixed text: no
+                // output of the server is repeated. A stopped daemon or a host without Docker stays silent, as before.
+                if (remoteStatus.Docker == DockerFailure.PermissionDenied)
+                    result.Add(Condition("docker-status-unavailable", server.Id.ToString("N"), AlertSeverity.Medium, server.Id, "docker",
+                        $"{server.Name}: container status could not be read",
+                        "Docker refused the SSH user (permission denied on the Docker socket) and the non-interactive sudo fallback "
+                        + (server.SudoCapable == true ? "did not help" : "is not available for this server")
+                        + ". Container alerts for this server are not working. Add the user to the docker group or allow passwordless sudo."));
+                // A container caught "restarting" is the restart-loop rule's (medium) business, not a stopped container; paused,
+                // created and removing containers have their own rules (container history, T7.R18). Everything else
+                // (exited, dead, unknown states) raises the High alert as before.
+                foreach (var container in remoteStatus.Containers.Where(item => item.State is not ("running" or "restarting" or "paused" or "created" or "removing")))
                     result.Add(Condition("container-state", $"{server.Id:N}:{container.Name}", AlertSeverity.High, server.Id,
                         container.Name, $"Container {container.Name} is {container.State}", $"Latest read-only Docker status reports: {container.State}."));
                 foreach (var unit in remoteStatus.FailedUnits)
@@ -160,17 +170,46 @@ public sealed class AlertSignalSource(
         }
     }
 
+    /// <summary>
+    /// The read-only status probe: Docker container states and failed systemd services. T7.R18: the Docker part reports its own
+    /// failure through markers instead of swallowing it. "Permission denied" on the Docker socket prints
+    /// <c>__DVA_DOCKER_DENIED__</c> (the caller retries with sudo), any other failure (daemon stopped) prints
+    /// <c>__DVA_DOCKER_DOWN__</c>, and a host without Docker prints nothing, as before. The trailing <c>|| true</c> belongs to
+    /// <c>systemctl</c> only: a host without systemd must not look like a failed probe.
+    /// </summary>
+    public const string StatusCommand =
+        "printf '__DVA_DOCKER__\\n'; if command -v docker >/dev/null 2>&1; then "
+        + "out=$(docker ps -a --format '{{.Names}}\\t{{.State}}' 2>&1); rc=$?; "
+        + "if [ $rc -eq 0 ]; then printf '%s\\n' \"$out\"; "
+        + "elif printf '%s' \"$out\" | grep -qi 'permission denied'; then printf '__DVA_DOCKER_DENIED__\\n'; "
+        + "else printf '__DVA_DOCKER_DOWN__\\n'; fi; fi; "
+        + "printf '__DVA_SYSTEMD_FAILED__\\n'; systemctl --failed --type=service --no-legend --plain 2>/dev/null || true";
+
     private async Task<(RemoteServiceStatus? Status, SshHostKeyMismatchException? HostKeyMismatch, HostUnreachableException? Unreachable, string? ProbeFailure)> TryGetRemoteStatusAsync(
-        Guid serverId, CancellationToken cycleToken, CancellationToken cancellationToken)
+        Server server, CancellationToken cycleToken, CancellationToken cancellationToken)
     {
-        const string command = "printf '__DVA_DOCKER__\\n'; if command -v docker >/dev/null 2>&1; then docker ps -a --format '{{.Names}}\\t{{.State}}'; fi; " +
-            "printf '__DVA_SYSTEMD_FAILED__\\n'; systemctl --failed --type=service --no-legend --plain 2>/dev/null || true";
+        var serverId = server.Id;
         try
         {
-            var response = await sshRunner.RunAsync(serverId, command, new SshRunOptions(_cycle.AlertProbeTimeout), cycleToken);
-            return response.ExitCode == 0
-                ? (RemoteServiceStatusParser.Parse(response.StandardOutput), null, null, null)
-                : (null, null, null, $"the status command exited with code {response.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown"}");
+            var options = new SshRunOptions(_cycle.AlertProbeTimeout);
+            var response = await sshRunner.RunAsync(serverId, StatusCommand, options, cycleToken);
+            if (response.ExitCode != 0)
+                return (null, null, null, $"the status command exited with code {response.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown"}");
+            var status = RemoteServiceStatusParser.Parse(response.StandardOutput);
+            // Same non-interactive sudo fallback as the metric cycle's container query, only when Docker refused the user
+            // and the server is known to allow sudo. It is the same read-only command, so no server write happens.
+            if (status.Docker == DockerFailure.PermissionDenied && server.SudoCapable == true)
+            {
+                try
+                {
+                    var retry = await sshRunner.RunAsync(serverId, StatusCommand, options with { UseSudo = true }, cycleToken);
+                    if (retry.ExitCode == 0) status = RemoteServiceStatusParser.Parse(retry.StandardOutput);
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException and not HostUnreachableException
+                    and not SshHostKeyMismatchException) { /* keep the refused result: it is reported below */ }
+            }
+
+            return (status, null, null, null);
         }
         catch (OperationCanceledException exception) when (exception is SshShutdownException || cancellationToken.IsCancellationRequested) { throw; }
         // The cycle deadline passed while the probe was running.

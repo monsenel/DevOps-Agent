@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Diagnostics;
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Discovery;
@@ -28,7 +29,7 @@ public sealed class MonitoringCycleDeadlineTests
         // A command timeout far beyond the cycle deadline: only the deadline can end the cycle in time.
         var options = new MonitoringCycleOptions { MetricCommandTimeout = TimeSpan.FromSeconds(20), MetricCycleDeadline = TimeSpan.FromMilliseconds(400) };
         var service = new MetricService(lab.Servers, metrics, lab.Runner,
-            new ContainerRestartMonitor(new HangSettings(), lab.Time), lab.Time, options);
+            new ContainerRestartMonitor(new HangSettings(), lab.Time, NullLogger<ContainerRestartMonitor>.Instance), lab.Time, options);
 
         var stopwatch = Stopwatch.StartNew();
         // The hung host's failure is still surfaced to the poller, after everything else was stored.
@@ -49,7 +50,7 @@ public sealed class MonitoringCycleDeadlineTests
         var metrics = new HangMetrics();
         var options = new MonitoringCycleOptions { MetricCommandTimeout = TimeSpan.FromMilliseconds(400), MetricCycleDeadline = TimeSpan.FromSeconds(10) };
         var service = new MetricService(lab.Servers, metrics, lab.Runner,
-            new ContainerRestartMonitor(new HangSettings(), lab.Time), lab.Time, options);
+            new ContainerRestartMonitor(new HangSettings(), lab.Time, NullLogger<ContainerRestartMonitor>.Instance), lab.Time, options);
 
         var durations = new List<TimeSpan>();
         for (var cycle = 1; cycle <= IHostReachability.CommandTimeoutThreshold; cycle++)
@@ -86,7 +87,7 @@ public sealed class MonitoringCycleDeadlineTests
             ContainerQueryTimeout = TimeSpan.FromMilliseconds(300)
         };
         var service = new MetricService(new HangServers([server]), metrics, runner,
-            new ContainerRestartMonitor(new HangSettings(), TimeProvider.System), TimeProvider.System, options);
+            new ContainerRestartMonitor(new HangSettings(), TimeProvider.System, NullLogger<ContainerRestartMonitor>.Instance), TimeProvider.System, options);
 
         var stopwatch = Stopwatch.StartNew();
         await service.PollAsync(CancellationToken.None);
@@ -222,7 +223,7 @@ public sealed class MonitoringCycleDeadlineTests
 
     private static AlertSignalSource AlertSource(IServerRepository servers, ISshRunner runner, IAuthLogScanSource scanner, MonitoringCycleOptions options) =>
         new(servers, new AlertMetrics(), new AlertChecks(), new AlertSnapshots(), runner, scanner, new DriftService(new AlertSnapshots(), null!),
-            new ContainerRestartMonitor(new HangSettings(), TimeProvider.System), TimeProvider.System, options);
+            new ContainerRestartMonitor(new HangSettings(), TimeProvider.System, NullLogger<ContainerRestartMonitor>.Instance), TimeProvider.System, options);
 
     private enum Behaviour { Answer, HangUntilCancelled }
 

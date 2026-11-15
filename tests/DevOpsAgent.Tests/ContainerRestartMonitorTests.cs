@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Monitoring;
 using DevOpsAgent.Domain.Monitoring;
@@ -110,7 +111,7 @@ public sealed class ContainerRestartMonitorTests
     public async Task MonitorPersistsCyclesAndRaisesAMediumAlertPerContainer()
     {
         var time = new ManualTime(Start);
-        var monitor = new ContainerRestartMonitor(new MemorySettings(), time);
+        var monitor = new ContainerRestartMonitor(new MemorySettings(), time, NullLogger<ContainerRestartMonitor>.Instance);
         for (var minute = 0; minute <= 3; minute++)
         {
             await monitor.RecordAsync(Server, [new ContainerStatus("id1", "crashloop", "running", minute), new ContainerStatus("id2", "api", "running", 0)],
@@ -148,7 +149,7 @@ public sealed class ContainerRestartMonitorTests
         server.RecordCapabilities(true, "Debian GNU/Linux 12", Start);
         var runner = new DockerNeedsSudoRunner();
         var time = new ManualTime(Start);
-        var monitor = new ContainerRestartMonitor(new MemorySettings(), time);
+        var monitor = new ContainerRestartMonitor(new MemorySettings(), time, NullLogger<ContainerRestartMonitor>.Instance);
         var service = new MetricService(new OneServer(server), new NoMetrics(), runner, monitor, time);
 
         await service.PollAsync(CancellationToken.None);

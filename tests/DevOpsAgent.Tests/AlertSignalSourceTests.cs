@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Discovery;
 using DevOpsAgent.Application.Monitoring;
@@ -21,7 +22,7 @@ public sealed class AlertSignalSourceTests
         var scanner = new AuthLogScanner(ssh, new FakeSettings(), Options.Create(new SecurityMonitoringOptions()), TimeProvider.System);
         var source = new AlertSignalSource(servers, new FakeMetrics(), new FakeHealthChecks(), new FakeSnapshots(), ssh,
             scanner, new DriftService(new FakeSnapshots(), null!),
-            new ContainerRestartMonitor(new FakeSettings(), TimeProvider.System), TimeProvider.System);
+            new ContainerRestartMonitor(new FakeSettings(), TimeProvider.System, NullLogger<ContainerRestartMonitor>.Instance), TimeProvider.System);
 
         var conditions = await source.GetActiveConditionsAsync(CancellationToken.None);
         var unreachable = conditions.Where(condition => condition.Rule == "server-unreachable").ToArray();
@@ -39,7 +40,7 @@ public sealed class AlertSignalSourceTests
         var scanner = new AuthLogScanner(ssh, new FakeSettings(), Options.Create(new SecurityMonitoringOptions()), TimeProvider.System);
         var source = new AlertSignalSource(new FakeServers(server), new FakeMetrics(), new FakeHealthChecks(), new FakeSnapshots(), ssh,
             scanner, new DriftService(new FakeSnapshots(), null!),
-            new ContainerRestartMonitor(new FakeSettings(), TimeProvider.System), TimeProvider.System);
+            new ContainerRestartMonitor(new FakeSettings(), TimeProvider.System, NullLogger<ContainerRestartMonitor>.Instance), TimeProvider.System);
 
         var conditions = await source.GetActiveConditionsAsync(CancellationToken.None);
 
@@ -61,7 +62,7 @@ public sealed class AlertSignalSourceTests
         var scanner = new AuthLogScanner(ssh, new FakeSettings(), Options.Create(new SecurityMonitoringOptions()), TimeProvider.System);
         var source = new AlertSignalSource(new FakeServers(gateway, behind1, behind2), new FakeMetrics(), new FakeHealthChecks(),
             new FakeSnapshots(), ssh, scanner, new DriftService(new FakeSnapshots(), null!),
-            new ContainerRestartMonitor(new FakeSettings(), TimeProvider.System), TimeProvider.System);
+            new ContainerRestartMonitor(new FakeSettings(), TimeProvider.System, NullLogger<ContainerRestartMonitor>.Instance), TimeProvider.System);
 
         var conditions = await source.GetActiveConditionsAsync(CancellationToken.None);
 

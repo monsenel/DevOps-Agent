@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net.Sockets;
@@ -225,7 +226,7 @@ public sealed class HostReachabilityTests
         public async Task<TimeSpan> PollAsync()
         {
             var stopwatch = Stopwatch.StartNew();
-            await new MetricService(Servers, Metrics, Runner, new ContainerRestartMonitor(new MemorySettings(), Time), Time).PollAsync(CancellationToken.None);
+            await new MetricService(Servers, Metrics, Runner, new ContainerRestartMonitor(new MemorySettings(), Time, NullLogger<ContainerRestartMonitor>.Instance), Time).PollAsync(CancellationToken.None);
             return stopwatch.Elapsed;
         }
     }

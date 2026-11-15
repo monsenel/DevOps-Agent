@@ -18,7 +18,7 @@
 
 ## WIP notes
 
-None.
+T7.R18 in progress (2026-11-15). Done in code (checkpoint 1): `ContainerRestartMonitor` (ILogger, 24 h prune on read/write, corrupt history logged and healed, freeze-as-of-last-sample when the latest sample is older than 3 min, loop carried across sampling gaps, `EvaluateStates` for paused/created/removing, conditions with rule `container-state`), `ContainerStatusQuery.Command` tolerates a vanished container, `AlertSignalSource.StatusCommand` (docker failure markers, sudo fallback, `docker-status-unavailable` condition, High `container-state` no longer for created/paused/removing), `AppSudoCommands` entry. Next: unit tests (each item in the owner's list), D-038, PLAN/ARCHITECTURE notes, then the live acceptance (lab only, isolated DB under /tmp, :5199).
 
 The 2026-11-15 review fixed small issues in `fix(review): …` commits (build 0 warnings, 342/342 tests), applied the owner's decisions (D-026–D-031) and filed the larger findings as T7.R tasks in PLAN.md › M7.
 

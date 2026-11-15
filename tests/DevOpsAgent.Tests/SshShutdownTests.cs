@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Diagnostics;
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Discovery;
@@ -156,7 +157,7 @@ public sealed class SshShutdownTests
         var runner = new ShutdownRunner();
         var source = new AlertSignalSource(new HangServers([server]), new NoMetrics(), new NoChecks(), new NoSnapshots(), runner,
             new AuthLogScanner(runner, new HangSettings(), Options.Create(new SecurityMonitoringOptions()), TimeProvider.System),
-            new DriftService(new NoSnapshots(), null!), new ContainerRestartMonitor(new HangSettings(), TimeProvider.System), TimeProvider.System);
+            new DriftService(new NoSnapshots(), null!), new ContainerRestartMonitor(new HangSettings(), TimeProvider.System, NullLogger<ContainerRestartMonitor>.Instance), TimeProvider.System);
 
         // Not a "server-unreachable" condition (which would open an alert while the app is going down): the evaluation just ends.
         await Assert.ThrowsAsync<SshShutdownException>(() => source.GetActiveConditionsAsync(CancellationToken.None));
@@ -168,7 +169,7 @@ public sealed class SshShutdownTests
         using var lab = new HangLab();
         var hung = lab.Add("hung", "10.0.0.9", script => script.Commands = CommandMode.HangIgnoringToken);
         var metrics = new HangMetrics();
-        var service = new MetricService(lab.Servers, metrics, lab.Runner, new ContainerRestartMonitor(new HangSettings(), lab.Time), lab.Time);
+        var service = new MetricService(lab.Servers, metrics, lab.Runner, new ContainerRestartMonitor(new HangSettings(), lab.Time, NullLogger<ContainerRestartMonitor>.Instance), lab.Time);
         var polling = service.PollAsync(CancellationToken.None);
         await WaitUntil(() => lab.Transports.Commands(hung) == 1);
 

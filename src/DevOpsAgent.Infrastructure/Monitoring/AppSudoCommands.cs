@@ -91,6 +91,7 @@ public static class AppSudoCommands
             AuthLogScanner.BuildCommand(DateTimeOffset.FromUnixTimeSeconds(SentinelNumber)),
             UpdatesCollector.AptScanCommand(SentinelNumber),
             Application.Monitoring.ContainerStatusQuery.Command,
+            AlertSignalSource.StatusCommand,
             tools.BuildReadOnly("disk_usage", new DiskUsageArgs()).Command,
             tools.BuildReadOnly("disk_usage", new DiskUsageArgs(SentinelPath)).Command,
             Mutating("restart_service", new { unit = SentinelUnit }),

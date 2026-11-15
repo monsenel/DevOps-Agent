@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Monitoring;
 using DevOpsAgent.Domain.Monitoring;
@@ -23,7 +24,7 @@ public sealed class MetricServiceTests
         var runner = new FixtureSshRunner(server.Id);
         var repository = new MetricRepository(database.Context);
         var service = new MetricService(new ServerRepository(database.Context), repository, runner,
-            new ContainerRestartMonitor(new AppSettingRepository(database.Context), time), time);
+            new ContainerRestartMonitor(new AppSettingRepository(database.Context), time, NullLogger<ContainerRestartMonitor>.Instance), time);
 
         await service.PollAsync(CancellationToken.None);
         time.Set(start.AddSeconds(60));
@@ -55,7 +56,7 @@ public sealed class MetricServiceTests
         var runner = new DelayedSshRunner(inventory[3].Id);
         var clock = new MutableTimeProvider(new DateTimeOffset(2026, 11, 14, 12, 0, 0, TimeSpan.Zero));
         var service = new MetricService(new ServerRepository(database.Context), new MetricRepository(database.Context), runner,
-            new ContainerRestartMonitor(new AppSettingRepository(database.Context), clock), clock);
+            new ContainerRestartMonitor(new AppSettingRepository(database.Context), clock, NullLogger<ContainerRestartMonitor>.Instance), clock);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.PollAsync(CancellationToken.None));
 
@@ -77,7 +78,7 @@ public sealed class MetricServiceTests
             readFailure: inventory[0].Id, writeFailure: inventory[2].Id);
         var clock = new MutableTimeProvider(new DateTimeOffset(2026, 11, 14, 12, 0, 0, TimeSpan.Zero));
         var service = new MetricService(new ServerRepository(database.Context), metrics, new DelayedSshRunner(Guid.Empty),
-            new ContainerRestartMonitor(new AppSettingRepository(database.Context), clock), clock);
+            new ContainerRestartMonitor(new AppSettingRepository(database.Context), clock, NullLogger<ContainerRestartMonitor>.Instance), clock);
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PollAsync(CancellationToken.None));
 
