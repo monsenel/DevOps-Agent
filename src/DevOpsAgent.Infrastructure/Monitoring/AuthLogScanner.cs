@@ -42,7 +42,7 @@ public sealed class AuthLogScanner(ISshRunner sshRunner, IAppSettingRepository s
             // a small overlap and de-duplicate by source-line fingerprint to avoid losing
             // entries written in the same second as the previous cursor.
             .Where(item => item.Timestamp > state.CursorUtc.AddSeconds(-2) && item.Timestamp <= now)
-            .Where(item => !IsOwnScanCommand(item))
+            .Where(item => !IsOwnSudoProbe(item, server))
             // Strip sudo arguments before the events are persisted in the scan state.
             .Select(item => item.Kind == AuthLogEventKind.SudoCommand ? item with { Command = SanitizeCommand(item.Command) } : item)
             .ToArray();
@@ -117,11 +117,16 @@ public sealed class AuthLogScanner(ISshRunner sshRunner, IAppSettingRepository s
     private static IReadOnlyList<AuthLogEvent> ActiveWindow(IEnumerable<AuthLogEvent> events, DateTimeOffset now) =>
         events.Where(item => item.Timestamp >= now - Window).ToArray();
 
-    private static bool IsOwnScanCommand(AuthLogEvent item) => item.Kind == AuthLogEventKind.SudoCommand
+    // Only the capability probe (`sudo -n true`, ServerCapabilityService) run by this server's own inventory SSH user is
+    // suppressed; sudo logs it as COMMAND=/usr/bin/true with no arguments. Everything else, including the app's other sudo
+    // commands, is reported unless the user is in SecurityMonitoring:SudoAllowlist. Matching on command text alone would let
+    // any user hide a command by embedding it.
+    private static readonly HashSet<string> SudoProbeCommands = new(["/usr/bin/true", "/bin/true", "true"], StringComparer.Ordinal);
+
+    private static bool IsOwnSudoProbe(AuthLogEvent item, Server server) => item.Kind == AuthLogEventKind.SudoCommand
+        && string.Equals(item.Username, server.User, StringComparison.Ordinal)
         && item.Command is { } command
-        && command.Contains("journalctl -u ssh -u sshd --since", StringComparison.Ordinal)
-        && command.Contains("__DVA_BAN_TOOLS__", StringComparison.Ordinal)
-        && command.Contains("__DVA_BAN_STATE__", StringComparison.Ordinal);
+        && SudoProbeCommands.Contains(command.Trim());
 
     private async Task<AuthLogState> ReadStateAsync(string key, DateTimeOffset now, CancellationToken cancellationToken)
     {

@@ -38,7 +38,7 @@ The disposable lab script (`dva-testlab.sh`, kept outside this repository) can c
 
 For a first run against real servers, add one server in **read-only** execution mode and run discovery before enabling Agent actions. Review the resulting inventory and graph, then configure notifications and an LLM provider as needed. Keep the app and its SSH access behind a VPN or WireGuard; do not expose the login or SSH keys to the public internet.
 
-Notifications can use ntfy (server URL, topic, optional token) or Telegram (bot token and chat ID) under **Settings → Notifications**. Configure a destination and use **Test** before relying on alert delivery. Agent chat requires a provider under **Settings → LLM**; local Ollama can be started with the command above, or use an OpenAI-compatible endpoint such as LM Studio or OpenRouter.
+Notifications can use ntfy (server URL, topic, optional token) or Telegram (bot token and chat ID) under **Settings → Notifications**. Configure a destination and use **Test** before relying on alert delivery. Notifications carry only server name, rule, severity and state; details stay in the Alerts page. The app's collectors use sudo as each server's SSH user and only its `sudo -n true` probe is exempt from the "sudo by non-allowlisted user" alert, so add that user to `SecurityMonitoring__SudoAllowlist__0` in `.env` if you don't want that alert. Agent chat requires a provider under **Settings → LLM**; local Ollama can be started with the command above, or use an OpenAI-compatible endpoint such as LM Studio or OpenRouter.
 
 ## Files
 

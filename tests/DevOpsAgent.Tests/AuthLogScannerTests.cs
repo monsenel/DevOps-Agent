@@ -142,47 +142,31 @@ public sealed class AuthLogScannerTests
         Assert.DoesNotContain("--rotate", runner.LastCommand, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task Scan_IgnoresTheActualScanCommandWhenSudoLogsItBackAsACommandEntry()
+    [Theory]
+    // The app's own capability probe (`sudo -n true`) by the server's inventory SSH user is the only suppressed sudo event.
+    [InlineData("dva", "/usr/bin/true", false)]
+    [InlineData("dva", "/bin/true", false)]
+    // Same command by another user, or the probe with arguments, is reported.
+    [InlineData("mallory", "/usr/bin/true", true)]
+    [InlineData("dva", "/usr/bin/true extra", true)]
+    [InlineData("DVA", "/usr/bin/true", true)]
+    // The app's own scan command is not suppressed any more (owner decision 2026-11-15); allowlist the SSH user instead.
+    [InlineData("dva", "/usr/bin/sh -c ssh_output=$(journalctl -u ssh -u sshd --since '@1'); printf __DVA_BAN_TOOLS__; printf __DVA_BAN_STATE__", true)]
+    // Embedding the old marker strings must not hide another user's command.
+    [InlineData("mallory", "/usr/bin/sh -c 'journalctl -u ssh -u sshd --since @1; echo __DVA_BAN_TOOLS__ __DVA_BAN_STATE__; id'", true)]
+    public async Task Scan_SuppressesOnlyTheAppUsersExactSudoProbe(string user, string command, bool expectAlert)
     {
         var now = DateTimeOffset.UtcNow;
-        var time = new MutableTimeProvider(now);
-        var runner = new FixtureSshRunner("\n__DVA_BAN_TOOLS__\n__DVA_BAN_STATE__\n");
-        var server = new Server("edge", "edge.example", 22, "dva", "id_ed25519", "staging");
-        var scanner = new AuthLogScanner(runner, new MemorySettings(), Options.Create(new SecurityMonitoringOptions()), time);
-        await scanner.ScanAsync(server, CancellationToken.None);
-        var scanCommand = runner.LastCommand;
-
-        // Exactly what sudo records when the scanner itself runs under `sudo -n -- sh -c <command>`.
-        var timestamp = now.AddSeconds(-5).ToString("yyyy-MM-dd'T'HH:mm:sszzz");
-        runner.Output = $"{timestamp} host sudo[9]: dva : TTY=unknown ; PWD=/home/dva ; USER=root ; COMMAND=/usr/bin/sh -c {scanCommand}"
+        var timestamp = now.AddSeconds(-30).ToString("yyyy-MM-dd'T'HH:mm:sszzz");
+        var output = $"{timestamp} host sudo[1]: {user} : TTY=unknown ; PWD=/home/{user} ; USER=root ; COMMAND={command}"
             + "\n__DVA_BAN_TOOLS__\n__DVA_BAN_STATE__\n";
-        var conditions = await scanner.ScanAsync(server, CancellationToken.None);
-
-        Assert.DoesNotContain(conditions, item => item.Rule == "ssh-unusual-sudo");
-
-        // A different sudo command by the same user is still reported.
-        time.Advance(TimeSpan.FromSeconds(30));
-        timestamp = now.AddSeconds(20).ToString("yyyy-MM-dd'T'HH:mm:sszzz");
-        runner.Output = $"{timestamp} host sudo[10]: dva : TTY=unknown ; PWD=/ ; USER=root ; COMMAND=/usr/bin/cat /etc/hosts"
-            + "\n__DVA_BAN_TOOLS__\n__DVA_BAN_STATE__\n";
-        Assert.Contains(await scanner.ScanAsync(server, CancellationToken.None), item => item.Rule == "ssh-unusual-sudo");
-    }
-
-    [Fact]
-    public async Task Scan_DoesNotAlertOnItsOwnSudoWrappedLogAndBanStateProbe()
-    {
-        var now = DateTimeOffset.UtcNow;
-        var timestamp = now.AddMinutes(-1).ToString("yyyy-MM-dd'T'HH:mm:sszzz");
-        var ownCommand = $"{timestamp} host sudo[1]: dva : TTY=unknown ; PWD=/home/dva ; USER=root ; COMMAND=/usr/bin/sh -c 'log_output=$(journalctl -u ssh -u sshd --since \'@1\'); printf __DVA_BAN_TOOLS__; printf __DVA_BAN_STATE__'";
-        var output = ownCommand + "\n__DVA_BAN_TOOLS__\nfail2ban-client\n__DVA_BAN_STATE__\nno active bans";
         var scanner = new AuthLogScanner(new FixtureSshRunner(output), new MemorySettings(),
             Options.Create(new SecurityMonitoringOptions()), new MutableTimeProvider(now));
         var server = new Server("edge", "edge.example", 22, "dva", "id_ed25519", "staging");
 
         var conditions = await scanner.ScanAsync(server, CancellationToken.None);
 
-        Assert.DoesNotContain(conditions, item => item.Rule == "ssh-unusual-sudo");
+        Assert.Equal(expectAlert, conditions.Any(item => item.Rule == "ssh-unusual-sudo"));
     }
 
     [Fact]
