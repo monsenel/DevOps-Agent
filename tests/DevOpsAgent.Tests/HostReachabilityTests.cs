@@ -151,6 +151,43 @@ public sealed class HostReachabilityTests
         Assert.Equal(2, lab.Transports.Attempts(server));
     }
 
+    [Fact]
+    public async Task ChainedJumpsShortCircuitAtTheDeadHostAndNameIt()
+    {
+        var lab = new Lab();
+        var edge = lab.AddServer("edge", "203.0.113.10", dead: true);
+        var middle = lab.AddServer("middle", "10.1.0.1", jump: edge);
+        var leaf = lab.AddServer("leaf", "10.2.0.1", jump: middle);
+
+        await lab.PollAsync();
+        await lab.PollAsync();
+
+        // One attempt, to the host that is actually dead; nothing behind it is tried, in either cycle.
+        Assert.Equal(1, lab.Transports.Attempts(edge));
+        Assert.Equal(0, lab.Transports.Attempts(middle));
+        Assert.Equal(0, lab.Transports.Attempts(leaf));
+        Assert.Contains("middle is unreachable via jump host edge", lab.Runner.LastError(middle.Id), StringComparison.Ordinal);
+        Assert.Contains("leaf is unreachable via jump host edge", lab.Runner.LastError(leaf.Id), StringComparison.Ordinal);
+        // Only the failing hop earns a backoff; the servers behind it recover the moment it does.
+        Assert.NotNull(lab.Reachability.Get(edge.Id));
+        Assert.Null(lab.Reachability.Get(middle.Id));
+        Assert.Null(lab.Reachability.Get(leaf.Id));
+    }
+
+    [Fact]
+    public async Task AServerWhoseJumpServerIsGoneFailsPlainlyWithoutBackoffOrAttempts()
+    {
+        var lab = new Lab();
+        var orphan = lab.AddServer("orphan", "10.3.0.1");
+        orphan.Update("orphan", "10.3.0.1", 22, "dva", "key", Guid.NewGuid(), "staging", "[]", null);
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+            lab.Runner.RunAsync(orphan.Id, "true", new SshRunOptions(TimeSpan.FromSeconds(5)), CancellationToken.None));
+
+        Assert.Equal(0, lab.Transports.Attempts(orphan));
+        Assert.Null(lab.Reachability.Get(orphan.Id));
+    }
+
     private sealed class Lab
     {
         private readonly List<Server> _servers = [];
