@@ -90,6 +90,18 @@ public sealed class AppSudoCommandsTests
         Assert.True(await AlertsFor(Log("dva", scanCommand).Replace("(command continued) ", "(command continued) ; id ", StringComparison.Ordinal)));
     }
 
+    [Fact]
+    public void ScanCommandCapturedFromARealSudoLogIsRecognisedAcrossTheLineSplit()
+    {
+        // Captured on the Debian 12 lab (sudo 1.9.13): sudo broke the scan command at a space and dropped it.
+        var log = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "auth-log-sudo-split.txt"));
+
+        var sudo = Assert.Single(AuthLogParser.Parse(log, DateTimeOffset.Parse("2026-11-15T06:00:00Z", System.Globalization.CultureInfo.InvariantCulture)));
+
+        Assert.Equal("dva", sudo.Username);
+        Assert.True(AppSudoCommands.IsAppCommand(sudo.Command));
+    }
+
     private static string SudoLogged(string command) =>
         "/usr/bin/sh -c '" + command.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("'", "\\'", StringComparison.Ordinal) + "'";
 
