@@ -314,7 +314,8 @@ Raised by the 2026-11-15 MVP review. Small issues were fixed directly (`fix(revi
 - **Do:** Only connection-level failures (`SshConnectionException`, `SocketException`, timeouts, host key mismatch) enter backoff; a missing key file, wrong passphrase or authentication failure is reported as such and does not hide a server for 15 minutes; Test connection shows the real cause (`LastFailure`) instead of only "unreachable since …". The first failure of a host is single-flight (callers queue for one connect timeout today). A cancelled caller must not clear a bypass caller's in-flight flag (claim token). Pool disposal at shutdown must not throw `ObjectDisposedException` or leak a late connection. Check the target's own backoff before connecting its jump host. Servers shows "Not tested" instead of "Reachable" for a server that was never contacted.
 - **Done when:** Tests for each point with the fake transport.
 - **Delivered (owner's scope, D-039):** login and key errors are `HostFailureKind.AuthFailed` ("auth failed", constant 1 minute retry, safe wording, alert title "SSH authentication failed", Servers badge "Auth failed"); Test connection shows the real cause; the first connect of a host is single-flight (`ConnectFlight`); pool shutdown audited (idempotent `Dispose`, a lock-order inversion fixed). Tests in `SshAuthFailureTests`, `SshAuthFailureConsumerTests`, `SshKeyLoadTests`, `SshSingleFlightTests`, `SshPoolShutdownRaceTests`.
-- **Not done (not in the owner's list):** the claim token for a cancelled caller clearing a bypass caller's in-flight flag, checking the target's own backoff before connecting its jump host, the Servers page "Not tested" versus "Reachable" label.
+- **Not done (not in the owner's list):** the claim token for a cancelled caller clearing a bypass caller's in-flight flag, checking the target's own backoff before connecting its jump host, the Servers page "Not tested" versus "Reachable" label. **These three moved to the v2 backlog on the owner's order (2026-11-15).**
+- **Added afterwards (owner orders, D-039 amendments):** automatic retries of a host stop after three consecutive failed logins (paused until Retry now, Test connection or an edit of the connection settings), and a failed login is alerted under its own rule `ssh-auth-failed` instead of `server-unreachable`.
 - **Depends on:** —
 
 ### T7.R12 Test gaps — low
@@ -330,3 +331,8 @@ Raised by the 2026-11-15 MVP review. Small issues were fixed directly (`fix(revi
 ## v2 backlog (do not start without being told)
 
 App-config/connection-string collector · Nexus collector · PostgreSQL/Redis client collectors · firewall collector · HAProxy/Traefik/Caddy · TLS collector · task routing + fallback · rolling patches by graph order · CVE scan (Trivy/Grype) · file integrity · runbooks · incident mode · anomaly baselines · daily digest · Prometheus/VictoriaLogs read · LLM-inferred edges · consider decomposing HealthCheck for maintainability · execution mode "auto within allowlist" (removed from MVP, D-026; needs command pinning and per-tool scopes).
+
+Deferred from T7.R19 (moved here on the owner's order, 2026-11-15; context in D-039):
+- SSH claim-token fix: a cancelled caller must not clear the in-flight flag of a "Retry now" (bypass) caller that claimed the attempt.
+- SSH jump order: check the target server's own backoff before connecting its jump host, so a server in backoff does not cost a jump-host connect.
+- Servers page: show "Not tested" instead of "Reachable" for a server that was never contacted.
