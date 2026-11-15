@@ -45,6 +45,27 @@ public sealed class AuthLogScannerTests
     }
 
     [Fact]
+    public async Task TheCachedStateKeepsSecurityAlertsWhileTheHostDoesNotAnswerAndTheNextScanExpiresThem()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var time = new MutableTimeProvider(now);
+        var timestamp = now.AddMinutes(-1).ToString("yyyy-MM-dd'T'HH:mm:sszzz");
+        var output = $"{timestamp} host sshd[1]: Accepted publickey for deploy from 198.51.100.7 port 22 ssh2"
+            + "\n__DVA_BAN_TOOLS__\nfail2ban-client\n__DVA_BAN_STATE__\nsshd ban list empty\n";
+        var scanner = new AuthLogScanner(new FixtureSshRunner(output), new MemorySettings(),
+            Options.Create(new SecurityMonitoringOptions()), time);
+        var server = new Server("edge", "edge.example", 22, "deploy", "id_ed25519", "staging");
+        Assert.Single(await scanner.ScanAsync(server, CancellationToken.None));
+
+        // The host stops answering: its status probe fails, so only the saved state is read, for half an hour.
+        time.Advance(TimeSpan.FromMinutes(30));
+        Assert.Single(await scanner.GetCachedAsync(server, CancellationToken.None));
+
+        // It answers again with nothing new: the scan prunes what is really old and the alert can resolve.
+        Assert.Empty(await scanner.ScanAsync(server, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task Scan_RetainsNewIpAlertAcrossCursorAdvanceThenExpiresAfterFiveMinutes()
     {
         var now = DateTimeOffset.UtcNow;

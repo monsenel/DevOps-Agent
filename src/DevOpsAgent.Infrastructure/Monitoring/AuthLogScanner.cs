@@ -55,7 +55,10 @@ public sealed class AuthLogScanner(ISshRunner sshRunner, IAppSettingRepository s
     {
         var now = timeProvider.GetUtcNow();
         var state = await ReadStateAsync($"security.auth-log.{server.Id:N}", now, cancellationToken);
-        return BuildConditions(server, ActiveWindow(state.RecentEvents, now), state.NewLoginIps, [], "Scan unavailable.");
+        // The saved state is what the last successful scan saw, so it ages by that scan's time, not by the clock: a host that
+        // has not answered for more than the 5 minute window would otherwise lose its security alerts (and resolve them, with
+        // a notification) while it is down. The next successful scan prunes what is really old.
+        return BuildConditions(server, ActiveWindow(state.RecentEvents, state.CursorUtc), state.NewLoginIps, [], "Scan unavailable.");
     }
 
     public async Task<IReadOnlyList<AlertCondition>> ScanAsync(Server server, CancellationToken cancellationToken)
