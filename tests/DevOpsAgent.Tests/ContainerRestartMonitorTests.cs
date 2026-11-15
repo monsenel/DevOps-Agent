@@ -21,12 +21,19 @@ public sealed class ContainerRestartMonitorTests
     }
 
     [Fact]
-    public void TwoRestartsDoNotAlertButARestartingStateDoes()
+    public void TwoRestartsDoNotAlertButARestartingStateInTwoCyclesDoes()
     {
         Assert.Empty(ContainerRestartMonitor.Evaluate(Cycles(("web", "id1", "running", new[] { 0, 1, 2 })), Start.AddMinutes(2)));
 
-        var restarting = Cycles(("crashloop", "id1", "restarting", new[] { 0 }));
-        Assert.Equal("crashloop", Assert.Single(ContainerRestartMonitor.Evaluate(restarting, Start)).Name);
+        // One sample caught in the short pause after a single crash is not a loop; the same state a minute later is.
+        var once = Cycles(("web", "id1", "running", new[] { 1 }));
+        once.Add(Cycle(Start.AddMinutes(1), ("web", "id1", "restarting", 2)));
+        Assert.Empty(ContainerRestartMonitor.Evaluate(once, Start.AddMinutes(1)));
+        once.Add(Cycle(Start.AddMinutes(2), ("web", "id1", "running", 2)));
+        Assert.Empty(ContainerRestartMonitor.Evaluate(once, Start.AddMinutes(2)));
+
+        var restarting = Cycles(("crashloop", "id1", "restarting", new[] { 70, 70 }));
+        Assert.Equal("crashloop", Assert.Single(ContainerRestartMonitor.Evaluate(restarting, Start.AddMinutes(1))).Name);
     }
 
     [Fact]

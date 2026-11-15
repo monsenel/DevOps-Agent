@@ -79,7 +79,8 @@ public sealed class ContainerRestartMonitor(IAppSettingRepository settings, Time
         foreach (var current in latest.Containers)
         {
             // Restart activity per cycle: the counter increase on the same container (a recreated container has a new ID
-            // and a reset counter, which is not a restart), or the container being caught in the "restarting" state.
+            // and a reset counter, which is not a restart), or the container being caught in the "restarting" state in two
+            // consecutive cycles (one sample can catch the short pause after a single crash).
             var activity = new List<(DateTimeOffset At, int Restarts, bool Restarting)>();
             ContainerStatus? previous = null;
             foreach (var cycle in cycles)
@@ -88,7 +89,7 @@ public sealed class ContainerRestartMonitor(IAppSettingRepository settings, Time
                 if (status is null) { previous = null; continue; }
                 var sameContainer = previous is not null && previous.Id == status.Id;
                 var increase = sameContainer ? Math.Max(0, status.RestartCount - previous!.RestartCount) : 0;
-                var restarting = IsRestarting(status);
+                var restarting = sameContainer && IsRestarting(status) && IsRestarting(previous!);
                 if (increase > 0 || restarting) activity.Add((cycle.AtUtc, increase, restarting));
                 previous = status;
             }
