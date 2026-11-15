@@ -82,6 +82,7 @@ Dependency rule: `Domain` ← `Application` ← `Infrastructure` ← `Web`. `Web
 
 ### SSH
 - `SshConnectionPool`: one `SshClient` per server, lazily connected, health-checked, recreated on failure. Commands lease the client; eviction, failure and repeated timeouts retire it and it is disposed when the last lease ends, jump tunnels outlive their dependents (D-036).
+- Time limits (D-037): `RunAsync`'s timeout is the deadline of the whole call, connect time included; a host whose commands time out four times in a row (one more than the three that recycle a client) enters the same per-host backoff as an unreachable host; metric (50 s) and alert (25 s) cycles have their own deadline; once the host is stopping (`IHostApplicationLifetime.ApplicationStopping`, re-delivered on a pool thread) the pool refuses new work and abandons connects and commands in flight with `SshShutdownException` (a cancellation, never a failure or an alert).
 - Jump host: connect to the jump server, open `ForwardedPortLocal` to target `host:port`, connect the target client through `127.0.0.1:<local port>`.
 - `ISshRunner.RunAsync(serverId, command, RunOptions { Sudo, Timeout }, ct)` → `CommandResult { ExitCode, StdOut, StdErr, Duration }`.
 - Sudo: `sudo -n <cmd>`; capability detected once with `sudo -n true`.

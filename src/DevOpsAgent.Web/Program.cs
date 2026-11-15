@@ -123,6 +123,19 @@ catch (Exception exception)
 }
 
 // Configure the HTTP request pipeline.
+// Once the host is stopping, no new Blazor circuit connection is accepted (T7.R17). A browser tab reconnects the moment the
+// server closes its connection; Kestrel would accept that WebSocket and then wait for it until the host's shutdown timeout
+// (30 s), so an open tab alone made SIGTERM take that long.
+app.Use(async (context, next) =>
+{
+    if (app.Lifetime.ApplicationStopping.IsCancellationRequested && context.Request.Path.StartsWithSegments("/_blazor"))
+    {
+        context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+        return;
+    }
+
+    await next();
+});
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
