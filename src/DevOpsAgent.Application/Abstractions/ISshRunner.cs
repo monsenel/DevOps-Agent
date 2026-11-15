@@ -18,7 +18,7 @@ public interface ISshRunner
 }
 
 public sealed class SshHostKeyMismatchException(string host, int port, string? fingerprint)
-    : Exception($"The SSH host key for {host}:{port} is not pinned.")
+    : Exception($"The SSH host key for {host}:{port} does not match the stored key.")
 {
     public string Host { get; } = host;
     public int Port { get; } = port;

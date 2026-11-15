@@ -89,8 +89,8 @@ public sealed class AlertSignalSource(
                 // A changed host key is a possible impersonation, not an outage: report it distinctly from "unreachable".
                 result.Add(Condition("ssh-host-key-mismatch", server.Id.ToString("N"), AlertSeverity.Critical, server.Id, server.Host,
                     $"{server.Name} presented an unexpected SSH host key",
-                    $"The host key of {hostKeyMismatch.Host}:{hostKeyMismatch.Port} does not match the pinned key; the connection was refused. "
-                    + $"Presented fingerprint: {hostKeyMismatch.Fingerprint ?? "unknown"}. Verify the server before trusting the new key."));
+                    $"The host key of {hostKeyMismatch.Host}:{hostKeyMismatch.Port} does not match the stored key; the connection was refused. "
+                    + $"Presented fingerprint: SHA256:{hostKeyMismatch.Fingerprint ?? "unknown"}. Verify the key on the server, then use Accept new key on the server page."));
             }
             else if (remoteStatus is null && unreachable is { IsAuthFailure: true })
             {

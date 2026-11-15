@@ -78,7 +78,8 @@ public sealed class SshAuthFailureConsumerTests
         var result = await new ServerCapabilityService(lab.Runner, lab.Servers, lab.Time).TestAsync(server.Id, CancellationToken.None);
 
         Assert.False(result.Reachable);
-        Assert.Contains("is not pinned (SHA256:abc)", result.Error, StringComparison.Ordinal);
+        Assert.Contains("changed (SHA256:abc)", result.Error, StringComparison.Ordinal);
+        Assert.Contains("Accept new key", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -59,6 +59,8 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<ICollector, ConnectionCollector>();
         services.AddSingleton<IServerKeyStore, ServerKeyStore>();
         services.AddSingleton<IHostReachability, DevOpsAgent.Application.Servers.HostReachabilityTracker>();
+        services.AddSingleton<ManagedKnownHosts>();
+        services.AddSingleton<IHostKeyStore>(serviceProvider => serviceProvider.GetRequiredService<ManagedKnownHosts>());
         services.AddSingleton<ISshTransportFactory, SshNetTransportFactory>();
         services.AddSingleton<SshConnectionPool>();
         services.AddSingleton<ISshConnectionPool>(serviceProvider => serviceProvider.GetRequiredService<SshConnectionPool>());

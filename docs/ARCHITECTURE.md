@@ -43,7 +43,7 @@ src/
     Servers/        ServerService, SshConfigImporter
   DevOpsAgent.Infrastructure/
     Persistence/    AppDbContext, configurations, migrations
-    Ssh/            SshConnectionPool, SshRunner, JumpTunnel
+    Ssh/            SshConnectionPool, SshRunner, JumpTunnel, ManagedKnownHosts (host keys: owner file first, then trust on first use, D-041)
     Collectors/     HostCollector, ListenerCollector, DockerCollector, SystemdCollector,
                     NginxCollector, ConnectionCollector, AuthLogCollector, UpdatesCollector
     Parsers/        IpJsonParser, SsParser, DockerInspectParser, NginxConfigParser (tokenizer + AST),

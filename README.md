@@ -16,7 +16,7 @@ Requirements: Docker Compose v2, a Linux server reachable over SSH, its private 
    chmod 600 keys/your_private_key
    ```
 
-   Put private identity files in `./keys`. Put verified OpenSSH host-key lines in `./keys/known_hosts` (for non-default ports, use OpenSSH's `[host]:port` format). The app mounts this directory read-only at `/keys`; configure each server and select its identity in **Servers**.
+   Put private identity files in `./keys`. The app mounts this directory read-only at `/keys`; configure each server and select its identity in **Servers**. Host keys are trusted on first use (D-041): the first successful connection to a server (jump hosts included) records its key in `./data/known_hosts`, and the server page shows the fingerprint and when it was first seen. Compare that fingerprint with `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the server. A key that changes later is refused (Critical alert "presented an unexpected SSH host key") until you press **Accept new key** on the server page, which shows the old and new fingerprints and asks for confirmation. Lines you put in `./keys/known_hosts` yourself (for non-default ports `[host]:port`) still take precedence: a host listed there is checked against those keys only, never trusted on first use, and a change must be made in that file.
 
 2. Configure the single-user login in `.env`. Start from `.env.example` and set a unique `ADMIN_USER` and `ADMIN_PASSWORD`. For deployment, prefer `ADMIN_PASSWORD_HASH`; keep `.env` private and never commit it.
 

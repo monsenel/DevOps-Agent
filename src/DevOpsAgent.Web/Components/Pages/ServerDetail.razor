@@ -3,6 +3,9 @@
 @inject MetricService Metrics
 @inject HealthCheckService HealthChecks
 @inject NavigationManager Navigation
+@inject IHostKeyStore HostKeys
+@inject ISshConnectionPool ConnectionPool
+@inject ServerCapabilityService Capabilities
 
 <PageTitle>@(_server?.Name ?? "Server") · DevOps Agent</PageTitle>
 
@@ -22,6 +25,54 @@
                 <p class="muted mono">@_server.User@@@_server.Host:@_server.Port · @(_server.OsInfo ?? "OS not detected")</p>
             </div>
             <a class="ui-button secondary" href="/servers">Back to servers</a>
+        </section>
+
+        @* T8.4 (D-041): the stored host key, recorded on first use or added by hand, and a refused changed key. *@
+        <section class="ui-card host-key-card" aria-labelledby="host-key-title">
+            <div class="ui-card-header">
+                <div>
+                    <h2 id="host-key-title">SSH host key</h2>
+                    <p class="muted">Recorded automatically on the first successful connection; keys in your own known_hosts are always honoured.</p>
+                </div>
+            </div>
+            @if (_hostKeyMessage is not null)
+            {
+                <div class="settings-message @(_hostKeyError ? "error" : "success")" role="status">@_hostKeyMessage</div>
+            }
+            @if (_hostKeys.Count == 0)
+            {
+                <p class="muted">No key stored yet. It is recorded on the next successful connection.</p>
+            }
+            else
+            {
+                <dl class="host-key-list">
+                    @foreach (var key in _hostKeys)
+                    {
+                        <div class="host-key-row" @key="key.Fingerprint">
+                            <dt><span class="mono">@key.KeyType</span></dt>
+                            <dd>
+                                <span class="mono host-key-fingerprint">@key.Fingerprint</span>
+                                <span class="muted">@(key.Manual ? "From your known_hosts (added manually)" : key.FirstSeenUtc is { } seen ? $"First seen {seen.ToLocalTime():g}" : "Recorded by the app")</span>
+                            </dd>
+                        </div>
+                    }
+                </dl>
+            }
+            @if (_mismatch is not null)
+            {
+                <div class="host-key-mismatch" role="alert">
+                    <p><strong>Host key changed.</strong> On @_mismatch.SeenAtUtc.ToLocalTime().ToString("g") the server presented a different key, and every connection is refused until you decide. This can mean a reinstalled server or someone impersonating it.</p>
+                    <p class="mono">Presented: @_mismatch.PresentedKeyType @_mismatch.PresentedFingerprint</p>
+                    @if (_mismatch.StoredIsManual)
+                    {
+                        <p class="muted">The stored key comes from your own known_hosts file. Verify the new key, then update that file.</p>
+                    }
+                    else
+                    {
+                        <button class="ui-button secondary" type="button" @onclick="() => _acceptOpen = true">Accept new key</button>
+                    }
+                </div>
+            }
         </section>
 
         <section class="server-metric-grid" aria-label="Latest server metrics">
@@ -148,8 +199,80 @@
     </div>
 }
 
+@if (_acceptOpen && _mismatch is not null)
+{
+    <div class="dialog-backdrop">
+        <section class="ui-card confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="accept-key-title">
+            <h2 id="accept-key-title">Accept the new host key?</h2>
+            <p class="muted">Compare the new fingerprint with the key on the server itself (for example <span class="mono">ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</span>, run on its console), not through this connection.</p>
+            <dl class="host-key-compare">
+                @foreach (var old in _mismatch.Stored)
+                {
+                    <dt>Stored (old)</dt><dd class="mono">@old.KeyType @old.Fingerprint</dd>
+                }
+                <dt>Presented (new)</dt><dd class="mono">@_mismatch.PresentedKeyType @_mismatch.PresentedFingerprint</dd>
+            </dl>
+            <label class="health-enabled" for="accept-key-confirm">
+                <input id="accept-key-confirm" type="checkbox" checked="@_acceptConfirmed" @onchange="args => _acceptConfirmed = args.Value is true" />
+                I compared the new fingerprint on the server and it matches.
+            </label>
+            <div class="dialog-actions">
+                <button class="ui-button secondary" type="button" @onclick="CloseAccept">Cancel</button>
+                <button class="ui-button primary" type="button" disabled="@(!_acceptConfirmed || _accepting)" @onclick="AcceptKeyAsync">@(_accepting ? "Replacing…" : "Replace stored key")</button>
+            </div>
+        </section>
+    </div>
+}
+
 @code {
     [Parameter] public Guid ServerId { get; set; }
+
+    private IReadOnlyList<HostKeyInfo> _hostKeys = [];
+    private HostKeyMismatch? _mismatch;
+    private bool _acceptOpen;
+    private bool _acceptConfirmed;
+    private bool _accepting;
+    private string? _hostKeyMessage;
+    private bool _hostKeyError;
+
+    private void LoadHostKeys()
+    {
+        if (_server is null) return;
+        _hostKeys = HostKeys.GetKeys(_server.Host, _server.Port);
+        _mismatch = HostKeys.GetMismatch(_server.Host, _server.Port);
+    }
+
+    private void CloseAccept()
+    {
+        _acceptOpen = false;
+        _acceptConfirmed = false;
+    }
+
+    private async Task AcceptKeyAsync()
+    {
+        if (_server is null || _mismatch is null || !_acceptConfirmed) return;
+        _accepting = true;
+        try
+        {
+            await HostKeys.AcceptPresentedKeyAsync(_server.Host, _server.Port, _mismatch.PresentedFingerprint, CancellationToken.None);
+            // Reconnect now with the accepted key (this is also "Retry now" for a host in backoff).
+            ConnectionPool.Evict(_server.Id);
+            var test = await Capabilities.TestAsync(_server.Id, CancellationToken.None);
+            _hostKeyError = !test.Reachable;
+            _hostKeyMessage = test.Reachable ? "New key stored; the connection works again." : $"New key stored, but the connection test failed: {test.Error}";
+        }
+        catch (InvalidOperationException exception)
+        {
+            _hostKeyError = true;
+            _hostKeyMessage = exception.Message;
+        }
+        finally
+        {
+            _accepting = false;
+            CloseAccept();
+            LoadHostKeys();
+        }
+    }
 
     private ServerSummary? _server;
     private ServerMetrics? _metrics;
@@ -169,6 +292,7 @@
         _missing = _server is null;
         _metrics = _server is null ? null : await Metrics.GetServerMetricsAsync(ServerId, CancellationToken.None);
         _healthChecks = _server is null ? [] : await HealthChecks.ListAsync(ServerId, CancellationToken.None);
+        LoadHostKeys();
     }
 
     private string Format(string name)

@@ -40,7 +40,8 @@ public interface ISshTransportFactory
 public sealed class SshNetTransportFactory(
     ISecretProtector secretProtector,
     IServerKeyStore keyStore,
-    IOptions<SshConnectionOptions> options) : ISshTransportFactory
+    IOptions<SshConnectionOptions> options,
+    ManagedKnownHosts hostKeys) : ISshTransportFactory
 {
     private readonly SshConnectionOptions _options = options.Value;
 
@@ -84,10 +85,14 @@ public sealed class SshNetTransportFactory(
             {
                 KeepAliveInterval = TimeSpan.FromSeconds(Math.Clamp(_options.KeepAliveSeconds, 0, 3600))
             };
-            var knownHosts = new KnownHostsVerifier(_options.KnownHostsFile);
+            // T8.4 (D-041): the owner's known_hosts decides for the hosts it lists; any other host is trusted on first use and
+            // its key recorded once the connection (login included) has succeeded; a changed key is refused.
+            (string Type, byte[] Key)? firstUse = null;
             client.HostKeyReceived += (_, eventArgs) =>
             {
-                eventArgs.CanTrust = knownHosts.Matches(server.Host, server.Port, eventArgs.HostKey);
+                var decision = hostKeys.Check(server.Host, server.Port, eventArgs.HostKeyName, eventArgs.HostKey);
+                eventArgs.CanTrust = decision != HostKeyDecision.Mismatch;
+                if (decision == HostKeyDecision.FirstUse) firstUse = (eventArgs.HostKeyName, eventArgs.HostKey.ToArray());
                 if (!eventArgs.CanTrust)
                 {
                     rejectedFingerprint = eventArgs.FingerPrintSHA256;
@@ -113,6 +118,11 @@ public sealed class SshNetTransportFactory(
             {
                 _ = connecting.ContinueWith(static task => _ = task.Exception, TaskScheduler.Default);
                 throw;
+            }
+
+            if (firstUse is { } recorded)
+            {
+                await hostKeys.RecordFirstUseAsync(server.Host, server.Port, recorded.Type, recorded.Key, CancellationToken.None);
             }
 
             return new SshNetTransport(client, privateKey, tunnel, jumpTransport);

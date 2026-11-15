@@ -36,7 +36,7 @@ public static class SshFailureClassifier
         if (AsAuthFailure(exception) is { } auth) return auth.Message;
         return exception switch
         {
-            SshHostKeyMismatchException => "host key mismatch (the presented key is not pinned)",
+            SshHostKeyMismatchException => "host key mismatch (the presented key does not match the stored key)",
             SshOperationTimeoutException or TimeoutException => "connection timed out",
             SocketException socket => DescribeSocket(socket.SocketErrorCode),
             SshConnectionException => "the SSH connection was closed or the SSH handshake failed",

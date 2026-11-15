@@ -60,6 +60,7 @@
         "settings" => "Settings",
         "settings/llm" => "Settings",
         "dev/components" => "Components",
+        var path when path.StartsWith("servers/", StringComparison.Ordinal) => "Servers",
         _ => "DevOps Agent"
     };
 

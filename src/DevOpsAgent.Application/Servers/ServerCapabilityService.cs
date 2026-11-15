@@ -78,7 +78,7 @@ public sealed class ServerCapabilityService(
         {
             var fingerprint = mismatch.Fingerprint is null ? "Fingerprint unavailable" : $"SHA256:{mismatch.Fingerprint}";
             return new ServerCapabilityResult(serverId, false, null, null, null, [],
-                $"SSH host key for {mismatch.Host}:{mismatch.Port} is not pinned ({fingerprint}). Verify it independently, then add its entry to /keys/known_hosts.", testedAt);
+                HostKeyChangedText(mismatch.Host, mismatch.Port, fingerprint), testedAt);
         }
         catch (HostUnreachableException exception)
         {
@@ -95,7 +95,7 @@ public sealed class ServerCapabilityService(
         {
             var fingerprint = exception.Fingerprint is null ? "Fingerprint unavailable" : $"SHA256:{exception.Fingerprint}";
             return new ServerCapabilityResult(serverId, false, null, null, null, [],
-                $"SSH host key for {exception.Host}:{exception.Port} is not pinned ({fingerprint}). Verify it independently, then add its entry to /keys/known_hosts.", testedAt);
+                HostKeyChangedText(exception.Host, exception.Port, fingerprint), testedAt);
         }
         catch (Exception)
         {
@@ -103,6 +103,11 @@ public sealed class ServerCapabilityService(
                 "Connection test failed. Check the host, identity key, jump server, and pinned host key.", testedAt);
         }
     }
+
+    // D-041: hosts not listed anywhere are trusted on first use, so a refusal means the key changed.
+    public static string HostKeyChangedText(string host, int port, string fingerprint) =>
+        $"The SSH host key for {host}:{port} changed ({fingerprint}); the connection was refused. Compare the fingerprint on the server, "
+        + "then use Accept new key on the server page (or update your own known_hosts if the key is pinned there).";
 
     private const string AuthHint = "Check the identity key file, its passphrase, and that the key is authorised for the user on the server.";
     private const string ConnectHint = "Check the host, identity key, jump server, and pinned host key.";

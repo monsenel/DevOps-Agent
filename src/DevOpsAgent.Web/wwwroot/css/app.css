@@ -3147,3 +3147,60 @@ p {
         flex-direction: column;
     }
 }
+
+/* SSH host key card (T8.4). */
+.host-key-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.host-key-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.host-key-row {
+    display: grid;
+    grid-template-columns: minmax(110px, auto) 1fr;
+    gap: 4px 14px;
+    padding: 10px 14px;
+    border-radius: var(--dva-radius-row);
+    background: var(--dva-inset);
+}
+
+.host-key-row dd {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.host-key-fingerprint,
+.host-key-compare dd {
+    overflow-wrap: anywhere;
+}
+
+.host-key-mismatch {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 12px 14px;
+    border-radius: var(--dva-radius-row);
+    background: var(--dva-danger-soft);
+    color: var(--dva-on-danger);
+}
+
+.host-key-compare {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 14px;
+    margin: 12px 0;
+}
+
+.host-key-compare dt {
+    color: var(--dva-muted);
+    font-weight: 600;
+}

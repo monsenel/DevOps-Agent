@@ -45,7 +45,7 @@ public sealed class SshAndCapabilityTests
     }
 
     [Fact]
-    public async Task CapabilityTest_ReportsUnpinnedHostFingerprint()
+    public async Task CapabilityTest_ReportsAChangedHostKeyWithItsFingerprint()
     {
         await using var database = await CreateDatabaseAsync();
         var repository = new ServerRepository(database.Context);
@@ -58,27 +58,8 @@ public sealed class SshAndCapabilityTests
 
         Assert.False(result.Reachable);
         Assert.Contains("SHA256:abc123", result.Error);
-        Assert.Contains("/keys/known_hosts", result.Error);
-    }
-
-    [Fact]
-    public void KnownHostsVerifier_RequiresExactHostPortAndKey()
-    {
-        var path = Path.Combine(Path.GetTempPath(), $"dva-known-hosts-{Guid.NewGuid():N}");
-        var key = Convert.FromBase64String("AAAAC3NzaC1lZDI1NTE5AAAAIA==");
-        File.WriteAllText(path, "edge.example.test,edge-alias ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA==\n[edge.example.test]:2222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA==\n");
-        try
-        {
-            var verifier = new KnownHostsVerifier(path);
-            Assert.True(verifier.Matches("edge.example.test", 22, key));
-            Assert.True(verifier.Matches("edge.example.test", 2222, key));
-            Assert.False(verifier.Matches("other.example.test", 22, key));
-            Assert.False(verifier.Matches("edge.example.test", 22, [.. key, 1]));
-        }
-        finally
-        {
-            File.Delete(path);
-        }
+        Assert.Contains("changed", result.Error);
+        Assert.Contains("Accept new key", result.Error);
     }
 
     [Fact]

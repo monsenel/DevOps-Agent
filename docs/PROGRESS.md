@@ -13,7 +13,7 @@
 ## Current
 
 - **Task:** T7.R25 and T7.R26 done (owner order 2026-11-16); T8.1–T8.9 next. T7.R4 and T7.R16 still held by the owner.
-- **Status:** T8.3 done; next T8.4
+- **Status:** T8.4 done; next T8.5
 - **Last updated:** 2026-11-16 by ZCode
 
 ## WIP notes
@@ -151,7 +151,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T8.1 | Bugs seen in screenshots | done | `feat(T8.1): provider list and form always agree; read-only updates cannot be selected; header separator` |
 | T8.2 | Global search | done | `feat(T8.2): global search in the top bar over servers, nodes, listeners and open alerts` |
 | T8.3 | Theme toggle icon button | done | `feat(T8.3): icon-only theme toggle with an action label and tooltip` |
-| T8.4 | Automatic known_hosts (TOFU) | todo | |
+| T8.4 | Automatic known_hosts (TOFU) | done | `feat(T8.4): host keys trusted on first use, shown on the server page, changed keys accepted explicitly` |
 | T8.5 | Chat attachments and effort | todo | |
 | T8.6 | Updates select all and sources | todo | |
 | T8.7 | Impact preview on proposed actions | todo | |
@@ -166,6 +166,7 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 
 One line per session: date · tool/model · tasks touched · result.
 
+- 2026-11-16 · ZCode / Claude · T8.4 done · D-041: `ManagedKnownHosts` (owner's `/keys/known_hosts` decides alone for hosts it lists; others trusted on first successful connection and recorded in `Ssh:ManagedKnownHostsFile`, default `/data/known_hosts`, with `dva-first-seen=`; changed key refused and remembered with its bytes; `AcceptPresentedKeyAsync` replaces only the managed key with the confirmed fingerprint); `KnownHostsVerifier` removed; server page "SSH host key" card (fingerprint, first seen / added manually, refused key, Accept new key dialog with old/new fingerprints and a required confirmation, then reconnect); texts say "changed" instead of "not pinned"; top bar title "Servers" on server pages; build 0 warnings, 641 tests (4 new, 1 replaced); live (isolated :5199, empty owner known_hosts): background cycles recorded `[127.0.0.1]:2201` and `10.88.20.30` (via jump) with fingerprints equal to `ssh-keygen -lf` of the lab keys; srv-db's stored key swapped for srv-edge's in the managed file + restart → Critical `ssh-host-key-mismatch` 22:42:47, connection refused, file unchanged; Accept new key (button disabled until confirmed) → key replaced, "connection works again", alert resolved 22:45:22; a wrong srv-db line in the owner's file wins over the correct managed key → refused, Critical alert, no Accept button ("update that file"); real owner file restored
 - 2026-11-16 · ZCode / Claude · T8.3 done · top-bar theme toggle is a 44×44 icon button (inline SVG moon in light, sun in dark), `aria-label` and `title` "Switch to dark theme" / "Switch to light theme", no text; DESIGN.md §2 updated; build 0 warnings, 638 tests (2 new); browser: 44×44 px, both icons and labels after a toggle, keyboard Tab from the search shows the accent focus ring (`:focus-visible`)
 - 2026-11-16 · ZCode / Claude · T8.2 done · `GlobalSearchService` (servers by name/host/discovered IPs, containers/services/domains/unknown endpoints, listeners by exact port with or without `:`, open alerts; exact > prefix > contains, 20 results max, grouped) in its own DI scope per search from a `GlobalSearch` combobox in the top bar (250 ms debounce, listbox with groups, ArrowUp/Down wrap, Enter opens, Escape closes, `aria-activedescendant`); Topology `?node=` selects and centers the node (`graph.js focus`), Alerts `?alert=` opens the alert (all states if it left the Open filter); top bar title ignores the query string; build 0 warnings, 636 tests (5 new); also `fix(T7.R25)`: listener collector timeout 15 → 30 s (a password sudo never started; found in this task's live discovery, guard test added); live (isolated :5199, discovery 2/2): `api` from Updates → 3 node results, ArrowDown+Enter → Topology with "server block · api.test.local" selected; `5432` → listener on db-pw; `new listener` from Servers → 7 open alerts, ArrowDown/Up wrap, Enter → alert detail; Escape closes
 - 2026-11-16 · ZCode / Claude · T8.1 done · Settings › LLM: `ProviderEditor` keeps list and form in step (selected provider = form values; no providers or Add provider = empty form with no type chosen, heading "Add provider", empty-state tile "No providers yet", `autocomplete=off` on the type/name/URL fields against browser form restore); Updates: `ServerUpdateStatus.ReadOnly` (group read-only, D-027/D-029) hides the select column and disables Review with the reason shown, badge "Read-only group"; header line `apt · <time> · Package lists last refreshed …` (`MetaLine`); build 0 warnings, 630 tests (7 new); browser check on the isolated :5199 app: empty Settings form in dark, Updates in light and dark (a display-only package row inserted into the /tmp DB and removed again)

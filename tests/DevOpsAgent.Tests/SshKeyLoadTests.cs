@@ -165,9 +165,17 @@ public sealed class SshKeyLoadTests : IDisposable
     private async Task<SshAuthFailedException> ConnectAsync(Server server) =>
         await Assert.ThrowsAsync<SshAuthFailedException>(() => Factory().ConnectAsync(server, null, CancellationToken.None));
 
-    private SshNetTransportFactory Factory() => new(_protector,
-        new ServerKeyStore(Options.Create(new ServerInventoryOptions { KeyDirectory = _directory })),
-        Options.Create(new SshConnectionOptions { KnownHostsFile = Path.Combine(_directory, "known_hosts"), ConnectionTimeoutSeconds = 5 }));
+    private SshNetTransportFactory Factory()
+    {
+        var options = Options.Create(new SshConnectionOptions
+        {
+            KnownHostsFile = Path.Combine(_directory, "known_hosts"),
+            ManagedKnownHostsFile = Path.Combine(_directory, "managed_known_hosts"),
+            ConnectionTimeoutSeconds = 5
+        });
+        return new(_protector, new ServerKeyStore(Options.Create(new ServerInventoryOptions { KeyDirectory = _directory })), options,
+            new ManagedKnownHosts(options, TimeProvider.System, Microsoft.Extensions.Logging.Abstractions.NullLogger<ManagedKnownHosts>.Instance));
+    }
 
     private Server KeyServer(string keyFile, string? passphrase = null, int port = 1)
     {

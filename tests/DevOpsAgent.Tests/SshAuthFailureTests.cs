@@ -102,7 +102,7 @@ public sealed class SshAuthFailureTests
     [InlineData("dns", "host name could not be resolved")]
     [InlineData("noroute", "no route to host")]
     [InlineData("ssh-closed", "the SSH connection was closed or the SSH handshake failed")]
-    [InlineData("host-key", "host key mismatch (the presented key is not pinned)")]
+    [InlineData("host-key", "host key mismatch (the presented key does not match the stored key)")]
     public async Task ConnectionLevelFailuresKeepTheUnreachableSemanticsAndNameTheirCause(string failure, string cause)
     {
         using var lab = new HangLab();
