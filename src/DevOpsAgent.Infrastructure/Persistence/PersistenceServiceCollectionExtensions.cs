@@ -101,4 +101,28 @@ public static class PersistenceServiceCollectionExtensions
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         await dbContext.Database.MigrateAsync(cancellationToken);
     }
+
+    /// <summary>
+    /// A discovery run still Running at startup was cut off by a crash or restart and can never finish; mark it Failed so it
+    /// is never shown as in progress and never used as a merge base. Returns how many were swept.
+    /// </summary>
+    public static async Task<int> RecoverInterruptedDiscoveryAsync(this IServiceProvider serviceProvider,
+        TimeProvider timeProvider, CancellationToken cancellationToken = default)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        return await RecoverInterruptedDiscoveryAsync(dbContext, timeProvider.GetUtcNow(), cancellationToken);
+    }
+
+    public static async Task<int> RecoverInterruptedDiscoveryAsync(AppDbContext dbContext, DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var running = await dbContext.Snapshots
+            .Where(snapshot => snapshot.Status == DevOpsAgent.Domain.Discovery.SnapshotStatus.Running)
+            .ToListAsync(cancellationToken);
+        foreach (var snapshot in running)
+            snapshot.Fail(now, snapshot.SucceededServerCount, snapshot.FailedServerCount);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return running.Count;
+    }
 }

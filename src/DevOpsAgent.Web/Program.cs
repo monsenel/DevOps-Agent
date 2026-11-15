@@ -109,6 +109,17 @@ catch (Exception exception)
     app.Logger.LogError(exception, "Could not sweep interrupted actions.");
 }
 
+// Likewise, a discovery run left Running can never finish.
+try
+{
+    var interruptedRuns = await app.Services.RecoverInterruptedDiscoveryAsync(TimeProvider.System);
+    if (interruptedRuns > 0) app.Logger.LogWarning("Marked {InterruptedRuns} interrupted discovery run(s) as failed.", interruptedRuns);
+}
+catch (Exception exception)
+{
+    app.Logger.LogError(exception, "Could not sweep interrupted discovery runs.");
+}
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
