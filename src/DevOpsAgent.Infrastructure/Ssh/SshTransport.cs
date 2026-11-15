@@ -34,6 +34,7 @@ public sealed class SshNetTransportFactory(
         ForwardedPortLocal? tunnel = null;
         PrivateKeyFile? privateKey = null;
         SshClient? client = null;
+        KeyAuthentication? authentication = null;
         string? rejectedFingerprint = null;
         try
         {
@@ -55,7 +56,7 @@ public sealed class SshNetTransportFactory(
                 port = checked((int)tunnel.BoundPort);
             }
 
-            var authentication = new PrivateKeyAuthenticationMethod(server.User, privateKey);
+            authentication = new KeyAuthentication(server.User, privateKey);
             var connectionInfo = new ConnectionInfo(host, port, server.User, authentication)
             {
                 Timeout = TimeSpan.FromSeconds(Math.Clamp(_options.ConnectionTimeoutSeconds, 1, 300))
@@ -110,6 +111,14 @@ public sealed class SshNetTransportFactory(
             CleanUp();
             throw SshFailureClassifier.AsAuthFailure(exception)!;
         }
+        catch (Exception exception) when (exception is SshConnectionException && authentication is { Attempted: true })
+        {
+            // The server hung up while the key was being offered (sshd closes the socket at MaxAuthTries or under a login
+            // penalty instead of answering "denied"). That is a failed login, not an outage: left as a connection failure it
+            // would restart the count of consecutive failed logins every time and the retry cap (D-039) would never apply.
+            CleanUp();
+            throw new SshAuthFailedException(SshAuthFailure.ServerClosedDuringLogin);
+        }
         catch (Exception exception)
         {
             // Disposing an SshClient that is still connecting blocks until its socket gives up (the connect timeout, for a
@@ -157,6 +166,23 @@ public sealed class SshNetTransportFactory(
                     ? SshAuthFailure.KeyFileUnreadable
                     : SshAuthFailure.KeyInvalidOrWrongPassphrase);
         }
+    }
+}
+
+/// <summary>
+/// The key login of a connect, remembering that the key was offered: a server that drops the connection after that point
+/// refused the login (a login limit hangs up instead of replying "denied"), it did not fail to be reached.
+/// </summary>
+internal sealed class KeyAuthentication(string username, PrivateKeyFile key) : PrivateKeyAuthenticationMethod(username, key)
+{
+    private int _attempted;
+
+    public bool Attempted => Volatile.Read(ref _attempted) != 0;
+
+    public override AuthenticationResult Authenticate(Session session)
+    {
+        Volatile.Write(ref _attempted, 1);
+        return base.Authenticate(session);
     }
 }
 

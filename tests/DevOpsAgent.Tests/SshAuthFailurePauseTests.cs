@@ -88,6 +88,23 @@ public sealed class SshAuthFailurePauseTests
     }
 
     [Fact]
+    public async Task AServerThatHangsUpDuringLoginIsPausedLikeOneThatRefusesTheKey()
+    {
+        // sshd closes the socket at MaxAuthTries or under a login penalty instead of answering "denied": the transport
+        // reports that as a login failure (SshNetTransportFactory, KeyAuthentication), so the cap applies to it as well.
+        var clock = new ManualClock();
+        using var lab = NewLab(clock);
+        var host = lab.Add("limited", "10.0.0.4", script => script.ConnectFails = () => new SshAuthFailedException(SshAuthFailure.ServerClosedDuringLogin));
+
+        await PauseAsync(lab, clock, host);
+        await AssertNoAutomaticAttemptAsync(lab, clock, host, Limit);
+
+        var state = lab.Reachability.Get(host.Id)!;
+        Assert.Equal(HostFailureKind.AuthFailed, state.Kind);
+        Assert.Equal("the server closed the connection during login", state.Cause);
+    }
+
+    [Fact]
     public void ThePauseIsAnOptionWithADefaultOfThreeNotAMagicNumber() =>
         Assert.Equal(3, IHostReachability.AuthFailedAttemptLimit);
 

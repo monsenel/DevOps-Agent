@@ -19,7 +19,13 @@ public enum SshAuthFailure
     KeyInvalidOrWrongPassphrase = 3,
 
     /// <summary>The key is passphrase protected and the server has no passphrase stored.</summary>
-    PassphraseRequired = 4
+    PassphraseRequired = 4,
+
+    /// <summary>
+    /// The server dropped the connection while the key was being offered (a login limit such as sshd's MaxAuthTries closes
+    /// the socket instead of answering "denied"). The login failed the same way a refused key does, and it counts the same.
+    /// </summary>
+    ServerClosedDuringLogin = 5
 }
 
 /// <summary>
@@ -39,6 +45,7 @@ public sealed class SshAuthFailedException(SshAuthFailure reason) : Exception(De
         SshAuthFailure.KeyFileUnreadable => "key file cannot be read",
         SshAuthFailure.KeyInvalidOrWrongPassphrase => "wrong passphrase or invalid key file",
         SshAuthFailure.PassphraseRequired => "the key needs a passphrase and none is stored",
+        SshAuthFailure.ServerClosedDuringLogin => "the server closed the connection during login",
         _ => "authentication failed"
     };
 }
