@@ -59,7 +59,7 @@ public sealed class HealthCheckServiceTests
     }
 
     [Fact]
-    public async Task ChecksOfAServerWhoseSshLoginFailedAreSkippedLikeThoseOfAnUnreachableOne()
+    public async Task ChecksOfAServerWhoseSshLoginFailedKeepRunningBecauseTheProbesUseNoSsh()
     {
         var fixture = new ServiceFixture();
         _ = await fixture.Service.CreateAsync(fixture.Server.Id,
@@ -71,37 +71,47 @@ public sealed class HealthCheckServiceTests
             DevOpsAgent.Application.Abstractions.SshAuthFailure.KeyFileNotFound));
         await fixture.Service.RunDueAsync(CancellationToken.None);
 
-        var item = Assert.Single(await fixture.Service.ListAsync(fixture.Server.Id, CancellationToken.None));
-        Assert.Equal(HealthCheckStatus.Healthy, item.Status);
-        Assert.Null(item.Error);
-        Assert.Equal(1, fixture.Probe.Count);
+        Assert.Equal(2, fixture.Probe.Count);
     }
 
     [Fact]
-    public async Task ChecksOfAServerWhoseLoginIsPausedAreNeverRunAgainUntilTheOwnerActs()
+    public async Task ChecksOfAServerWhoseLoginIsPausedKeepRunningSoADownSiteIsStillCaught()
     {
         var fixture = new ServiceFixture();
         _ = await fixture.Service.CreateAsync(fixture.Server.Id,
             new HealthCheckInput("Web", HealthCheckType.Http, "http://app.example.test/health", 60), CancellationToken.None);
         await fixture.Service.RunDueAsync(CancellationToken.None);
 
-        // Three failed logins in a row (D-039 amendment): the host is paused, not just in a one-minute backoff.
+        // Three failed logins in a row (D-039 amendment): the host is paused, not just in a one-minute backoff, and that
+        // lasts until the owner acts. The site's own health must not freeze with it.
         for (var failure = 0; failure < DevOpsAgent.Application.Abstractions.IHostReachability.AuthFailedAttemptLimit; failure++)
             fixture.Reachability.RecordFailure(fixture.Server.Id, new DevOpsAgent.Application.Abstractions.SshAuthFailedException(
                 DevOpsAgent.Application.Abstractions.SshAuthFailure.ServerRejectedKey));
 
-        // Hours pass, the check is due every minute: it never runs, and keeps its last result.
+        // Hours pass, the check is due every minute: it runs every time and records what it finds.
         for (var hour = 0; hour < 5; hour++)
         {
             fixture.Clock.Set(fixture.Clock.GetUtcNow().AddHours(1));
             await fixture.Service.RunDueAsync(CancellationToken.None);
         }
 
-        Assert.Equal(1, fixture.Probe.Count);
-        Assert.Equal(HealthCheckStatus.Healthy, Assert.Single(await fixture.Service.ListAsync(fixture.Server.Id, CancellationToken.None)).Status);
+        Assert.Equal(6, fixture.Probe.Count);
+    }
 
-        // Once the owner resets it (edit, or a successful Retry now), the check runs again.
-        fixture.Reachability.Reset(fixture.Server.Id);
+    [Fact]
+    public async Task ChecksOfAHostThatCannotBeReachedAreStillSkippedUntilItsBackoffEnds()
+    {
+        var fixture = new ServiceFixture();
+        _ = await fixture.Service.CreateAsync(fixture.Server.Id,
+            new HealthCheckInput("Web", HealthCheckType.Http, "http://app.example.test/health", 60), CancellationToken.None);
+        await fixture.Service.RunDueAsync(CancellationToken.None);
+
+        fixture.Clock.Set(fixture.Clock.GetUtcNow().AddSeconds(61));
+        fixture.Reachability.RecordFailure(fixture.Server.Id, new System.Net.Sockets.SocketException());
+        await fixture.Service.RunDueAsync(CancellationToken.None);
+        Assert.Equal(1, fixture.Probe.Count);
+
+        fixture.Clock.Set(fixture.Clock.GetUtcNow().AddMinutes(2));
         await fixture.Service.RunDueAsync(CancellationToken.None);
         Assert.Equal(2, fixture.Probe.Count);
     }

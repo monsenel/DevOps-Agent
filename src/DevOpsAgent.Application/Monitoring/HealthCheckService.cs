@@ -104,9 +104,13 @@ public sealed class HealthCheckService(
         var due = enabled.Where(item => item.LastCheckedAtUtc is null ||
             item.LastCheckedAtUtc.Value.AddSeconds(item.IntervalSeconds) <= now).ToArray();
         using var semaphore = new SemaphoreSlim(MaxParallelProbes);
-        // A server in SSH backoff is not probed this cycle (T7.R1), and its checks keep their last result: "not probed" is
-        // not a failure, so it must not open a health-check alert for a site that may be fine (the unreachable alert covers the host).
-        var results = await Task.WhenAll(due.Where(item => !reachability.IsBlocked(item.ServerId, out _)).Select(async item =>
+        // A server that cannot be reached at all (SSH connect backoff) is not probed this cycle (T7.R1), and its checks keep
+        // their last result: "not probed" is not a failure, so it must not open a health-check alert for a site that may be
+        // fine (the unreachable alert covers the host). The probes use no SSH: a host whose login failed or whose commands
+        // time out still answers on its ports, and with the automatic retries of a failed login paused (D-039) it would
+        // otherwise never be probed again.
+        var results = await Task.WhenAll(due.Where(item => !(reachability.IsBlocked(item.ServerId, out var backoff)
+            && backoff!.Kind == HostFailureKind.Connect)).Select(async item =>
         {
             await semaphore.WaitAsync(cancellationToken);
             try
