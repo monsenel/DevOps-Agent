@@ -12,8 +12,8 @@
 
 ## Current
 
-- **Task:** T7.R1–T7.R3, T7.R15, T7.R17–T7.R19 done (R17–R19 were done ahead of T7.R7 on the owner's order); next T7.R4
-- **Status:** —
+- **Task:** T7.R24 Optional sudo password per server (owner order; filed as "T7.R20", renumbered because T7.R20 exists). T7.R1–T7.R3, T7.R15, T7.R17–T7.R19 done; T7.R4 and T7.R16 held by the owner
+- **Status:** in-progress
 - **Last updated:** 2026-11-15 by ZCode
 
 ## WIP notes
@@ -145,6 +145,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T7.R21 | Deadline and timeout semantics | todo | |
 | T7.R22 | Shutdown and lease hardening | todo | |
 | T7.R23 | Auth-failed follow-ups | todo | |
+| T7.R24 | Optional sudo password per server | in-progress | |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
 
@@ -153,6 +154,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 ## Session log
 
 One line per session: date · tool/model · tasks touched · result.
+
+- 2026-11-15 · ZCode / Claude · started T7.R24 (owner's "T7.R20", renumbered) · optional per-server sudo password (`sudo -S -p ''`, stdin only, one failure pauses sudo until edit / Retry now); pushed `main` to origin (6b4d044..af9e0b2, over SSH; tags still local); baseline build 0 warnings, 555/555 tests
 
 - 2026-11-15 · ZCode / Claude · independent review of T7.R15/R17/R18/R19 and the auth-retry cap (v0.1.2..HEAD) · four read-only reviewers plus a live run on the lab (isolated `/tmp` DB, Release build, private sshd on 127.0.0.1:2222-2224, no new containers; srv-edge's fail2ban untouched): SIGTERM exit 0.12 s with a tab open and a blackhole connect in flight, 0.12 s during discovery, 2.14 s with the jump host frozen; hung leaf host (`docker pause dva-srv-app`) cycles max 15.2 s; hung jump host: alert cycles 30.0 s and 31.0 s and metric 45 s before the fix, 15-21 s / 31 s after; hung-command host backed off after four timeouts (~80 s); auth cap: 3 attempts 60.0 s apart then none for 5+ minutes, Test connection and a dependent's Retry now one login each; 6 `fix(review-r2)` commits + tests (build 0 warnings, 555 tests); T7.R20–R23 filed
 

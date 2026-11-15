@@ -338,6 +338,11 @@ Raised by the 2026-11-15 MVP review. Small issues were fixed directly (`fix(revi
 - **Done when:** Tests per point; owner decision recorded for the flap policy.
 - **Depends on:** —
 
+### T7.R24 Optional sudo password per server (owner order, 2026-11-15) — medium
+- **Do:** For hosts where NOPASSWD sudo is not possible: an optional "sudo password" per server in the server form, stored with Data Protection, never returned to the browser, masked. When set, sudo runs as `sudo -S -p '' …` with the password written to stdin; it is never on the command line, in logs, action output, alerts, notifications or anything sent to the LLM, and it is on the server's redaction list. A rejected password is a distinct "sudo auth failed" state: after one failure no sudo is used on that server until the password is edited or "Retry now" is pressed (pam_faillock); non-sudo collectors keep running. Without a password `sudo -n` is used exactly as before. The Servers page shows the mode per server ("sudo: NOPASSWD", "sudo: password", "sudo: none"). (Filed by the owner as "T7.R20"; that number was already taken by the stale-alerts task, so it is T7.R24.)
+- **Done when:** Unit tests: the password never appears in any captured command, log or output; one failure stops further attempts; reset paths. Live on the lab: a second sudo user on srv-db that needs a password, discovery works with it, a wrong password causes exactly one failed attempt. DECISIONS entry: NOPASSWD restricted sudoers stays the recommended setup.
+- **Depends on:** —
+
 ### T7.R12 Test gaps — low
 - **Do:** Tests for `ChatService.SendAsync` (streaming + tool loop), discovery max degree 8, unix-socket edge resolution, dnf update parsing/reboot report, the no-sudo capability path (fake returning non-zero for `sudo -n true`).
 - **Done when:** Tests green.
