@@ -284,6 +284,32 @@ Raised by the 2026-11-15 MVP review. Small issues were fixed directly (`fix(revi
 - **Done when:** A sudoers file listing only the app's commands works on the lab for discovery, scans and approved tools; the app still alerts on any other sudo.
 - **Depends on:** —
 
+### T7.R15 SSH client leases (T7.R1 gap, INV-5) — high
+- **Do:** The lease/ref-count requirement of T7.R1 was not delivered. A pooled client (and a jump tunnel) must not be disposed while another caller is mid-command: count in-flight commands per `ConnectionEntry`; `Invalidate`/`Evict`/timeout recycling mark the entry retired and dispose it only when the count reaches zero (new callers get a fresh entry meanwhile). Recycle after consecutive timeouts only when no other command is in flight.
+- **Evidence (2026-11-15 review, code):** `SshConnectionPool.cs` `Invalidate`/`RemoveConnection`/`Evict` dispose the transport immediately; `SshTimeoutTracker` is shared by every session on the entry, so three timeouts of short probes (metrics 30 s, status 20 s, auth scan 20 s) can close the client under a running `apt upgrade` (10 min) and kill its channel.
+- **Done when:** Fake-transport tests: Evict, host edit and the timeout threshold during an in-flight command leave that command running and dispose the client afterwards; a jump tunnel outlives dependents' commands; no leak on cancellation.
+- **Depends on:** —
+
+### T7.R16 Stale carry-forward correctness (T7.R2 gaps, NFR-3) — medium
+- **Do:** (a) Fresh-to-stale edges are carried from the old snapshot without checking that the fresh server still reports them (a removed `proxy_pass` to a stale server is hidden until recovery), and a fresh server's edge to a stale server's other addresses (bare host has no `Addresses`) can resolve to a new Unknown node (added drift during the outage, removed on recovery): seed the IP index with the stale hosts' last-known addresses, then carry only stale-to-stale edges. (b) "Last seen" uses the previous snapshot's start time, which is wrong after a merge snapshot and is the run start, not the collection time: use the host collector run time of the snapshot where the server was last reachable. (c) New-listener alerts compare only servers whose listener collector succeeded in both snapshots and that are not stale in either (T7.R2 Do text); a server never discovered before must not raise one alert per listener on recovery. (d) Mark carried edges stale in the graph (dashed + text in the detail panel), check `opacity` of stale labels against NFR-10, pass the C# badge text to `graph.js` instead of parsing the date in JS, make `IGraphRepository.GetEntitiesAsync` non-default, correct D-033 consequences (observed connections become `unknown:observed:` nodes, not "removed").
+- **Done when:** Tests on fixture snapshots for each point (multi-address stale host, merge-base last-seen, failed listener collector, recovery from "never discovered"); on the lab with a server that has two addresses, an outage and a recovery produce no added/removed Unknown nodes and no new-listener alerts.
+- **Depends on:** —
+
+### T7.R17 Cycle deadlines and alert stalls (T7.R1 gaps, NFR-2) — medium
+- **Do:** A host that accepts connections but whose commands hang is never backed off and holds a slot: count consecutive command timeouts toward backoff (distinct from connect failures) or skip it for a cycle. Skip the auth-log scan when the status probe failed or timed out; a per-cycle deadline for the 30 s alert and 60 s metric cycles; the per-call deadline must include connect time (`SshRunner` times only the command); the container status query runs under its own limiter or with a short timeout so it cannot add 20 s to a hung host's slot; report a failed probe as "probe failed", not "could not reach the server".
+- **Done when:** Tests with a fake transport whose commands hang: the cycle ends within its interval and the host is skipped after N timeouts; on the lab (`docker pause dva-srv-app`) the metric and alert cycles for the other servers stay within 60 s and 30 s.
+- **Depends on:** T7.R7 (overlapping alert-engine scope; do together)
+
+### T7.R18 Restart-loop rule follow-ups (T7.R3, MON-2) — medium
+- **Do:** (a) An unreachable server must not resolve an open restart-loop alert after 10 minutes on stale data: carry the open condition while the server is unreachable. (b) `docker inspect` failing for one container (removed between `ps` and `inspect`) drops the whole sample and triggers a needless sudo retry: tolerate partial output. (c) The status probe in `AlertSignalSource` ends in `|| true`, so a Docker permission failure looks like "no containers"; give it the same sudo fallback as the metric query. (d) Store only containers with a restart count above 0 or a non-running state, log (without contents) when stored history is corrupt (D-025), remove history of deleted servers, and verify parallel settings writes with a SQLite busy timeout. (e) Decide with the owner whether `created`, `paused` and `removing` should raise the High container-state alert; document that a recreate loop and `docker restart` are invisible to the rule.
+- **Done when:** Tests for (a)–(d); owner decision recorded for (e).
+- **Depends on:** —
+
+### T7.R19 SSH failure classification and reachability UI (T7.R1 gaps) — low
+- **Do:** Only connection-level failures (`SshConnectionException`, `SocketException`, timeouts, host key mismatch) enter backoff; a missing key file, wrong passphrase or authentication failure is reported as such and does not hide a server for 15 minutes; Test connection shows the real cause (`LastFailure`) instead of only "unreachable since …". The first failure of a host is single-flight (callers queue for one connect timeout today). A cancelled caller must not clear a bypass caller's in-flight flag (claim token). Pool disposal at shutdown must not throw `ObjectDisposedException` or leak a late connection. Check the target's own backoff before connecting its jump host. Servers shows "Not tested" instead of "Reachable" for a server that was never contacted.
+- **Done when:** Tests for each point with the fake transport.
+- **Depends on:** —
+
 ### T7.R12 Test gaps — low
 - **Do:** Tests for `ChatService.SendAsync` (streaming + tool loop), discovery max degree 8, unix-socket edge resolution, dnf update parsing/reboot report, the no-sudo capability path (fake returning non-zero for `sudo -n true`).
 - **Done when:** Tests green.

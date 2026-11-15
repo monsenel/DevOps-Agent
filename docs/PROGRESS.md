@@ -35,6 +35,11 @@ The 2026-11-15 review fixed small issues in `fix(review): …` commits (build 0 
 | T7.R10 | medium | Loading skeletons, J6 health re-run, dnf with sudo, subnet filter, import group options, sidebar groups, chat Markdown |
 | T7.R11 | medium | Manual real-browser recheck of forms, 390 px and contrast |
 | T7.R14 | medium | Privileged commands as direct argv so sudoers can pin them |
+| T7.R15 | high | SSH client leases: a pooled client can be disposed under a running command (T7.R1 gap) |
+| T7.R16 | medium | Stale carry-forward: fresh→stale edges, stale hosts' other addresses, last-seen time, new-listener guard |
+| T7.R17 | medium | Hung-command hosts are never backed off; alert/metric cycle deadlines; connect time outside the call deadline |
+| T7.R18 | medium | Restart-loop rule follow-ups (unreachable host, partial inspect, sudo fallback in the status probe, history size) |
+| T7.R19 | low | SSH failure classification (auth/key errors are not "unreachable"), single-flight first failure, shutdown races |
 | T7.R12 | low | Test gaps (chat send loop, discovery parallelism, unix sockets, dnf, no-sudo path) |
 
 ### Live acceptance run (2026-11-15, single agent; replaces earlier overlapping results)
@@ -131,6 +136,11 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T7.R12 | Test gaps | todo | |
 | T7.R13 | Owner decisions | done | D-026–D-031 |
 | T7.R14 | Sudoers-pinnable privileged commands | todo | |
+| T7.R15 | SSH client leases | todo | |
+| T7.R16 | Stale carry-forward correctness | todo | |
+| T7.R17 | Cycle deadlines and alert stalls | todo | |
+| T7.R18 | Restart-loop rule follow-ups | todo | |
+| T7.R19 | SSH failure classification and reachability UI | todo | |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
 

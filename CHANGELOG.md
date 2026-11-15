@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+Independent review of 0.1.2 (T7.R1–T7.R3):
+
+- Health checks of a server in SSH backoff are skipped and keep their last result instead of being stored as failing (they raised a High alert for sites that may be fine).
+- Restart-loop alert: one restart after an earlier, resolved loop no longer reopens it; a container needs two consecutive `restarting` samples to alert (D-035).
+- A connect that fails after the server was edited no longer puts the new settings into backoff; editing a jump server resets the backoff of the servers behind it.
+- Drift no longer throws when two Docker DNS listeners share one identity.
+
 ## 0.1.2 — 2026-11-15
 
 - T7.R1: per-host SSH backoff (1 min doubling to 15 min, reset on success); servers behind an unreachable jump host are reported unreachable without a connection attempt; alerts, metrics and health checks run 8 servers in parallel; "Retry now" on Servers bypasses the backoff. With a blackholed host, discovery takes ~15 s and metric cycles stay well under 60 s.
