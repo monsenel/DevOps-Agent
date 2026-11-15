@@ -12,8 +12,8 @@
 
 ## Current
 
-- **Task:** T7.R2 Stale nodes for unreachable servers (NFR-3), no false drift
-- **Status:** in-progress
+- **Task:** T7.R2 done; next T7.R3
+- **Status:** —
 - **Last updated:** 2026-11-15 by ZCode
 
 ## WIP notes
@@ -26,7 +26,6 @@ The 2026-11-15 review fixed small issues in `fix(review): …` commits (build 0 
 
 | Task | Severity | Summary |
 |---|---|---|
-| T7.R2 | high | Stale marking (text badge + last seen) for unreachable servers' nodes |
 | T7.R3 | high | Container restart-loop alert rule (restart counts) |
 | T7.R4 | medium | `restart_service` guard for sshd/docker; decide on `restart_container` |
 | T7.R5 | medium | HTTPS for token-bearing endpoints; redact raw Docker `Cmd`/labels and `nginx -T` before storage |
@@ -120,7 +119,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T6.5 | Updates | done | `feat(T6.5): verify security update workflow and resilient scans` |
 | T6.6 | MVP hardening pass | done | `feat(T6.6): MVP hardening and release closeout` |
 | T7.R1 | SSH connection lifecycle | done | `feat(T7.R1): dead hosts never slow discovery, metrics or alerts` |
-| T7.R2 | Stale nodes for unreachable servers | in-progress | |
+| T7.R2 | Stale nodes for unreachable servers | done | `feat(T7.R2): stale carry-forward for unreachable servers without false drift` |
 | T7.R3 | Container restart-loop alert rule | todo | |
 | T7.R4 | Agent action guardrails | todo | |
 | T7.R5 | Secret handling gaps | todo | |
@@ -141,6 +140,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 ## Session log
 
 One line per session: date · tool/model · tasks touched · result.
+
+- 2026-11-15 · ZCode / Claude · T7.R2 done · live: `docker stop dva-srv-db` → discovery 2/2 with srv-db, redis-server, sshd and its server block shown "stale · last seen 07:13 UTC" and Postgres/Redis listeners carried; drift 0 removals and 0 new listeners, no new-listener alert; after `docker start` + Retry now, discovery cleared stale and drift reported nothing added for srv-db (Docker DNS random ports fixed as one identity); 351/351 tests
 
 - 2026-11-15 · ZCode / Claude · T7.R1 done · live on the fixed-IP lab with a 192.0.2.1 entry: discovery 15.3 s (Partial 3/1); 10 consecutive metric cycles max 15.6 s (first), then 9–240 ms; `docker stop dva-srv-edge` → srv-app/srv-db "unreachable via jump host srv-edge" with no connect attempts logged for them; Retry now recovered srv-app in ~2 s; natural recovery 35 s after start; build 0 warnings, 347/347 tests
 

@@ -185,9 +185,14 @@ public sealed class DriftService(ISnapshotRepository snapshots, IGraphRepository
     private static ListenerState? ToListenerState(GraphListenerDto listener, IReadOnlyDictionary<string, string> nodeKeys)
     {
         if (!nodeKeys.TryGetValue(listener.NodeId.ToString("N"), out var nodeKey)) return null;
-        var identity = $"{nodeKey}\u001f{listener.Address}\u001f{listener.Port}\u001f{listener.Protocol}";
+        // Docker's embedded DNS (127.0.0.11, present when the server itself runs in a container on a user-defined network)
+        // binds random ports on every start: it is one endpoint per protocol, not a new listener each time.
+        var port = listener.Address == DockerEmbeddedDns ? "dns" : listener.Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var identity = $"{nodeKey}\u001f{listener.Address}\u001f{port}\u001f{listener.Protocol}";
         return new ListenerState(identity, nodeKey, listener);
     }
+
+    private const string DockerEmbeddedDns = "127.0.0.11";
 
     private static string EdgeDescription(string prefix, EdgeState edge) =>
         $"{prefix} {Humanize(edge.Kind)} edge {edge.SourceKey} → {edge.TargetKey}{(edge.Port is null ? string.Empty : $" :{edge.Port}")}.";

@@ -150,6 +150,8 @@ public sealed class StaleCarryForwardTests
         public CollectorResult Parse(CollectorOutput raw) => new(JsonDocument.Parse(raw.StandardOutput).RootElement.Clone());
     }
 
+    private static int _dnsPort = 40000;
+
     private sealed class ListenerCollector : ICollector
     {
         public string Name => "listeners";
@@ -158,8 +160,11 @@ public sealed class StaleCarryForwardTests
         public async Task<CollectorOutput> CollectAsync(ServerContext context, CancellationToken cancellationToken)
         {
             await context.SshRunner.RunAsync(context.Server.Id, "ss -tulpnH", new SshRunOptions(TimeSpan.FromSeconds(5)), cancellationToken);
+            // Docker's embedded DNS picks a new random port each time the (containerised) server starts.
+            var dnsPort = Interlocked.Increment(ref _dnsPort);
             ListenerInfo[] listeners = context.Server.Name == "srv-db"
-                ? [new("tcp", "LISTEN", "0.0.0.0", 5432, null, "postgres", 23), new("tcp", "LISTEN", "0.0.0.0", 6379, null, "redis-server", 45)]
+                ? [new("tcp", "LISTEN", "0.0.0.0", 5432, null, "postgres", 23), new("tcp", "LISTEN", "0.0.0.0", 6379, null, "redis-server", 45),
+                   new("tcp", "LISTEN", "127.0.0.11", dnsPort, null, null, null)]
                 : [new("tcp", "LISTEN", "0.0.0.0", 5000, null, "docker-proxy", 77)];
             return new CollectorOutput(JsonSerializer.Serialize(new ListenerDiscoveryResult(listeners)), string.Empty, 0, TimeSpan.Zero);
         }
