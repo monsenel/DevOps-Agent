@@ -88,6 +88,20 @@ public sealed class StaleCarryForwardTests
     }
 
     [Fact]
+    public async Task TwoDockerDnsListenersOnOneServerAreOneDriftIdentityAndDoNotThrow()
+    {
+        await using var database = await CreateDatabaseAsync();
+        AddServer(database.Context, "srv-db", "10.88.20.30");
+        var discovery = CreateDiscovery(database.Context, new SwitchableRunner(), twoDnsListeners: true);
+        var drift = new DriftService(new SnapshotRepository(database.Context), new GraphRepository(database.Context));
+
+        var first = await discovery.RunAsync(null, CancellationToken.None);
+        var second = await discovery.RunAsync(null, CancellationToken.None);
+
+        Assert.Empty((await drift.CompareAsync(first.Id, second.Id, CancellationToken.None)).Changes);
+    }
+
+    [Fact]
     public void DriftIgnoresOnlyTheStaleMarkers()
     {
         Assert.True(StaleCarryForward.SameIgnoringStale("{\"Addresses\":[\"10.0.0.1\"]}",
@@ -99,9 +113,9 @@ public sealed class StaleCarryForwardTests
     private static Guid? ServerId(JsonElement node) =>
         Guid.TryParse(node.TryGetProperty("serverId", out var value) ? value.GetString() : null, out var id) ? id : null;
 
-    private static DiscoveryService CreateDiscovery(AppDbContext context, ISshRunner runner) => new(
+    private static DiscoveryService CreateDiscovery(AppDbContext context, ISshRunner runner, bool twoDnsListeners = false) => new(
         new ServerRepository(context), new SnapshotRepository(context), new GraphRepository(context), new GraphBuilder(), runner,
-        [new HostCollector(), new ListenerCollector()], TimeProvider.System);
+        [new HostCollector(), new ListenerCollector(twoDnsListeners)], TimeProvider.System);
 
     private static Server AddServer(AppDbContext context, string name, string address)
     {
@@ -152,7 +166,7 @@ public sealed class StaleCarryForwardTests
 
     private static int _dnsPort = 40000;
 
-    private sealed class ListenerCollector : ICollector
+    private sealed class ListenerCollector(bool twoDnsListeners = false) : ICollector
     {
         public string Name => "listeners";
         public Task<bool> IsApplicableAsync(ServerContext context, CancellationToken cancellationToken) => Task.FromResult(true);
@@ -164,7 +178,8 @@ public sealed class StaleCarryForwardTests
             var dnsPort = Interlocked.Increment(ref _dnsPort);
             ListenerInfo[] listeners = context.Server.Name == "srv-db"
                 ? [new("tcp", "LISTEN", "0.0.0.0", 5432, null, "postgres", 23), new("tcp", "LISTEN", "0.0.0.0", 6379, null, "redis-server", 45),
-                   new("tcp", "LISTEN", "127.0.0.11", dnsPort, null, null, null)]
+                   new("tcp", "LISTEN", "127.0.0.11", dnsPort, null, null, null),
+                   .. (twoDnsListeners ? new[] { new ListenerInfo("tcp", "LISTEN", "127.0.0.11", dnsPort + 1000, null, null, null) } : [])]
                 : [new("tcp", "LISTEN", "0.0.0.0", 5000, null, "docker-proxy", 77)];
             return new CollectorOutput(JsonSerializer.Serialize(new ListenerDiscoveryResult(listeners)), string.Empty, 0, TimeSpan.Zero);
         }

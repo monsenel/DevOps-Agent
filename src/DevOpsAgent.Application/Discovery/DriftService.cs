@@ -92,12 +92,8 @@ public sealed class DriftService(ISnapshotRepository snapshots, IGraphRepository
     {
         var beforeNodeKeys = NodeKeys(before);
         var afterNodeKeys = NodeKeys(after);
-        var beforeByKey = before.Listeners.Select(listener => ToListenerState(listener, beforeNodeKeys))
-            .Where(state => state is not null).Select(state => state!)
-            .ToDictionary(state => state.Identity, StringComparer.Ordinal);
-        var afterByKey = after.Listeners.Select(listener => ToListenerState(listener, afterNodeKeys))
-            .Where(state => state is not null).Select(state => state!)
-            .ToDictionary(state => state.Identity, StringComparer.Ordinal);
+        var beforeByKey = ListenersByIdentity(before, beforeNodeKeys);
+        var afterByKey = ListenersByIdentity(after, afterNodeKeys);
 
         foreach (var (identity, current) in afterByKey)
         {
@@ -181,6 +177,11 @@ public sealed class DriftService(ISnapshotRepository snapshots, IGraphRepository
             yield return new EdgeState(identity, sourceKey, targetKey, kind, port, protocol);
         }
     }
+
+    // Several listeners can share one identity (Docker's embedded DNS binds more than one random port); the first stands for all.
+    private static Dictionary<string, ListenerState> ListenersByIdentity(GraphSnapshotDto graph, IReadOnlyDictionary<string, string> nodeKeys) =>
+        graph.Listeners.Select(listener => ToListenerState(listener, nodeKeys)).OfType<ListenerState>()
+            .GroupBy(state => state.Identity, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
 
     private static ListenerState? ToListenerState(GraphListenerDto listener, IReadOnlyDictionary<string, string> nodeKeys)
     {
