@@ -1633,6 +1633,17 @@ p {
     font-size: 10px;
 }
 
+.topology-stale-note {
+    display: grid;
+    gap: 6px;
+    margin: 0 0 12px;
+    font-size: 12px;
+}
+
+.topology-stale-note .ui-badge {
+    justify-self: start;
+}
+
 .topology-detail-list {
     display: grid;
     grid-template-columns: minmax(80px, .7fr) minmax(0, 1.3fr);

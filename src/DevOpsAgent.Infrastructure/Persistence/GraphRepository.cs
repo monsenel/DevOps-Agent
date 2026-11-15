@@ -125,6 +125,16 @@ public sealed class GraphRepository(AppDbContext dbContext) : IGraphRepository
         }
     }
 
+    public async Task<GraphBuildResult?> GetEntitiesAsync(Guid snapshotId, CancellationToken cancellationToken)
+    {
+        if (!await dbContext.Snapshots.AnyAsync(snapshot => snapshot.Id == snapshotId, cancellationToken)) return null;
+        return new GraphBuildResult(
+            await dbContext.GraphNodes.AsNoTracking().Where(node => node.SnapshotId == snapshotId).ToArrayAsync(cancellationToken),
+            await dbContext.GraphEdges.AsNoTracking().Where(edge => edge.SnapshotId == snapshotId).ToArrayAsync(cancellationToken),
+            await dbContext.GraphListeners.AsNoTracking().Where(listener => listener.SnapshotId == snapshotId).ToArrayAsync(cancellationToken),
+            await dbContext.GraphEvidence.AsNoTracking().Where(item => item.SnapshotId == snapshotId).ToArrayAsync(cancellationToken));
+    }
+
     public async Task<GraphSnapshotDto?> GetAsync(Guid snapshotId, GraphView view, CancellationToken cancellationToken)
     {
         if (!await dbContext.Snapshots.AnyAsync(snapshot => snapshot.Id == snapshotId, cancellationToken))

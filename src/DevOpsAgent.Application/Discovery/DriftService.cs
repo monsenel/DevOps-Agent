@@ -67,7 +67,8 @@ public sealed class DriftService(ISnapshotRepository snapshots, IGraphRepository
 
             if (RequiredString(previous, "label") != RequiredString(current, "label")
                 || RequiredString(previous, "kind") != RequiredString(current, "kind")
-                || previous.GetProperty("attributes").GetRawText() != current.GetProperty("attributes").GetRawText()
+                // Staleness itself is not drift: a node carried forward unchanged, or seen again, is not a change.
+                || !StaleCarryForward.SameIgnoringStale(previous.GetProperty("attributes").GetRawText(), current.GetProperty("attributes").GetRawText())
                 || GetValue(beforeParentKeys, key) != GetValue(afterParentKeys, key))
             {
                 changes.Add(new DriftChange(DriftChangeType.Changed, DriftEntityType.Node, key,

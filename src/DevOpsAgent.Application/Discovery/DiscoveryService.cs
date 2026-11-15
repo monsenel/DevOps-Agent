@@ -59,6 +59,7 @@ public sealed class DiscoveryService(
             Message: $"Discovery started for {servers.Count} server(s)."));
 
         var runs = new ConcurrentBag<CollectorRun>();
+        var unreachableServers = new ConcurrentDictionary<Guid, bool>();
         var serverContexts = new ConcurrentBag<ServerContext>();
         var succeededServers = 0;
         var failedServers = 0;
@@ -100,6 +101,7 @@ public sealed class DiscoveryService(
                         var (run, hostUnreachable) = await RunCollectorAsync(snapshot.Id, context, collector, serverCancellationToken);
                         runs.Add(run);
                         unreachable = hostUnreachable;
+                        if (unreachable is not null) unreachableServers[server.Id] = true;
                         if (run.Status == CollectorRunStatus.Failed)
                         {
                             serverSucceeded = false;
@@ -130,6 +132,18 @@ public sealed class DiscoveryService(
                 GetPreviousResult<SystemdDiscoveryResult>(context, "systemd"),
                 GetPreviousResult<NginxDiscoveryResult>(context, "nginx"),
                 GetPreviousResult<ConnectionDiscoveryResult>(context, "connections"))).ToArray());
+            if (!unreachableServers.IsEmpty)
+            {
+                // NFR-3: an unreachable server keeps its last known nodes, flagged stale, instead of disappearing.
+                var previousSnapshot = mergeSnapshotId is Guid mergeBase
+                    ? (await snapshotRepository.ListAsync(cancellationToken)).FirstOrDefault(item => item.Id == mergeBase)
+                    : await snapshotRepository.GetLatestAsync(cancellationToken);
+                var previousGraph = previousSnapshot is null ? null
+                    : await graphRepository.GetEntitiesAsync(previousSnapshot.Id, cancellationToken);
+                graph = StaleCarryForward.Apply(snapshot.Id, graph, previousGraph, unreachableServers.Keys.ToHashSet(),
+                    previousSnapshot?.StartedAtUtc);
+            }
+
             if (mergeSnapshotId is Guid previousId)
             {
                 await graphRepository.MergeAsync(snapshot.Id, previousId, graph, cancellationToken);

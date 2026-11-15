@@ -10,6 +10,15 @@ public static class GraphNodeLabel
     /// </summary>
     public static string Describe(JsonElement node)
     {
+        var label = DescribeWithoutStatus(node);
+        // Staleness is part of the accessible name, not only a dimmed colour (NFR-3).
+        var stale = node.ValueKind == JsonValueKind.Object && node.TryGetProperty("attributes", out var attributes)
+            ? StaleCarryForward.Badge(attributes) : null;
+        return stale is null ? label : $"{label} ({stale})";
+    }
+
+    private static string DescribeWithoutStatus(JsonElement node)
+    {
         var label = ReadString(node, "label") ?? ReadString(node, "kind") ?? "Node";
         if (!string.Equals(ReadString(node, "kind"), "Unknown", StringComparison.Ordinal)) return label;
 

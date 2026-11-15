@@ -46,6 +46,7 @@ function applyStyles() {
             "shape": "round-rectangle", "border-width": 1, "border-color": c.line,
             "padding": 12, "text-halign": "center", "text-valign": "center"
         } },
+        { selector: 'node[stale = "stale"]', style: { "opacity": 0.55, "border-style": "dashed" } },
         { selector: 'node[alertSeverity = "Critical"]', style: { "border-width": 3, "border-color": c.danger } },
         { selector: 'node[alertSeverity = "High"]', style: { "border-width": 2, "border-color": c.danger } },
         { selector: 'node[alertSeverity = "Medium"]', style: { "border-width": 2, "border-color": c.warn } },
@@ -122,10 +123,20 @@ export function setData(elements, view, alertStatuses = {}) {
         // Status is never color-only: the border colour is backed by a text marker in the label.
         const alertSeverity = alertStatuses[data.serverId] || "";
         if (alertSeverity) displayLabel = `${displayLabel}\n· ${alertSeverity} alert`;
-        return { data: { ...data, displayLabel, edgeLabel: data.port ? `:${data.port}` : "", alertSeverity } };
+        // NFR-3: a stale node (server unreachable at the last discovery) is dimmed and says so in text.
+        const stale = attributes.Stale === true ? "stale" : "";
+        if (stale) displayLabel = `${displayLabel}\n${staleText(attributes.LastSeenUtc)}`;
+        return { data: { ...data, displayLabel, edgeLabel: data.port ? `:${data.port}` : "", alertSeverity, stale } };
     }));
     applyStyles();
     runLayout(view, true);
+}
+
+function staleText(lastSeenUtc) {
+    const seen = lastSeenUtc ? new Date(lastSeenUtc) : null;
+    if (!seen || Number.isNaN(seen.getTime())) return "stale · never discovered";
+    const pad = value => String(value).padStart(2, "0");
+    return `stale · last seen ${seen.getUTCFullYear()}-${pad(seen.getUTCMonth() + 1)}-${pad(seen.getUTCDate())} ${pad(seen.getUTCHours())}:${pad(seen.getUTCMinutes())} UTC`;
 }
 
 export function setTheme() { applyStyles(); }
