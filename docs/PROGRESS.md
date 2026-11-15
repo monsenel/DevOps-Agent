@@ -12,8 +12,8 @@
 
 ## Current
 
-- **Task:** T7.R2 done; next T7.R3
-- **Status:** —
+- **Task:** T7.R3 Container restart-loop alert rule
+- **Status:** in-progress
 - **Last updated:** 2026-11-15 by ZCode
 
 ## WIP notes
@@ -120,7 +120,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T6.6 | MVP hardening pass | done | `feat(T6.6): MVP hardening and release closeout` |
 | T7.R1 | SSH connection lifecycle | done | `feat(T7.R1): dead hosts never slow discovery, metrics or alerts` |
 | T7.R2 | Stale nodes for unreachable servers | done | `feat(T7.R2): stale carry-forward for unreachable servers without false drift` |
-| T7.R3 | Container restart-loop alert rule | todo | |
+| T7.R3 | Container restart-loop alert rule | in-progress | |
 | T7.R4 | Agent action guardrails | todo | |
 | T7.R5 | Secret handling gaps | todo | |
 | T7.R6 | nginx relative includes | todo | |
