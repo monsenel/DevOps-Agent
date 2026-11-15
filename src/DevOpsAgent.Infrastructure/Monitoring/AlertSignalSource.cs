@@ -44,6 +44,7 @@ public sealed class AlertSignalSource(
         using var cycle = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cycle.CancelAfter(_cycle.AlertCycleDeadline);
         var cycleToken = cycle.Token;
+        var cycleEnd = now + _cycle.AlertCycleDeadline;
         using var throttle = new SemaphoreSlim(MaxParallelServers);
         var remote = await Task.WhenAll(inventory.Select(async server =>
         {
@@ -52,10 +53,10 @@ public sealed class AlertSignalSource(
                 await throttle.WaitAsync(cycleToken);
                 try
                 {
-                    var status = await TryGetRemoteStatusAsync(server, cycleToken, cancellationToken);
+                    var status = await TryGetRemoteStatusAsync(server, cycleEnd, cycleToken, cancellationToken);
                     var auth = status.Status is null
                         ? await authLogScanner.GetCachedAsync(server, cancellationToken)
-                        : await ScanOrCachedAsync(server, cycleToken, cancellationToken);
+                        : await ScanOrCachedAsync(server, cycleEnd, cycleToken, cancellationToken);
                     return (Server: server, Status: status, Auth: auth);
                 }
                 finally { throttle.Release(); }
@@ -153,11 +154,10 @@ public sealed class AlertSignalSource(
             // the password, a command or server output.
             if (server.HasSudoPassword && server.SudoAuthFailedSinceUtc is { } sudoFailedSince)
                 result.Add(Condition(SudoAuthFailedRule, server.Id.ToString("N"), AlertSeverity.Medium, server.Id, server.Host,
-                    $"{server.Name}: sudo password rejected",
-                    $"The saved sudo password was rejected at {sudoFailedSince:yyyy-MM-dd HH:mm:ss} UTC. "
-                    + (server.SudoPasswordRejectedAtUtc is null
-                        ? "The password has been edited since; the alert resolves when sudo works with it."
-                        : "No sudo is used on this server until its sudo password is edited or removed.")));
+                    server.SudoPasswordOutcomeUnknownAtUtc is not null
+                        ? $"{server.Name}: sudo password outcome unknown, paused"
+                        : $"{server.Name}: sudo password rejected",
+                    SudoAlertDetails(server, sudoFailedSince)));
 
             foreach (var check in await healthChecks.ListAsync(server.Id, cancellationToken))
             {
@@ -186,14 +186,25 @@ public sealed class AlertSignalSource(
         return result;
     }
 
+    // Fixed text only (D-028 for the notification; the alert details never hold the password, a command or server output).
+    private static string SudoAlertDetails(Server server, DateTimeOffset since)
+    {
+        if (server.SudoPasswordRejectedAtUtc is not null)
+            return $"The saved sudo password was rejected at {since:yyyy-MM-dd HH:mm:ss} UTC. No sudo is used on this server until its sudo password is edited or removed.";
+        if (server.SudoPasswordOutcomeUnknownAtUtc is { } unknownAt)
+            return $"A sudo command with the saved password ended at {unknownAt:yyyy-MM-dd HH:mm:ss} UTC without confirming that sudo accepted the password "
+                + "(timeout, lost connection, cancellation or an unknown answer). Password sudo is paused until Retry now, or until the password is edited or removed.";
+        return $"Sudo with the saved password failed at {since:yyyy-MM-dd HH:mm:ss} UTC. The password has been edited or retried since; the alert resolves when sudo works with it.";
+    }
+
     private string DeadlineText() =>
         $"it did not finish within the {_cycle.AlertCycleDeadline.TotalSeconds:0.#} s alert cycle deadline";
 
-    private async Task<IReadOnlyList<AlertCondition>> ScanOrCachedAsync(Server server, CancellationToken cycleToken, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<AlertCondition>> ScanOrCachedAsync(Server server, DateTimeOffset cycleEnd, CancellationToken cycleToken, CancellationToken cancellationToken)
     {
         try
         {
-            return await authLogScanner.ScanAsync(server, cycleToken);
+            return await authLogScanner.ScanAsync(server, cycleToken, cycleEnd);
         }
         catch (OperationCanceledException exception) when (exception is not SshShutdownException && !cancellationToken.IsCancellationRequested)
         {
@@ -218,7 +229,7 @@ public sealed class AlertSignalSource(
         + "printf '__DVA_SYSTEMD_FAILED__\\n'; systemctl --failed --type=service --no-legend --plain 2>/dev/null || true";
 
     private async Task<(RemoteServiceStatus? Status, SshHostKeyMismatchException? HostKeyMismatch, HostUnreachableException? Unreachable, string? ProbeFailure)> TryGetRemoteStatusAsync(
-        Server server, CancellationToken cycleToken, CancellationToken cancellationToken)
+        Server server, DateTimeOffset cycleEnd, CancellationToken cycleToken, CancellationToken cancellationToken)
     {
         var serverId = server.Id;
         try
@@ -234,7 +245,9 @@ public sealed class AlertSignalSource(
             {
                 try
                 {
-                    var retry = await sshRunner.RunAsync(serverId, StatusCommand, options with { UseSudo = true }, cycleToken);
+                    // Bounded by the cycle, not by the probe timeout, so a password sudo (which needs 20 s left, T7.R25) can run.
+                    var retry = await sshRunner.RunAsync(serverId, StatusCommand,
+                        options with { Timeout = _cycle.AlertCycleDeadline, UseSudo = true, NotAfterUtc = cycleEnd }, cycleToken);
                     if (retry.ExitCode == 0) status = RemoteServiceStatusParser.Parse(retry.StandardOutput);
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException and not HostUnreachableException

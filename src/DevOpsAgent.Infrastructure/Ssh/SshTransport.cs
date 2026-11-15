@@ -20,6 +20,15 @@ public interface ISshTransport : IDisposable
         standardInput is null
             ? ExecuteAsync(command, timeout, cancellationToken)
             : throw new NotSupportedException("This SSH transport cannot write to a command's input.");
+
+    /// <summary>
+    /// Like the overload above, reading stdout as it arrives and reporting <paramref name="marker"/> as soon as its line is
+    /// there (T7.R25), also when the command later times out; the marker line is removed from the returned output.
+    /// </summary>
+    Task<RemoteCommandResult> ExecuteAsync(string command, string? standardInput, OutputMarker? marker, TimeSpan timeout, CancellationToken cancellationToken) =>
+        marker is null
+            ? ExecuteAsync(command, standardInput, timeout, cancellationToken)
+            : throw new NotSupportedException("This SSH transport cannot watch a command's output.");
 }
 
 public interface ISshTransportFactory
@@ -215,12 +224,19 @@ public sealed class SshNetTransport(
     public Task<RemoteCommandResult> ExecuteAsync(string command, TimeSpan timeout, CancellationToken cancellationToken) =>
         ExecuteAsync(command, null, timeout, cancellationToken);
 
-    public async Task<RemoteCommandResult> ExecuteAsync(string command, string? standardInput, TimeSpan timeout, CancellationToken cancellationToken)
+    public Task<RemoteCommandResult> ExecuteAsync(string command, string? standardInput, TimeSpan timeout, CancellationToken cancellationToken) =>
+        ExecuteAsync(command, standardInput, null, timeout, cancellationToken);
+
+    public async Task<RemoteCommandResult> ExecuteAsync(
+        string command, string? standardInput, OutputMarker? marker, TimeSpan timeout, CancellationToken cancellationToken)
     {
         using var sshCommand = Client.CreateCommand(command);
         sshCommand.CommandTimeout = timeout;
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var executing = sshCommand.ExecuteAsync(cancellationToken);
+        // With a marker stdout is read here as it arrives (SSH.NET's OutputStream can be read while the command runs; Result
+        // then holds only what was not read), so the marker is known the moment sudo let the command start.
+        var reading = marker is null ? null : ReadOutputAsync(sshCommand.OutputStream, marker);
         if (standardInput is not null)
         {
             // The input goes over the command's own channel and is closed at once, so the command sees EOF after it. Without
@@ -242,9 +258,45 @@ public sealed class SshNetTransport(
             }
         }
 
-        await executing;
+        try
+        {
+            await executing;
+        }
+        catch when (reading is not null)
+        {
+            // The command failed or timed out; disposing it ends the read. Whether the marker came back is already recorded.
+            _ = reading.ContinueWith(static task => _ = task.Exception, TaskScheduler.Default);
+            throw;
+        }
+
+        // The output stream ends just after the command does.
+        var output = reading is null ? sshCommand.Result : await reading.WaitAsync(timeout, cancellationToken);
         stopwatch.Stop();
-        return new RemoteCommandResult(sshCommand.ExitStatus, sshCommand.Result, sshCommand.Error, stopwatch.Elapsed);
+        return new RemoteCommandResult(sshCommand.ExitStatus, output, sshCommand.Error, stopwatch.Elapsed);
+    }
+
+    // Reads stdout to its end, reporting the marker once the first line is complete; the marker line is not part of the result.
+    private static async Task<string> ReadOutputAsync(Stream output, OutputMarker marker)
+    {
+        using var collected = new MemoryStream();
+        var buffer = new byte[8192];
+        var expected = System.Text.Encoding.UTF8.GetBytes(marker.Value + "\n");
+        var decided = false;
+        int read;
+        while ((read = await output.ReadAsync(buffer)) > 0)
+        {
+            collected.Write(buffer, 0, read);
+            if (decided) continue;
+            var sofar = collected.GetBuffer().AsSpan(0, (int)collected.Length);
+            if (sofar.Length >= expected.Length || sofar.Contains((byte)'\n'))
+            {
+                decided = true;
+                if (sofar.StartsWith(expected)) marker.MarkSeen();
+            }
+        }
+
+        var text = System.Text.Encoding.UTF8.GetString(collected.GetBuffer(), 0, (int)collected.Length);
+        return marker.Strip(text);
     }
 
     private int _disposed;

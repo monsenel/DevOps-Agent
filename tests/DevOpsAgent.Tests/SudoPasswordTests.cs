@@ -17,12 +17,12 @@ namespace DevOpsAgent.Tests;
 /// T7.R24: the per-server sudo password goes to stdin only, never into a command, a log or an output; a rejected password is
 /// tried exactly once and then pauses all sudo on that server until the password is edited or the owner presses Retry now.
 /// </summary>
-public sealed class SudoPasswordTests
+public sealed partial class SudoPasswordTests
 {
     private const string Password = "Pw-7f3K!q 9z";
     private const string WrongPassword = "Wrong-Pw-55";
-    private static readonly SshRunOptions Sudo = new(TimeSpan.FromSeconds(20), UseSudo: true);
-    private static readonly SshRunOptions Plain = new(TimeSpan.FromSeconds(20));
+    private static readonly SshRunOptions Sudo = new(TimeSpan.FromSeconds(30), UseSudo: true);
+    private static readonly SshRunOptions Plain = new(TimeSpan.FromSeconds(30));
 
     [Fact]
     public async Task NoPassword_UsesSudoNExactlyAsBefore_WithoutStdin()
@@ -48,12 +48,16 @@ public sealed class SudoPasswordTests
         Assert.Equal(0, sudo.ExitCode);
         Assert.Equal(0, plain.ExitCode);
         Assert.Equal(0, probe.ExitCode);
-        Assert.Equal("LC_ALL=C sudo -S -p '' -- sh -c 'ss -tulpnH'", lab.Session.Calls[0].Command);
+        Assert.Matches(@"^LC_ALL=C sudo -S -p '' -- sh -c 'exec </dev/null; printf ""%s\\n"" ""dva-sudo-ok-[0-9a-f]{32}""; ss -tulpnH'$",
+            lab.Session.Calls[0].Command);
         Assert.Equal(Password + "\n", lab.Session.Calls[0].Input);
+        Assert.Equal("ok", sudo.StandardOutput); // the marker line is not part of the output
         Assert.Equal("uptime -p", lab.Session.Calls[1].Command);
         Assert.Null(lab.Session.Calls[1].Input);
-        Assert.Equal("LC_ALL=C sudo -S -p '' true", lab.Session.Calls[2].Command);
+        Assert.Matches(@"^LC_ALL=C sudo -S -p '' -- sh -c 'exec </dev/null; printf ""%s\\n"" ""dva-sudo-ok-[0-9a-f]{32}""; true'$",
+            lab.Session.Calls[2].Command);
         Assert.Equal(Password + "\n", lab.Session.Calls[2].Input);
+        Assert.NotEqual(Marker(lab.Session.Calls[0].Command), Marker(lab.Session.Calls[2].Command)); // a new marker per call
         lab.AssertPasswordNowhere(Password);
     }
 
@@ -139,39 +143,56 @@ public sealed class SudoPasswordTests
     }
 
     [Fact]
-    public async Task AuthenticationWindow_ReleasesTheTurn_ForALongRunningCommand()
+    public async Task ConfirmedPassword_ReleasesTheTurn_WhileALongCommandRuns()
     {
-        var clock = new TimerClock();
-        await using var lab = await SudoLab.CreateAsync(Password, clock);
+        await using var lab = await SudoLab.CreateAsync(Password);
         var release = new TaskCompletionSource();
         lab.Session.Hold = release.Task;
 
         var longCommand = lab.Runner.RunAsync(lab.ServerId, "apt-get -y upgrade", Sudo, CancellationToken.None);
         await lab.Session.WaitForSudoAttemptsAsync(1);
-        var second = lab.Runner.RunAsync(lab.ServerId, "ss -tulpnH", Sudo, CancellationToken.None);
-        await Task.Delay(100);
-        Assert.Equal(1, lab.Session.SudoAttempts); // still inside the first command's authentication window
-
         lab.Session.Hold = null;
-        clock.FireAll(); // the window has passed: sudo got past authentication
-        Assert.Equal(0, (await second).ExitCode);
+        // The marker of the long command came back: the next password sudo does not wait for the upgrade to end.
+        Assert.Equal(0, (await lab.Runner.RunAsync(lab.ServerId, "ss -tulpnH", Sudo, CancellationToken.None)).ExitCode);
         Assert.Equal(2, lab.Session.SudoAttempts);
+        Assert.False(longCommand.IsCompleted);
+
         release.SetResult();
         Assert.Equal(0, (await longCommand).ExitCode);
+        Assert.Null((await lab.GetServerAsync()).SudoPasswordAttemptStartedAtUtc);
     }
 
     [Fact]
-    public async Task AuthenticationWindow_StartsWhenThePasswordIsSent_NotBeforeASlowConnect()
+    public async Task UnconfirmedAttempt_HoldsTheTurn_WithoutATimeLimit_ThenPausesTheNextOne()
     {
-        var clock = new TimerClock();
-        await using var lab = await SudoLab.CreateAsync(WrongPassword, clock);
+        await using var lab = await SudoLab.CreateAsync(Password);
+        var unfreeze = new TaskCompletionSource();
+        lab.Session.Freeze = unfreeze.Task;
+        var longCall = new SshRunOptions(TimeSpan.FromSeconds(60), UseSudo: true);
+
+        var first = lab.Runner.RunAsync(lab.ServerId, "ss -tulpnH", longCall, CancellationToken.None);
+        await lab.Session.WaitForSudoAttemptsAsync(1);
+        var second = lab.Runner.RunAsync(lab.ServerId, "docker ps -q", longCall, CancellationToken.None);
+        await Task.Delay(200);
+        Assert.Equal(1, lab.Session.SudoAttempts); // the first outcome is still open: nothing else may try the password
+
+        lab.Session.SudoAnswer = () => new RemoteCommandResult(null, "", "", TimeSpan.Zero); // the channel closed without an answer
+        unfreeze.SetResult();
+        Assert.Null((await first).ExitCode);
+        Assert.Equal(SudoPasswordGate.OutcomeUnknownMessage, (await second).StandardError);
+        Assert.Equal(1, lab.Session.SudoAttempts);
+    }
+
+    [Fact]
+    public async Task TheTurnIsHeldAcrossASlowConnect()
+    {
+        await using var lab = await SudoLab.CreateAsync(WrongPassword);
         var connected = new TaskCompletionSource();
         lab.Pool.Connect = connected.Task;
 
         var first = lab.Runner.RunAsync(lab.ServerId, "ss -tulpnH", Sudo, CancellationToken.None);
         for (var index = 0; index < 200 && lab.Pool.Connects < 1; index++) await Task.Delay(10);
         var second = lab.Runner.RunAsync(lab.ServerId, "docker ps -q", Sudo, CancellationToken.None);
-        clock.FireAll(); // the connect took longer than the window: the turn must still be held
         await Task.Delay(100);
         Assert.Equal(1, lab.Pool.Connects);
 
@@ -301,7 +322,7 @@ public sealed class SudoPasswordTests
         Assert.False(first.SudoProbeSkipped);
         Assert.True(first.SudoPasswordRejected);
         Assert.False(first.SudoCapable);
-        Assert.Equal("LC_ALL=C sudo -S -p '' true", lab.Session.Calls.Single(call => call.IsSudo).Command);
+        Assert.EndsWith("; true'", lab.Session.Calls.Single(call => call.IsSudo).Command);
         Assert.True(second.SudoProbeSkipped);
         Assert.True(second.SudoPasswordRejected);
     }
@@ -334,10 +355,8 @@ public sealed class SudoPasswordTests
         Assert.Null(edited.SudoPasswordRejectedAtUtc); // the pause is lifted ...
         Assert.Equal(since, edited.SudoAuthFailedSinceUtc); // ... but the alert waits for sudo to work
 
+        // The marker came back, so sudo accepted the password, even though the command itself then failed (T7.R25).
         await lab.Runner.RunAsync(lab.ServerId, "failing-command", Sudo, CancellationToken.None);
-        Assert.NotNull((await lab.GetServerAsync()).SudoAuthFailedSinceUtc); // a failing command proves nothing
-
-        await lab.Runner.RunAsync(lab.ServerId, "ss -tulpnH", Sudo, CancellationToken.None);
         Assert.Null((await lab.GetServerAsync()).SudoAuthFailedSinceUtc);
         Assert.Single(lab.Logs.Messages, message => message.Contains("sudo works again", StringComparison.Ordinal));
 
@@ -404,7 +423,8 @@ public sealed class SudoPasswordTests
         var withPassword = new ActionServerResult(Guid.NewGuid(), "db", "systemctl restart -- 'nginx'", null, "", "", 0, null, "db:22", UseSudo: true, SudoPassword: true);
         var without = withPassword with { SudoPassword = false };
 
-        Assert.Equal(@"LC_ALL=C sudo -S -p '' -- sh -c 'systemctl restart -- '\''nginx'\'''", withPassword.DisplayCommand);
+        Assert.Equal(@"LC_ALL=C sudo -S -p '' -- sh -c 'exec </dev/null; printf ""%s\n"" ""dva-sudo-ok-<random>""; systemctl restart -- '\''nginx'\'''",
+            withPassword.DisplayCommand);
         Assert.Equal(@"sudo -n -- sh -c 'systemctl restart -- '\''nginx'\'''", without.DisplayCommand);
     }
 
@@ -543,55 +563,80 @@ public sealed class SudoPasswordTests
         }
     }
 
-    internal sealed record SessionCall(string Command, string? Input)
+    private static string Marker(string command) =>
+        System.Text.RegularExpressions.Regex.Match(command, "dva-sudo-ok-[0-9a-f]{32}").Value;
+
+    internal sealed record SessionCall(string Command, string? Input, TimeSpan Timeout = default)
     {
         public bool IsSudo => Command.Contains("sudo ", StringComparison.Ordinal);
         public bool IsSudoS => Command.Contains("sudo -S -p '' ", StringComparison.Ordinal);
     }
 
-    /// <summary>Plays a host whose sudo accepts <see cref="AcceptedPassword"/> from stdin, like <c>sudo -S</c>.</summary>
+    /// <summary>
+    /// Plays a host whose sudo accepts <see cref="AcceptedPassword"/> from stdin, like <c>sudo -S</c>: an accepted password lets
+    /// the shell print the marker first (reported at once, like the real transport), a wrong one ends in sudo's rejection lines.
+    /// </summary>
     private sealed class RecordingSession : ISshCommandSession
     {
         private readonly ConcurrentQueue<SessionCall> _calls = new();
         private int _sudoAttempts;
-        private int _runningSudo;
+        private int _authenticating;
         private int _maxConcurrentSudo;
 
         public string AcceptedPassword { get; set; } = string.Empty;
         public bool Echo { get; set; }
         public TimeSpan Delay { get; set; }
+        /// <summary>When set, a sudo command waits for it after authenticating (a long-running command).</summary>
         public Task? Hold { get; set; }
+        /// <summary>When set, a sudo command waits for it before sudo answers (a frozen host, PAM still deciding).</summary>
+        public Task? Freeze { get; set; }
+        /// <summary>Replaces what sudo does with the password (an unknown answer, a dropped connection ...).</summary>
+        public Func<RemoteCommandResult>? SudoAnswer { get; set; }
         public IReadOnlyList<SessionCall> Calls => _calls.ToArray();
         public int SudoAttempts => Volatile.Read(ref _sudoAttempts);
+        /// <summary>The most password sudo commands that were authenticating at the same time.</summary>
         public int MaxConcurrentSudo => Volatile.Read(ref _maxConcurrentSudo);
         public bool IsConnected => true;
 
         public void Dispose() { }
 
         public Task<RemoteCommandResult> ExecuteAsync(string command, TimeSpan timeout, CancellationToken cancellationToken) =>
-            ExecuteAsync(command, null, timeout, cancellationToken);
+            ExecuteAsync(command, null, null, timeout, cancellationToken);
 
-        public async Task<RemoteCommandResult> ExecuteAsync(string command, string? standardInput, TimeSpan timeout, CancellationToken cancellationToken)
+        public Task<RemoteCommandResult> ExecuteAsync(string command, string? standardInput, TimeSpan timeout, CancellationToken cancellationToken) =>
+            ExecuteAsync(command, standardInput, null, timeout, cancellationToken);
+
+        public async Task<RemoteCommandResult> ExecuteAsync(string command, string? standardInput, OutputMarker? marker, TimeSpan timeout, CancellationToken cancellationToken)
         {
-            var call = new SessionCall(command, standardInput);
+            var call = new SessionCall(command, standardInput, timeout);
             _calls.Enqueue(call);
             if (!call.IsSudoS) return Result(0, command.StartsWith("printf", StringComparison.Ordinal) ? command : "ok", "");
 
+            Assert.NotNull(marker);
+            Assert.Contains($"\"{marker.Value}\"", command, StringComparison.Ordinal);
             Interlocked.Increment(ref _sudoAttempts);
-            var running = Interlocked.Increment(ref _runningSudo);
-            InterlockedMax(ref _maxConcurrentSudo, running);
+            var authenticating = Interlocked.Increment(ref _authenticating);
+            InterlockedMax(ref _maxConcurrentSudo, authenticating);
+            var stillAuthenticating = true;
             try
             {
-                if (Hold is { } hold) await hold.WaitAsync(cancellationToken);
+                if (Freeze is { } freeze) await freeze.WaitAsync(timeout, cancellationToken);
                 if (Delay > TimeSpan.Zero) await Task.Delay(Delay, cancellationToken);
+                if (SudoAnswer is { } answer) return answer();
                 if (standardInput != AcceptedPassword + "\n")
                     return Result(1, "", "Sorry, try again.\nsudo: no password was provided\nsudo: 1 incorrect password attempt\n");
+
+                marker.MarkSeen();
+                stillAuthenticating = false;
+                Interlocked.Decrement(ref _authenticating);
+                if (Hold is { } hold) await hold.WaitAsync(cancellationToken);
                 if (command.Contains("failing-command", StringComparison.Ordinal)) return Result(1, "", "failing-command: not found");
-                return Echo ? Result(0, $"read: {standardInput}", $"note {AcceptedPassword} end") : Result(0, "ok", "");
+                var stdout = marker.Value + "\n" + (Echo ? $"read: {standardInput}" : "ok");
+                return Result(0, marker.Strip(stdout), Echo ? $"note {AcceptedPassword} end" : "");
             }
             finally
             {
-                Interlocked.Decrement(ref _runningSudo);
+                if (stillAuthenticating) Interlocked.Decrement(ref _authenticating);
             }
         }
 

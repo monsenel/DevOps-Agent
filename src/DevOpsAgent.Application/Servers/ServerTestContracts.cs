@@ -11,4 +11,5 @@ public sealed record ServerCapabilityResult(
     DateTimeOffset TestedAtUtc,
     bool SudoPasswordUsed = false,
     bool SudoPasswordRejected = false,
-    bool SudoProbeSkipped = false);
+    bool SudoProbeSkipped = false,
+    bool SudoPasswordOutcomeUnknown = false);

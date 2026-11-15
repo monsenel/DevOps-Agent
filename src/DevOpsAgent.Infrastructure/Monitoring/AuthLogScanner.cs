@@ -17,7 +17,8 @@ public sealed class SecurityMonitoringOptions
 /// <summary>Runs the auth-log scan for one server; the alert engine calls it for several servers in parallel.</summary>
 public interface IAuthLogScanSource
 {
-    Task<IReadOnlyList<AlertCondition>> ScanAsync(Server server, CancellationToken cancellationToken);
+    /// <param name="notAfterUtc">The end of the alert cycle the scan runs in; a password sudo is not started close to it (T7.R25).</param>
+    Task<IReadOnlyList<AlertCondition>> ScanAsync(Server server, CancellationToken cancellationToken, DateTimeOffset? notAfterUtc = null);
 
     /// <summary>
     /// The conditions from the last saved scan state, without any remote command (T7.R17): used instead of a scan while the
@@ -30,11 +31,11 @@ public interface IAuthLogScanSource
 /// <summary>Gives each scan its own DI scope, so parallel scans never share a DbContext.</summary>
 public sealed class ScopedAuthLogScanSource(IServiceScopeFactory scopes) : IAuthLogScanSource
 {
-    public async Task<IReadOnlyList<AlertCondition>> ScanAsync(Server server, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<AlertCondition>> ScanAsync(Server server, CancellationToken cancellationToken, DateTimeOffset? notAfterUtc = null)
     {
         await using var scope = scopes.CreateAsyncScope();
         var scanner = scope.ServiceProvider.GetRequiredService<AuthLogScanner>();
-        return await scanner.ScanAsync(server, cancellationToken);
+        return await scanner.ScanAsync(server, cancellationToken, notAfterUtc);
     }
 
     public async Task<IReadOnlyList<AlertCondition>> GetCachedAsync(Server server, CancellationToken cancellationToken)
@@ -49,6 +50,13 @@ public sealed class AuthLogScanner(ISshRunner sshRunner, IAppSettingRepository s
     IOptions<SecurityMonitoringOptions> options, TimeProvider timeProvider) : IAuthLogScanSource
 {
     private static readonly TimeSpan Window = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Deadline of the scan command. More than the 20 s a password sudo needs left (T7.R25); the alert cycle's own deadline
+    /// still ends it earlier.
+    /// </summary>
+    public static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(24);
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public async Task<IReadOnlyList<AlertCondition>> GetCachedAsync(Server server, CancellationToken cancellationToken)
@@ -61,7 +69,7 @@ public sealed class AuthLogScanner(ISshRunner sshRunner, IAppSettingRepository s
         return BuildConditions(server, ActiveWindow(state.RecentEvents, state.CursorUtc), state.NewLoginIps, [], "Scan unavailable.");
     }
 
-    public async Task<IReadOnlyList<AlertCondition>> ScanAsync(Server server, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<AlertCondition>> ScanAsync(Server server, CancellationToken cancellationToken, DateTimeOffset? notAfterUtc = null)
     {
         var now = timeProvider.GetUtcNow();
         var key = $"security.auth-log.{server.Id:N}";
@@ -70,7 +78,7 @@ public sealed class AuthLogScanner(ISshRunner sshRunner, IAppSettingRepository s
         try
         {
             response = await sshRunner.RunAsync(server.Id, BuildCommand(state.CursorUtc),
-                new SshRunOptions(TimeSpan.FromSeconds(20), UseSudo: true), cancellationToken);
+                new SshRunOptions(CommandTimeout, UseSudo: true, NotAfterUtc: notAfterUtc), cancellationToken);
         }
         catch (OperationCanceledException exception) when (exception is SshShutdownException || cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception) { return BuildConditions(server, ActiveWindow(state.RecentEvents, now), state.NewLoginIps, [], "Scan unavailable."); }

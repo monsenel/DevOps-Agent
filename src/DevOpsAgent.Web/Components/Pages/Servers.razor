@@ -89,11 +89,12 @@
                                 </td>
                                 <td>
                                     <div class="table-actions">
-                                        @if (unreachable is not null)
+                                        @if (unreachable is not null || sudo.RetryAllowed)
                                         {
-                                            @* Retry now bypasses the backoff for this server's whole route. It never retries a rejected sudo password. *@
+                                            @* Retry now bypasses the backoff for this server's whole route and tries a password whose last outcome
+                                               was unknown once more (T7.R25). It never retries a rejected sudo password. *@
                                             <button class="ui-button primary compact" type="button" @onclick="() => TestConnectionAsync(server.Id)" disabled="@(_testingId == server.Id)"
-                                                    aria-describedby="@(sudo.Paused ? $"sudo-retry-blocked-{server.Id:N}" : null)">Retry now</button>
+                                                    aria-describedby="@(sudo.Paused && !sudo.RetryAllowed ? $"sudo-retry-blocked-{server.Id:N}" : null)">Retry now</button>
                                         }
                                         else if (sudo.Paused)
                                         {
@@ -104,7 +105,7 @@
                                         <button class="ui-button secondary compact" type="button" @onclick="() => OpenEdit(server.Id)">Edit</button>
                                         <button class="ui-button ghost-danger compact" type="button" @onclick="() => AskDelete(server.Id)">Remove</button>
                                     </div>
-                                    @if (sudo.Paused)
+                                    @if (sudo.Paused && !sudo.RetryAllowed)
                                     {
                                         <span class="server-reachability" id="sudo-retry-blocked-@server.Id.ToString("N")">@ServerSudoStatus.RetryBlockedReason</span>
                                     }
@@ -504,6 +505,7 @@
     {
         { SudoProbeSkipped: true } => "Not tried: the saved password was rejected earlier. " + ServerSudoStatus.RetryBlockedReason,
         { SudoPasswordRejected: true } => "Password rejected — sudo paused until the password is edited or removed",
+        { SudoPasswordOutcomeUnknown: true } => "Outcome unknown — sudo did not confirm the password in time; password sudo paused until Retry now or an edit",
         { SudoCapable: true, SudoPasswordUsed: true } => "Available (password)",
         { SudoCapable: true } => "Available (NOPASSWD)",
         { SudoPasswordUsed: true } => "Unavailable (sudo with the saved password failed, but not because of a wrong password)",

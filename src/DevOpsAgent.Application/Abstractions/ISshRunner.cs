@@ -61,9 +61,22 @@ public interface ISshCommandSession : IDisposable
         standardInput is null
             ? ExecuteAsync(command, timeout, cancellationToken)
             : throw new NotSupportedException("This SSH session cannot write to a command's input.");
+
+    /// <summary>
+    /// Like the overload above, watching the output for <paramref name="marker"/> as it arrives (T7.R25): the marker is
+    /// reported the moment its line comes back and is removed from the returned output.
+    /// </summary>
+    Task<RemoteCommandResult> ExecuteAsync(string command, string? standardInput, OutputMarker? marker, TimeSpan timeout, CancellationToken cancellationToken) =>
+        marker is null
+            ? ExecuteAsync(command, standardInput, timeout, cancellationToken)
+            : throw new NotSupportedException("This SSH session cannot watch a command's output.");
 }
 
 /// <param name="BypassBackoff">Ignore the host's reachability backoff for this one command ("Test connection", "Retry now").</param>
-public sealed record SshRunOptions(TimeSpan Timeout, bool UseSudo = false, bool BypassBackoff = false);
+/// <param name="NotAfterUtc">
+/// The deadline of the cycle the call belongs to, when it ends before <paramref name="Timeout"/> does (T7.R25): a password
+/// sudo is not started when less than <c>SudoPasswordGate.MinimumTimeLeft</c> is left of either.
+/// </param>
+public sealed record SshRunOptions(TimeSpan Timeout, bool UseSudo = false, bool BypassBackoff = false, DateTimeOffset? NotAfterUtc = null);
 
 public sealed record RemoteCommandResult(int? ExitCode, string StandardOutput, string StandardError, TimeSpan Duration);

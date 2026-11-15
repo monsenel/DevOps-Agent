@@ -42,8 +42,24 @@ public static class AppSudoCommands
     public static IReadOnlyList<string> Templates { get; } = BuildTemplates();
 
     /// <summary>True when a command, as sudo logged it, is one of the app's own sudo command lines.</summary>
-    public static bool IsAppCommand(string? loggedCommand) =>
-        TryUnwrap(loggedCommand, out var inner) && Patterns.Any(pattern => pattern.IsMatch(inner));
+    public static bool IsAppCommand(string? loggedCommand)
+    {
+        if (!TryUnwrap(loggedCommand, out var inner)) return false;
+        // A password sudo (T7.R25) runs its command behind a fixed preamble with a random marker; behind it, the bare
+        // `true` is the password sudo probe.
+        if (PasswordPreamble.Match(inner) is { Success: true } preamble)
+        {
+            inner = inner[preamble.Length..];
+            if (inner == "true") return true;
+        }
+
+        return Patterns.Any(pattern => pattern.IsMatch(inner));
+    }
+
+    private static readonly Regex PasswordPreamble = new(
+        @"\A" + Regex.Escape(Application.Abstractions.RemoteCommand.SudoPasswordPreamble("MARKER"))
+            .Replace("MARKER", Regex.Escape(Application.Abstractions.OutputMarker.Prefix) + "[0-9a-f]{32}", StringComparison.Ordinal),
+        RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
     // The app runs every sudo command as `sudo -n -- sh -c '<command>'`; sudo logs it as `/usr/bin/sh -c '<escaped>'`,
     // escaping ' and \ with a backslash.

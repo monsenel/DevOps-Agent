@@ -8,6 +8,8 @@ public sealed class ServerCapabilityService(
     TimeProvider timeProvider)
 {
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(10);
+    // A password sudo is not started with less than 20 s left (T7.R25), so the sudo probe gets more than that.
+    private static readonly TimeSpan SudoProbeTimeout = TimeSpan.FromSeconds(30);
     private const string OsReleaseCommand = "cat /etc/os-release";
     private const string UptimeCommand = "uptime -p";
     // Admin tools such as nginx, iptables and nft live in /usr/sbin or /sbin, which a non-root SSH session's PATH often omits.
@@ -31,14 +33,27 @@ public sealed class ServerCapabilityService(
 
             // `sudo -n true`, or with a stored sudo password one `sudo -S` attempt. A password that was already rejected is not
             // tried again, not even from here (D-040 amendment): one wrong password can cost two pam_faillock failures, so only
-            // an edit or removal of the password lifts the pause. The previous sudo capability is then kept.
+            // an edit or removal of the password lifts the pause. The previous sudo capability is then kept. An attempt whose
+            // outcome was unknown is tried once more: that is what this button is for (T7.R25).
             var sudoSkipped = server.HasSudoPassword && server.SudoPasswordRejectedAtUtc is not null;
-            var sudo = sudoSkipped ? null : await sshRunner.ProbeSudoAsync(serverId,
-                new SshRunOptions(ProbeTimeout, BypassBackoff: true), cancellationToken);
+            RemoteCommandResult? sudo = null;
+            if (!sudoSkipped)
+            {
+                try
+                {
+                    sudo = await sshRunner.ProbeSudoAsync(serverId, new SshRunOptions(SudoProbeTimeout, BypassBackoff: true), cancellationToken);
+                }
+                catch (Exception exception) when (server.HasSudoPassword && exception is not OperationCanceledException)
+                {
+                    // The password probe timed out or lost its connection: its outcome is recorded as unknown and shown below.
+                }
+            }
+
             var availableCommands = await sshRunner.RunAsync(serverId, AvailableCommandsCommand,
                 new SshRunOptions(ProbeTimeout, BypassBackoff: true), cancellationToken);
 
             var osInfo = ParseOsInfo(osRelease.StandardOutput);
+            // A probe that did not run to a confirmed or rejected answer keeps the previous capability, like a skipped one.
             bool? sudoCapable = sudo is null ? null : sudo.ExitCode == 0;
             // Reloaded: the probe may just have recorded a rejection in another scope.
             server = await serverRepository.GetAsync(serverId, cancellationToken);
@@ -47,11 +62,13 @@ public sealed class ServerCapabilityService(
                 return new ServerCapabilityResult(serverId, false, null, null, null, [], "Server no longer exists.", testedAt);
             }
 
+            if (server.HasSudoPassword && server.SudoPasswordOutcomeUnknownAtUtc is not null) sudoCapable = null;
             server.RecordCapabilities(sudoCapable, osInfo, testedAt);
             await serverRepository.SaveAsync(server, cancellationToken);
             return new ServerCapabilityResult(serverId, true, osInfo, uptime.StandardOutput.Trim(), sudoCapable ?? server.SudoCapable,
                 ParseAvailableCommands(availableCommands.StandardOutput), null, testedAt,
-                server.HasSudoPassword, server.HasSudoPassword && server.SudoPasswordRejectedAtUtc is not null, sudoSkipped);
+                server.HasSudoPassword, server.HasSudoPassword && server.SudoPasswordRejectedAtUtc is not null, sudoSkipped,
+                server.HasSudoPassword && server.SudoPasswordOutcomeUnknownAtUtc is not null);
         }
         catch (OperationCanceledException exception) when (exception is SshShutdownException || cancellationToken.IsCancellationRequested)
         {

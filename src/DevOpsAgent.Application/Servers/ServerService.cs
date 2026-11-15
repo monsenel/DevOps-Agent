@@ -222,5 +222,6 @@ public sealed class ServerService(
         server.LastSeenAtUtc,
         server.OsInfo,
         server.HasSudoPassword,
-        server.SudoPasswordRejectedAtUtc);
+        server.SudoPasswordRejectedAtUtc,
+        server.SudoPasswordOutcomeUnknownAtUtc);
 }

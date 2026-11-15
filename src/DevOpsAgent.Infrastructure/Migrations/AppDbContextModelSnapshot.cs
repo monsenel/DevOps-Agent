@@ -708,6 +708,12 @@ namespace DevOpsAgent.Infrastructure.Migrations
                     b.Property<bool?>("SudoCapable")
                         .HasColumnType("INTEGER");
 
+                    b.Property<DateTimeOffset?>("SudoPasswordAttemptStartedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("SudoPasswordOutcomeUnknownAtUtc")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTimeOffset?>("SudoPasswordRejectedAtUtc")
                         .HasColumnType("TEXT");
 

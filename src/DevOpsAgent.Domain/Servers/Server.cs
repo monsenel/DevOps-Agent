@@ -44,8 +44,22 @@ public sealed class Server
     public DateTimeOffset? SudoPasswordRejectedAtUtc { get; private set; }
 
     /// <summary>
-    /// Since when the server's "sudo-auth-failed" alert is open: set by a rejection, kept when the password is edited (an edit
-    /// is not proof that sudo works), cleared by the next password sudo that succeeds or by removing the password (D-040).
+    /// When a password sudo ended without its confirmation marker and without sudo's rejection (timeout, lost connection,
+    /// cancellation, shutdown, an unknown message): whether the password was tried is unknown, so no password sudo is used on
+    /// the server until the owner presses Retry now / Test connection or edits or removes the password (T7.R25).
+    /// </summary>
+    public DateTimeOffset? SudoPasswordOutcomeUnknownAtUtc { get; private set; }
+
+    /// <summary>
+    /// Written before the password is sent and cleared when the outcome is known (T7.R25). Still set when no attempt is running
+    /// (the app stopped or crashed mid-attempt) means the outcome is unknown.
+    /// </summary>
+    public DateTimeOffset? SudoPasswordAttemptStartedAtUtc { get; private set; }
+
+    /// <summary>
+    /// Since when the server's "sudo-auth-failed" alert is open: set by a rejection or an unknown outcome, kept when the
+    /// password is edited (an edit is not proof that sudo works), cleared by the next confirmed password sudo or by removing the
+    /// password (D-040).
     /// </summary>
     public DateTimeOffset? SudoAuthFailedSinceUtc { get; private set; }
 
@@ -55,8 +69,11 @@ public sealed class Server
 
     public bool HasSudoPassword => !string.IsNullOrEmpty(ProtectedSudoPassword);
 
-    /// <summary>Whether the app may use sudo on this server: it passed the sudo probe and its sudo password is not rejected.</summary>
-    public bool CanUseSudo => SudoCapable == true && SudoPasswordRejectedAtUtc is null;
+    /// <summary>The stored sudo password is not used: it was rejected, or the outcome of an attempt is unknown.</summary>
+    public bool SudoPasswordPaused => HasSudoPassword && (SudoPasswordRejectedAtUtc is not null || SudoPasswordOutcomeUnknownAtUtc is not null);
+
+    /// <summary>Whether the app may use sudo on this server: it passed the sudo probe and its sudo password is not paused.</summary>
+    public bool CanUseSudo => SudoCapable == true && SudoPasswordRejectedAtUtc is null && SudoPasswordOutcomeUnknownAtUtc is null;
 
     public void Update(
         string name,
@@ -89,6 +106,8 @@ public sealed class Server
         ArgumentException.ThrowIfNullOrEmpty(protectedSudoPassword);
         ProtectedSudoPassword = protectedSudoPassword;
         SudoPasswordRejectedAtUtc = null;
+        SudoPasswordOutcomeUnknownAtUtc = null;
+        SudoPasswordAttemptStartedAtUtc = null;
     }
 
     /// <summary>Removes the stored sudo password; sudo goes back to <c>sudo -n</c> and the sudo-auth-failed alert resolves.</summary>
@@ -96,17 +115,38 @@ public sealed class Server
     {
         ProtectedSudoPassword = null;
         SudoPasswordRejectedAtUtc = null;
+        SudoPasswordOutcomeUnknownAtUtc = null;
+        SudoPasswordAttemptStartedAtUtc = null;
         SudoAuthFailedSinceUtc = null;
     }
 
     public void RecordSudoPasswordRejected(DateTimeOffset rejectedAtUtc)
     {
+        SudoPasswordAttemptStartedAtUtc = null;
         SudoPasswordRejectedAtUtc ??= rejectedAtUtc;
         SudoAuthFailedSinceUtc ??= rejectedAtUtc;
     }
 
-    /// <summary>A sudo command with the stored password succeeded: the sudo-auth-failed alert resolves.</summary>
-    public void RecordSudoPasswordSucceeded() => SudoAuthFailedSinceUtc = null;
+    /// <summary>The password is about to be sent (T7.R25).</summary>
+    public void RecordSudoPasswordAttemptStarted(DateTimeOffset startedAtUtc) => SudoPasswordAttemptStartedAtUtc = startedAtUtc;
+
+    /// <summary>An attempt ended without the confirmation marker and without a rejection: paused until Retry now or an edit.</summary>
+    public void RecordSudoPasswordOutcomeUnknown(DateTimeOffset atUtc)
+    {
+        SudoPasswordAttemptStartedAtUtc = null;
+        SudoPasswordOutcomeUnknownAtUtc ??= atUtc;
+        SudoAuthFailedSinceUtc ??= atUtc;
+    }
+
+    /// <summary>The owner pressed Retry now / Test connection: the next probe may try the password once (a rejection stays).</summary>
+    public void ClearSudoPasswordOutcomeUnknown() => SudoPasswordOutcomeUnknownAtUtc = null;
+
+    /// <summary>The confirmation marker came back: the password works, and the sudo-auth-failed alert resolves.</summary>
+    public void RecordSudoPasswordSucceeded()
+    {
+        SudoPasswordAttemptStartedAtUtc = null;
+        SudoAuthFailedSinceUtc = null;
+    }
 
     /// <param name="sudoCapable">The sudo probe's result; null when the probe was not run (a rejected sudo password), which
     /// keeps the previous value.</param>

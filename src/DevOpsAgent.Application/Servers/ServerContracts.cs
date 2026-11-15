@@ -35,16 +35,21 @@ public sealed record ServerSummary(
     DateTimeOffset? LastSeenAtUtc,
     string? OsInfo,
     bool HasSudoPassword = false,
-    DateTimeOffset? SudoPasswordRejectedAtUtc = null)
+    DateTimeOffset? SudoPasswordRejectedAtUtc = null,
+    DateTimeOffset? SudoPasswordOutcomeUnknownAtUtc = null)
 {
-    public ServerSudoStatus Sudo => ServerSudoStatus.Describe(SudoCapable, HasSudoPassword, SudoPasswordRejectedAtUtc);
+    public ServerSudoStatus Sudo =>
+        ServerSudoStatus.Describe(SudoCapable, HasSudoPassword, SudoPasswordRejectedAtUtc, SudoPasswordOutcomeUnknownAtUtc);
 }
 
 /// <summary>How a server uses sudo, as the Servers page shows it (T7.R24).</summary>
-/// <param name="Label">"sudo: NOPASSWD", "sudo: password", "sudo: none", with "not tested" or "rejected" where it applies.</param>
+/// <param name="Label">"sudo: NOPASSWD", "sudo: password", "sudo: none", with "not tested", "rejected" or "outcome unknown, paused"
+/// where it applies.</param>
 /// <param name="Detail">One sentence for the tooltip and screen readers.</param>
-/// <param name="Paused">The stored password was rejected and no sudo is used until it is edited or removed.</param>
-public sealed record ServerSudoStatus(string Label, string Detail, bool Paused)
+/// <param name="Paused">No password sudo is used: the stored password was rejected, or the outcome of an attempt is unknown.</param>
+/// <param name="RetryAllowed">Retry now may try the password again: only after an unknown outcome, never after a rejection
+/// (T7.R25, D-040 amendment 1).</param>
+public sealed record ServerSudoStatus(string Label, string Detail, bool Paused, bool RetryAllowed = false)
 {
     /// <summary>
     /// Why "Retry now" (and Test connection's sudo step) does nothing while the password is rejected (D-040 amendment). Shown
@@ -53,12 +58,20 @@ public sealed record ServerSudoStatus(string Label, string Detail, bool Paused)
     public const string RetryBlockedReason =
         "Sudo is not retried: each wrong sudo password can count twice in pam_faillock (lockout risk). Edit or remove the sudo password first.";
 
-    public static ServerSudoStatus Describe(bool? sudoCapable, bool hasSudoPassword, DateTimeOffset? sudoPasswordRejectedAtUtc)
+    public static ServerSudoStatus Describe(bool? sudoCapable, bool hasSudoPassword, DateTimeOffset? sudoPasswordRejectedAtUtc,
+        DateTimeOffset? sudoPasswordOutcomeUnknownAtUtc = null)
     {
         if (hasSudoPassword && sudoPasswordRejectedAtUtc is { } rejectedAt)
         {
             return new("sudo: password — rejected", $"The sudo password was rejected at {rejectedAt:yyyy-MM-dd HH:mm:ss} UTC. "
                 + "No sudo is used on this server, and it is not retried, until the password is edited or removed.", true);
+        }
+
+        if (hasSudoPassword && sudoPasswordOutcomeUnknownAtUtc is { } unknownAt)
+        {
+            return new("sudo: password — outcome unknown, paused", $"A sudo command with the saved password ended at {unknownAt:yyyy-MM-dd HH:mm:ss} UTC "
+                + "without confirming that sudo accepted the password (timeout, lost connection or cancellation). No password sudo is used "
+                + "until you press Retry now (one attempt) or edit or remove the password.", true, RetryAllowed: true);
         }
 
         return (hasSudoPassword, sudoCapable) switch

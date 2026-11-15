@@ -108,6 +108,28 @@ public sealed class AlertSignalSourceTests
     }
 
     [Fact]
+    public async Task UnknownSudoPasswordOutcome_OpensTheSameMediumAlert_UntilAConfirmedSudo()
+    {
+        var db = new Server("db", "db.test", 22, "dvapw", "test_key", "staging");
+        db.SetSudoPassword("protected-secret-token");
+        var source = Source(db);
+
+        db.RecordSudoPasswordOutcomeUnknown(new DateTimeOffset(2026, 11, 16, 8, 0, 0, TimeSpan.Zero));
+        var unknown = Assert.Single(await source.GetActiveConditionsAsync(CancellationToken.None), c => c.Rule == "sudo-auth-failed");
+        Assert.Equal(AlertSeverity.Medium, unknown.Severity);
+        Assert.Equal($"sudo-auth-failed:{db.Id:N}", unknown.Key);
+        Assert.Equal("db: sudo password outcome unknown, paused", unknown.Title);
+        Assert.Contains("Retry now", unknown.Details, StringComparison.Ordinal);
+        Assert.DoesNotContain("protected-secret-token", unknown.Details, StringComparison.Ordinal);
+
+        // Retry now lifts the pause; the alert stays until the marker confirms the password.
+        db.ClearSudoPasswordOutcomeUnknown();
+        Assert.Single(await source.GetActiveConditionsAsync(CancellationToken.None), c => c.Rule == "sudo-auth-failed");
+        db.RecordSudoPasswordSucceeded();
+        Assert.DoesNotContain(await source.GetActiveConditionsAsync(CancellationToken.None), c => c.Rule == "sudo-auth-failed");
+    }
+
+    [Fact]
     public void SudoAuthFailedNotification_CarriesOnlyServerRuleSeverityAndState()
     {
         Assert.Equal("[Medium] db · sudo-auth-failed · opened",
