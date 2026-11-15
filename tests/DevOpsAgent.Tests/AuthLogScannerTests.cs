@@ -150,7 +150,7 @@ public sealed class AuthLogScannerTests
     [InlineData("mallory", "/usr/bin/true", true)]
     [InlineData("dva", "/usr/bin/true extra", true)]
     [InlineData("DVA", "/usr/bin/true", true)]
-    // The app's own scan command is not suppressed any more (owner decision 2026-11-15); allowlist the SSH user instead.
+    // Only the exact command lines in AppSudoCommands are exempt; this unquoted look-alike of the scan command is not.
     [InlineData("dva", "/usr/bin/sh -c ssh_output=$(journalctl -u ssh -u sshd --since '@1'); printf __DVA_BAN_TOOLS__; printf __DVA_BAN_STATE__", true)]
     // Embedding the old marker strings must not hide another user's command.
     [InlineData("mallory", "/usr/bin/sh -c 'journalctl -u ssh -u sshd --since @1; echo __DVA_BAN_TOOLS__ __DVA_BAN_STATE__; id'", true)]

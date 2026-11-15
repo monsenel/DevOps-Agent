@@ -6,6 +6,8 @@ namespace DevOpsAgent.Infrastructure.Collectors;
 
 public sealed class ListenerCollector : ICollector
 {
+    public const string Command = "ss -tulpnH";
+
     private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(15);
 
     public string Name => "listeners";
@@ -20,7 +22,7 @@ public sealed class ListenerCollector : ICollector
     public async Task<CollectorOutput> CollectAsync(ServerContext context, CancellationToken cancellationToken)
     {
         var useSudo = context.Server.SudoCapable == true;
-        var result = await context.SshRunner.RunAsync(context.Server.Id, "ss -tulpnH",
+        var result = await context.SshRunner.RunAsync(context.Server.Id, Command,
             new SshRunOptions(CommandTimeout, useSudo), cancellationToken);
         return new CollectorOutput(result.StandardOutput, result.StandardError, result.ExitCode, result.Duration);
     }

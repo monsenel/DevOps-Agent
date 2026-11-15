@@ -6,6 +6,8 @@ namespace DevOpsAgent.Infrastructure.Collectors;
 
 public sealed class ConnectionCollector : ICollector
 {
+    public static string NamespaceCommand(int pid) => $"nsenter -t {pid} -n ss -tnH state established";
+
     private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(30);
 
     public string Name => "connections";
@@ -42,7 +44,7 @@ public sealed class ConnectionCollector : ICollector
                 foreach (var container in containers)
                 {
                     var result = await context.SshRunner.RunAsync(context.Server.Id,
-                        $"nsenter -t {container.MainPid} -n ss -tnH state established",
+                        NamespaceCommand(container.MainPid),
                         new SshRunOptions(CommandTimeout, UseSudo: true), cancellationToken);
                     duration += result.Duration;
                     if (result.ExitCode == 0)

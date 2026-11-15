@@ -105,7 +105,7 @@ public sealed class UpdatesCollector : ICollector
     private const string AptCacheOnlyCommand = "apt list --upgradable 2>/dev/null";
     private const string DnfCacheOnlyCheckCommand = "dnf -C check-update";
 
-    private static string AptScanCommand(int repositoryTimeoutSeconds) =>
+    public static string AptScanCommand(int repositoryTimeoutSeconds) =>
         $"update_output=$(apt-get -o Acquire::Retries=0 -o Acquire::http::Timeout={repositoryTimeoutSeconds} -o Acquire::https::Timeout={repositoryTimeoutSeconds} update 2>&1); update_status=$?; " +
         $"if [ \"$update_status\" -ne 0 ] || printf '%s\\n' \"$update_output\" | grep -Eiq '(^|[[:space:]])Err:|Failed to fetch|Could not resolve|Temporary failure resolving|Network is unreachable|Connection timed out|Some index files failed'; then " +
         $"printf '%s\\n' '{RepositoriesUnreachableMarker}'; exit 0; fi; apt list --upgradable 2>/dev/null";

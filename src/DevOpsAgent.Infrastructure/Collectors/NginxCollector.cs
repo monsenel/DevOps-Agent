@@ -7,6 +7,8 @@ namespace DevOpsAgent.Infrastructure.Collectors;
 
 public sealed class NginxCollector : ICollector
 {
+    public const string Command = "if command -v nginx >/dev/null 2>&1; then nginx -T; else /usr/sbin/nginx -T; fi";
+
     private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(30);
 
     public string Name => "nginx";
@@ -23,7 +25,7 @@ public sealed class NginxCollector : ICollector
     {
         var useSudo = context.Server.SudoCapable == true;
         var config = await context.SshRunner.RunAsync(context.Server.Id,
-            "if command -v nginx >/dev/null 2>&1; then nginx -T; else /usr/sbin/nginx -T; fi",
+            Command,
             new SshRunOptions(CommandTimeout, useSudo), cancellationToken);
         if (config.ExitCode is not 0)
         {

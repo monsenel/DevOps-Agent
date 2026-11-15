@@ -117,16 +117,15 @@ public sealed class AuthLogScanner(ISshRunner sshRunner, IAppSettingRepository s
     private static IReadOnlyList<AuthLogEvent> ActiveWindow(IEnumerable<AuthLogEvent> events, DateTimeOffset now) =>
         events.Where(item => item.Timestamp >= now - Window).ToArray();
 
-    // Only the capability probe (`sudo -n true`, ServerCapabilityService) run by this server's own inventory SSH user is
-    // suppressed; sudo logs it as COMMAND=/usr/bin/true with no arguments. Everything else, including the app's other sudo
-    // commands, is reported unless the user is in SecurityMonitoring:SudoAllowlist. Matching on command text alone would let
-    // any user hide a command by embedding it.
+    // Only the app's own sudo use by this server's inventory SSH user is suppressed: the capability probe (`sudo -n true`,
+    // logged as COMMAND=/usr/bin/true with no arguments) and the exact command lines in AppSudoCommands. Any other sudo by that
+    // user, and any sudo by another user, is reported unless the user is in SecurityMonitoring:SudoAllowlist.
     private static readonly HashSet<string> SudoProbeCommands = new(["/usr/bin/true", "/bin/true", "true"], StringComparer.Ordinal);
 
     private static bool IsOwnSudoProbe(AuthLogEvent item, Server server) => item.Kind == AuthLogEventKind.SudoCommand
         && string.Equals(item.Username, server.User, StringComparison.Ordinal)
         && item.Command is { } command
-        && SudoProbeCommands.Contains(command.Trim());
+        && (SudoProbeCommands.Contains(command.Trim()) || AppSudoCommands.IsAppCommand(command));
 
     private async Task<AuthLogState> ReadStateAsync(string key, DateTimeOffset now, CancellationToken cancellationToken)
     {
@@ -144,7 +143,7 @@ public sealed class AuthLogScanner(ISshRunner sshRunner, IAppSettingRepository s
         return new AuthLogState { CursorUtc = now - Window };
     }
 
-    private static string BuildCommand(DateTimeOffset cursor) =>
+    public static string BuildCommand(DateTimeOffset cursor) =>
         // sudo does not run under the ssh units, so it is read with a second journal query (matches on different
         // fields are ANDed, and mixing -u with `+` is ambiguous); both are read-only.
         // The auth.log fallback depends only on the sshd journal query being empty, not on the sudo query.

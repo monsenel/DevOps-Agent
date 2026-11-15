@@ -28,11 +28,31 @@ public static partial class AuthLogParser
     [GeneratedRegex(@"sudo(?:\[\d+\])?:\s+(?<user>[a-zA-Z0-9_.-]+)\s*:.*?COMMAND=(?<command>.*)$", RegexOptions.IgnoreCase)]
     private static partial Regex SudoCommandRegex();
 
+    // sudo splits a long command over several log lines; the later ones read "<user> : (command continued) <rest>".
+    [GeneratedRegex(@"sudo(?:\[\d+\])?:\s+(?<user>[a-zA-Z0-9_.-]+)\s*:\s\(command continued\)\s(?<rest>.*)$", RegexOptions.IgnoreCase)]
+    private static partial Regex SudoContinuationRegex();
+
     public static IReadOnlyList<AuthLogEvent> Parse(string output, DateTimeOffset now)
     {
         var events = new List<AuthLogEvent>();
-        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        AuthLogEvent? openSudo = null;
+        // Lines are not trimmed: a split sudo command may end or continue with a space that is part of the command.
+        foreach (var rawLine in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
+            var line = rawLine.TrimEnd('\r');
+            var continuation = SudoContinuationRegex().Match(line);
+            if (continuation.Success)
+            {
+                if (openSudo is not null && string.Equals(openSudo.Username, continuation.Groups["user"].Value, StringComparison.Ordinal))
+                {
+                    openSudo = openSudo with { Command = openSudo.Command + continuation.Groups["rest"].Value };
+                    events[^1] = openSudo;
+                }
+                continue;
+            }
+
+            openSudo = null;
+            if (string.IsNullOrWhiteSpace(line)) continue;
             if (!TryParseTimestamp(line, now, out var timestamp)) continue;
             var failed = FailedLoginRegex().Match(line);
             if (failed.Success && TryGetIp(failed.Groups["ip"].Value, out var failedIp))
@@ -61,8 +81,9 @@ public static partial class AuthLogParser
             var sudo = SudoCommandRegex().Match(line);
             if (sudo.Success)
             {
-                events.Add(new AuthLogEvent(timestamp, AuthLogEventKind.SudoCommand,
-                    sudo.Groups["user"].Value, Command: sudo.Groups["command"].Value.Trim(), EventKey: Fingerprint(line)));
+                openSudo = new AuthLogEvent(timestamp, AuthLogEventKind.SudoCommand,
+                    sudo.Groups["user"].Value, Command: sudo.Groups["command"].Value, EventKey: Fingerprint(line));
+                events.Add(openSudo);
             }
         }
 

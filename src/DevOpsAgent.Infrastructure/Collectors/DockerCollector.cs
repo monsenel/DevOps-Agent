@@ -8,6 +8,12 @@ namespace DevOpsAgent.Infrastructure.Collectors;
 
 public sealed class DockerCollector : ICollector
 {
+    public const string InfoCommand = "docker info >/dev/null 2>&1";
+    public const string ContainerListCommand = "docker ps -q";
+    public const string NetworkListCommand = "docker network ls -q";
+    public const string ContainerInspectCommand = "docker inspect";
+    public const string NetworkInspectCommand = "docker network inspect";
+
     private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(30);
     private static readonly Regex DockerIdPattern = new("^[a-fA-F0-9]{12,64}$", RegexOptions.CultureInvariant);
 
@@ -22,7 +28,7 @@ public sealed class DockerCollector : ICollector
             return false;
         }
 
-        var userAccess = await context.SshRunner.RunAsync(context.Server.Id, "docker info >/dev/null 2>&1",
+        var userAccess = await context.SshRunner.RunAsync(context.Server.Id, InfoCommand,
             new SshRunOptions(CommandTimeout), cancellationToken);
         if (userAccess.ExitCode == 0)
         {
@@ -34,7 +40,7 @@ public sealed class DockerCollector : ICollector
             return false;
         }
 
-        var sudoAccess = await context.SshRunner.RunAsync(context.Server.Id, "docker info >/dev/null 2>&1",
+        var sudoAccess = await context.SshRunner.RunAsync(context.Server.Id, InfoCommand,
             new SshRunOptions(CommandTimeout, UseSudo: true), cancellationToken);
         return sudoAccess.ExitCode == 0;
     }
@@ -45,13 +51,13 @@ public sealed class DockerCollector : ICollector
         var duration = TimeSpan.Zero;
         var useSudo = context.Server.SudoCapable == true;
 
-        var containerList = await RunAsync("docker ps -q");
+        var containerList = await RunAsync(ContainerListCommand);
         var containerIds = ParseIds("container", containerList, errors);
-        var containerInspectJson = await InspectAsync(containerIds, "docker inspect");
+        var containerInspectJson = await InspectAsync(containerIds, ContainerInspectCommand);
 
-        var networkList = await RunAsync("docker network ls -q");
+        var networkList = await RunAsync(NetworkListCommand);
         var networkIds = ParseIds("network", networkList, errors);
-        var networkInspectJson = await InspectAsync(networkIds, "docker network inspect");
+        var networkInspectJson = await InspectAsync(networkIds, NetworkInspectCommand);
 
         try
         {

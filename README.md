@@ -38,7 +38,24 @@ The disposable lab script (`dva-testlab.sh`, kept outside this repository) can c
 
 For a first run against real servers, add one server in **read-only** execution mode and run discovery before enabling Agent actions. Review the resulting inventory and graph, then configure notifications and an LLM provider as needed. Keep the app and its SSH access behind a VPN or WireGuard; do not expose the login or SSH keys to the public internet.
 
-Notifications can use ntfy (server URL, topic, optional token) or Telegram (bot token and chat ID) under **Settings → Notifications**. Configure a destination and use **Test** before relying on alert delivery. Notifications carry only server name, rule, severity and state; details stay in the Alerts page. The app's collectors use sudo as each server's SSH user and only its `sudo -n true` probe is exempt from the "sudo by non-allowlisted user" alert, so add that user to `SecurityMonitoring__SudoAllowlist__0` in `.env` if you don't want that alert. Agent chat requires a provider under **Settings → LLM**; local Ollama can be started with the command above, or use an OpenAI-compatible endpoint such as LM Studio or OpenRouter.
+Notifications can use ntfy (server URL, topic, optional token) or Telegram (bot token and chat ID) under **Settings → Notifications**. Configure a destination and use **Test** before relying on alert delivery. Notifications carry only server name, rule, severity and state; details stay in the Alerts page. The app's own sudo use by a server's SSH user (its `sudo -n true` probe and the fixed command lines listed below) does not raise the "sudo by non-allowlisted user" alert; any other sudo by that user does. Only add the user to `SecurityMonitoring__SudoAllowlist__0` if you accept losing that signal.
+
+### Sudo on managed servers
+
+Give the app a dedicated SSH user. It runs every privileged command as `sudo -n -- sh -c '<command>'`; the complete list lives in `src/DevOpsAgent.Infrastructure/Monitoring/AppSudoCommands.cs`:
+
+| Used by | Command (inside `sh -c`) |
+|---|---|
+| Capability probe | `true` (as `sudo -n true`) |
+| Listener collector | `ss -tulpnH` |
+| nginx collector | `if command -v nginx >/dev/null 2>&1; then nginx -T; else /usr/sbin/nginx -T; fi` |
+| Docker collector | `docker info >/dev/null 2>&1`, `docker ps -q`, `docker network ls -q`, `docker inspect <ids>`, `docker network inspect <ids>` |
+| Connection collector | `nsenter -t <pid> -n ss -tnH state established` |
+| Security scan | journal/auth.log read plus fail2ban/nftables/ufw status (`AuthLogScanner.BuildCommand`) |
+| Update scan (confirm groups only) | `apt-get update` then `apt list --upgradable` (`UpdatesCollector.AptScanCommand`) |
+| Agent tools (after approval, or read-only `disk_usage`) | `systemctl restart -- '<unit>'`, package install with restart/reboot report, fail2ban/ufw/nftables ban and unban, `df`/`du` |
+
+On real servers, restrict the user's sudoers entry to these commands instead of `NOPASSWD: ALL`. The fixed ones can be pinned exactly, for example `deploy ALL=(root) NOPASSWD: /bin/sh -c ss -tulpnH`. The ones with variable parts (IDs, PIDs, the scan cursor, unit and package names, addresses) cannot be pinned safely while they run through `sh -c`, because a sudoers wildcard would also match extra shell commands; for those, rely on read-only execution mode, the approval step and the sudo alert, and track sudoers hardening as T7.R14. Agent chat requires a provider under **Settings → LLM**; local Ollama can be started with the command above, or use an OpenAI-compatible endpoint such as LM Studio or OpenRouter.
 
 ## Files
 
