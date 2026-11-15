@@ -87,7 +87,7 @@ Dependency rule: `Domain` ← `Application` ← `Infrastructure` ← `Web`. `Web
 - Connect attempts are single-flight (D-039): one attempt per server at a time, shared by every caller that arrives while it runs and has no failure on record to wait out (or by "Retry now" callers for a "Retry now" attempt); a caller's deadline or cancellation only ends its own wait, the last one to leave ends the attempt.
 - Jump host: connect to the jump server, open `ForwardedPortLocal` to target `host:port`, connect the target client through `127.0.0.1:<local port>`.
 - `ISshRunner.RunAsync(serverId, command, RunOptions { Sudo, Timeout }, ct)` → `CommandResult { ExitCode, StdOut, StdErr, Duration }`.
-- Sudo: `sudo -n <cmd>`; capability detected once with `sudo -n true`.
+- Sudo: `sudo -n <cmd>`; capability detected once with `sudo -n true`. With a stored per-server sudo password (D-040, `SudoPasswordGate`): `LC_ALL=C sudo -S -p '' -- sh -c '<cmd>'` and probe `LC_ALL=C sudo -S -p '' true`, password on stdin only; one password sudo per server at a time for a 15 s authentication window; a rejection (`Server.SudoPasswordRejectedAtUtc`, persisted) stops all sudo on that server (calls return exit 1 with fixed text, nothing is sent) until the password is edited or "Retry now"/"Test connection" (`ISshRunner.ProbeSudoAsync`) tries it once; every command's output from that server is redacted of the password. Callers decide on sudo with `Server.CanUseSudo`.
 
 ### Collectors
 ```csharp
@@ -132,7 +132,7 @@ UI gets live updates through the Blazor circuit (services publish to an in-proce
 
 | Entity | Key fields |
 |---|---|
-| Server | Id, Name, Host, Port, User, KeyFile, KeyPassphrase (protected), JumpServerId?, Group, Tags (json), SudoCapable, LastSeenAt, OsInfo |
+| Server | Id, Name, Host, Port, User, KeyFile, KeyPassphrase (protected), SudoPassword (protected, optional), SudoPasswordRejectedAt?, JumpServerId?, Group, Tags (json), SudoCapable, LastSeenAt, OsInfo |
 | LlmProvider | Id, Name, Type, BaseUrl, ApiKey (protected), Model, ContextWindow, Temperature, TimeoutSeconds, NativeToolCalling, Streaming, IsDefault, LastTest (json) |
 | AppSetting | Key, Value (json) — execution modes, notification config, discovery interval, redaction toggle |
 | Snapshot | Id, StartedAt, FinishedAt, Status, ServerIds (json) |
