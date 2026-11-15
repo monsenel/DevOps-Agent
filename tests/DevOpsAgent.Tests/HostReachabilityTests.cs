@@ -134,6 +134,23 @@ public sealed class HostReachabilityTests
         Assert.Equal(1, lab.Transports.Attempts(app));
     }
 
+    [Fact]
+    public async Task AConnectThatFailsAfterTheServerWasEditedDoesNotBackOffTheNewSettings()
+    {
+        var lab = new Lab();
+        var server = lab.AddServer("web", "198.51.100.7", dead: true);
+
+        // The owner corrects the host while the old address is still timing out.
+        var run = lab.Runner.RunAsync(server.Id, "true", new SshRunOptions(TimeSpan.FromSeconds(5)), CancellationToken.None);
+        await Task.Delay(ConnectTimeout / 4);
+        lab.Transports.Revive(server);
+        lab.Pool.Evict(server.Id);
+        await run;
+
+        Assert.Null(lab.Reachability.Get(server.Id));
+        Assert.Equal(2, lab.Transports.Attempts(server));
+    }
+
     private sealed class Lab
     {
         private readonly List<Server> _servers = [];

@@ -31,7 +31,8 @@ public interface IHostReachability
     bool TryBeginAttempt(Guid serverId, bool bypassBackoff, out HostReachabilityState? blockedBy);
 
     void RecordSuccess(Guid serverId);
-    void RecordFailure(Guid serverId, Exception failure);
+    /// <returns>The new backoff state.</returns>
+    HostReachabilityState RecordFailure(Guid serverId, Exception failure);
 
     /// <summary>Releases a claimed attempt that ended without an outcome (for example the caller cancelled).</summary>
     void EndAttempt(Guid serverId);

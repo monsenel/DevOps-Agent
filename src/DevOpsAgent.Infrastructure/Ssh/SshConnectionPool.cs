@@ -156,11 +156,13 @@ public sealed class SshConnectionPool(
                 }
                 catch (Exception exception) when (!(exception is OperationCanceledException && cancellationToken.IsCancellationRequested))
                 {
-                    reachability.RecordFailure(server.Id, exception);
+                    // Evicted while connecting: the failure belongs to the old settings and must not back off the new ones.
+                    if (Generation(server.Id) != generation) return null;
+
+                    var state = reachability.RecordFailure(server.Id, exception);
                     outcomeRecorded = true;
-                    logger.LogInformation("{ServerName} is unreachable; next retry at {NextRetryUtc:u}", server.Name,
-                        reachability.Get(server.Id)!.NextRetryUtc);
-                    throw new HostUnreachableException(server.Id, server.Name, reachability.Get(server.Id)!);
+                    logger.LogInformation("{ServerName} is unreachable; next retry at {NextRetryUtc:u}", server.Name, state.NextRetryUtc);
+                    throw new HostUnreachableException(server.Id, server.Name, state);
                 }
 
                 reachability.RecordSuccess(server.Id);

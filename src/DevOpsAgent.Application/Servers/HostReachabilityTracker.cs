@@ -43,14 +43,14 @@ public sealed class HostReachabilityTracker(TimeProvider timeProvider) : IHostRe
         lock (_gate) _states.TryRemove(serverId, out _);
     }
 
-    public void RecordFailure(Guid serverId, Exception failure)
+    public HostReachabilityState RecordFailure(Guid serverId, Exception failure)
     {
         ArgumentNullException.ThrowIfNull(failure);
         lock (_gate)
         {
             var now = timeProvider.GetUtcNow();
             var failures = _states.TryGetValue(serverId, out var previous) ? previous.ConsecutiveFailures + 1 : 1;
-            _states[serverId] = new HostReachabilityState(serverId, previous?.UnreachableSinceUtc ?? now,
+            return _states[serverId] = new HostReachabilityState(serverId, previous?.UnreachableSinceUtc ?? now,
                 now + BackoffFor(failures), failures, failure.Message, RetryInProgress: false, failure);
         }
     }
