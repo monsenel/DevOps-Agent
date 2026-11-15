@@ -364,6 +364,57 @@ Raised by the 2026-11-15 MVP review. Small issues were fixed directly (`fix(revi
 
 ---
 
+## M8 — Owner feedback round (v0.2.0)
+
+Owner order 2026-11-16: T8.1–T8.9 in order, one commit each, AGENTS.md §2, DESIGN.md for all UI; build 0 warnings, all tests green, tag `v0.2.0` locally (no push). Lab and isolated `/tmp` DB only.
+
+### T8.1 Bugs seen in screenshots
+- **Do:** Settings › LLM connection: the Providers list and the Connection form always show the same data (seen: an empty list while the form showed a provider "Ollama" of type OpenRouter with an empty Base URL); with no providers, an empty state and an empty "Add provider" form. Updates: on read-only groups, selection checkboxes and Apply are hidden or disabled with the reason shown ("read-only group"). Updates header: separator between the scan time and "Package lists last refreshed".
+- **Done when:** Tests for the list/form state and the read-only rule; checked in both themes.
+- **Depends on:** —
+
+### T8.2 Global search (top bar)
+- **Do:** Searches servers (name, host, IP), nodes (containers, services, domains), listeners (port) and open alerts. Results dropdown grouped by type, keyboard navigable, Enter opens the item (server detail, Topology focused on the node, alert detail). Works from every page. Debounced, server-side, at most 20 results.
+- **Done when:** Search service tests (matching, grouping, limit 20); keyboard navigation and Enter verified in a browser.
+- **Depends on:** —
+
+### T8.3 Theme toggle as an icon button
+- **Do:** Sun/moon inline SVG, aria-label "Switch to dark theme" / "Switch to light theme", 44 px target, tooltip, no text label.
+- **Done when:** Both states checked in a browser, keyboard focus ring visible.
+- **Depends on:** —
+
+### T8.4 Automatic known_hosts (trust on first use)
+- **Do:** On the first successful connection to a server (jump targets included) record its host key in the app-managed known_hosts file; show the fingerprint and "first seen" on the server page. A changed key still raises the Critical "host key changed" alert and blocks connections; "Accept new key" on the server page replaces the stored key after showing old and new fingerprints and a confirmation. Keys added by hand are still honoured. DECISIONS entry on the TOFU trade-off.
+- **Done when:** Tests (first use recorded, mismatch still refused, accept replaces, manual keys kept); live on the lab with a fresh known_hosts.
+- **Depends on:** —
+
+### T8.5 Chat: attachments and effort
+- **Do:** Attach files to a message (text, logs, configs, JSON, YAML; images only if the model supports them), 2 MB per file, 5 files per message; text attachments go through the same redaction as tool output before being stored or sent to a cloud provider; chips on the message. Effort selector (Low / Medium / High) per conversation, default Medium, mapped to the provider's reasoning-effort parameter where supported (exact field from OpenRouter's and Ollama's current docs), hidden when the model does not support it. Assistant messages rendered as Markdown (code blocks, lists, tables; noted in T7.R10).
+- **Done when:** Tests for limits, redaction, effort mapping and Markdown rendering (no raw HTML).
+- **Depends on:** —
+
+### T8.6 Updates: select all and sources
+- **Do:** "Select all" per server table (and per group) and "Select security only". Above each server's table its package sources: apt (`/etc/apt/sources.list`, `/etc/apt/sources.list.d/*`, deb822 `.sources`): URI, suite, components, signed-by; dnf (`dnf repolist -v`): id, name, baseurl/metalink. Read-only commands only. The Source column shows the repository origin (apt origin/label from `apt-cache policy` or the list file name) so Docker's repo and Ubuntu's "jammy" are distinguishable.
+- **Done when:** Parser tests with fixtures (one-line, deb822, dnf); live on the lab.
+- **Depends on:** T8.1
+
+### T8.7 Impact preview on every proposed action
+- **Do:** Every approval card (restart_service, restart_container, apply_updates, block_ip, run_shell, edit_config) shows "Impact" from the latest graph: services and servers depending on the target (inbound declared and observed edges, 2 levels) and domains routed to it through nginx. Stale target or graph older than 24 h is said in the card. The system prompt tells the agent to call query_graph and mention impact before proposing a mutating action.
+- **Done when:** Impact service tests on a fixture graph; card checked in a browser.
+- **Depends on:** —
+
+### T8.8 edit_config tool
+- **Do:** Mutating, always needs approval, never on read-only groups. Input: server, path, and full new content or a unified diff; the card shows the diff. Execution: back up (`path.bak-<timestamp>`), write atomically, run the validation command if known (nginx: `nginx -t`; others configurable, else none), reload the service, health check (related health checks, else the service's listener). On any failure restore the backup, reload again and report what failed. Allowed paths: configurable allowlist (default `/etc/nginx/**`); the sensitive-path deny list still applies.
+- **Done when:** Tests (allowlist, deny list, read-only refusal, diff apply, rollback on each failing step); live on the lab: wrong upstream port for api.test.local on srv-edge → `nginx -t` passes, health check fails → automatic rollback; then a valid change succeeds.
+- **Depends on:** T8.7
+
+### T8.9 Dependency awareness for updates
+- **Do:** The apply_updates approval card lists the services on that server the package changes touch (docker-ce → all containers; nginx → its domains), from the graph and package names; warns when a package restarts Docker or nginx.
+- **Done when:** Tests on a fixture graph; card checked in a browser.
+- **Depends on:** T8.7
+
+---
+
 ## v2 backlog (do not start without being told)
 
 App-config/connection-string collector · Nexus collector · PostgreSQL/Redis client collectors · firewall collector · HAProxy/Traefik/Caddy · TLS collector · task routing + fallback · rolling patches by graph order · CVE scan (Trivy/Grype) · file integrity · runbooks · incident mode · anomaly baselines · daily digest · Prometheus/VictoriaLogs read · LLM-inferred edges · consider decomposing HealthCheck for maintainability · execution mode "auto within allowlist" (removed from MVP, D-026; needs command pinning and per-tool scopes).

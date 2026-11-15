@@ -148,6 +148,15 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T7.R24 | Optional sudo password per server | done | `feat(T7.R24): optional per-server sudo password over stdin; one rejected attempt pauses sudo` |
 | T7.R25 | Unknown-outcome sudo password attempts | done | `feat(T7.R25): a password sudo is confirmed only by its marker; an unknown outcome pauses until Retry now` |
 | T7.R26 | Sudo password redaction across servers | done | `feat(T7.R26): every stored sudo password is redacted from every server's output, alerts and LLM input; live sudo column` |
+| T8.1 | Bugs seen in screenshots | todo | |
+| T8.2 | Global search | todo | |
+| T8.3 | Theme toggle icon button | todo | |
+| T8.4 | Automatic known_hosts (TOFU) | todo | |
+| T8.5 | Chat attachments and effort | todo | |
+| T8.6 | Updates select all and sources | todo | |
+| T8.7 | Impact preview on proposed actions | todo | |
+| T8.8 | edit_config tool | todo | |
+| T8.9 | Dependency awareness for updates | todo | |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
 
