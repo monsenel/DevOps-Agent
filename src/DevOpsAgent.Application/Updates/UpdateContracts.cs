@@ -7,10 +7,16 @@ public enum PackageManagerKind
 }
 
 public sealed record UpdatePackageDto(string Name, string CurrentVersion, string CandidateVersion, string Repository, bool IsSecurity);
+
+/// <summary>A configured package source (T8.6): apt URI, suite, components and signed-by key; or a dnf repo id, name and URL.</summary>
+/// <param name="File">The apt file it is configured in, or the dnf repository's name.</param>
+public sealed record PackageSourceDto(string Type, string Uri, string Suite, IReadOnlyList<string> Components, string? SignedBy,
+    string File, bool Enabled);
 /// <param name="ReadOnly">The server's group is read-only (D-027, D-029): updates are listed but cannot be selected or applied.</param>
 public sealed record ServerUpdateStatus(Guid ServerId, string ServerName, string Group, PackageManagerKind? PackageManager,
     DateTimeOffset? CheckedAtUtc, IReadOnlyList<UpdatePackageDto> Packages, string? Error,
-    DateTimeOffset? PackageListsRefreshedAtUtc = null, bool CacheOnly = false, bool ReadOnly = false)
+    DateTimeOffset? PackageListsRefreshedAtUtc = null, bool CacheOnly = false, bool ReadOnly = false,
+    IReadOnlyList<PackageSourceDto>? Sources = null)
 {
     public const string ReadOnlyReason = "Read-only group: updates can be reviewed but not applied. Change the group's execution mode in Settings › Execution modes.";
 
@@ -30,6 +36,6 @@ public sealed record ServerUpdateStatus(Guid ServerId, string ServerName, string
     }
 }
 public sealed record UpdateCollectionOutput(string AptOutput, string DnfOutput, string SecurityOutput, string? Error,
-    DateTimeOffset? PackageListsRefreshedAtUtc = null, bool CacheOnly = false);
+    DateTimeOffset? PackageListsRefreshedAtUtc = null, bool CacheOnly = false, string SourcesOutput = "", string AptPolicyOutput = "");
 public sealed record CollectedUpdateResult(PackageManagerKind PackageManager, string ResultJson,
-    DateTimeOffset? PackageListsRefreshedAtUtc = null, bool CacheOnly = false);
+    DateTimeOffset? PackageListsRefreshedAtUtc = null, bool CacheOnly = false, string SourcesJson = "[]");

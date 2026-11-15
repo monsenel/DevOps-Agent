@@ -28,8 +28,15 @@ public sealed class UpdatesService(
                 Enum.TryParse<PackageManagerKind>(scan?.PackageManager, true, out var manager) ? manager : null,
                 scan?.CheckedAtUtc,
                 items.Select(item => new UpdatePackageDto(item.Name, item.CurrentVersion, item.CandidateVersion, item.Repository, item.IsSecurity)).ToArray(), scan?.Error,
-                scan?.PackageListsRefreshedAtUtc, scan?.CacheOnly ?? false, readOnly.Contains(server.Group));
+                scan?.PackageListsRefreshedAtUtc, scan?.CacheOnly ?? false, readOnly.Contains(server.Group), ReadSources(scan?.SourcesJson));
         }).ToArray();
+    }
+
+    private static IReadOnlyList<PackageSourceDto> ReadSources(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return [];
+        try { return JsonSerializer.Deserialize<PackageSourceDto[]>(json) ?? []; }
+        catch (JsonException) { return []; }
     }
 
     // Read one group at a time: the scoped DbContext must not be used concurrently.
@@ -78,9 +85,9 @@ public sealed class UpdatesService(
             await packages.ReplaceForServerAsync(item.Server.Id, item.Rows.Select(row => new UpdatePackage(item.Server.Id,
                 row.Name, row.CurrentVersion, row.CandidateVersion, row.Repository, row.IsSecurity, checkedAt)).ToArray(), cancellationToken);
             await scans.SaveAsync(new UpdateScan(item.Server.Id, item.Collected.PackageManager.ToString(), checkedAt, null,
-                item.Collected.PackageListsRefreshedAtUtc, item.Collected.CacheOnly), cancellationToken);
+                item.Collected.PackageListsRefreshedAtUtc, item.Collected.CacheOnly, item.Collected.SourcesJson), cancellationToken);
             results.Add(new ServerUpdateStatus(item.Server.Id, item.Server.Name, item.Server.Group, item.Collected.PackageManager, checkedAt, item.Rows, null,
-                item.Collected.PackageListsRefreshedAtUtc, item.Collected.CacheOnly, cacheOnly[item.Server.Id]));
+                item.Collected.PackageListsRefreshedAtUtc, item.Collected.CacheOnly, cacheOnly[item.Server.Id], ReadSources(item.Collected.SourcesJson)));
         }
         return results.OrderBy(result => result.ServerName, StringComparer.OrdinalIgnoreCase).ToArray();
     }

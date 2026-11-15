@@ -5,8 +5,9 @@ public sealed class UpdateScan
     private UpdateScan() { }
 
     public UpdateScan(Guid serverId, string? packageManager, DateTimeOffset checkedAtUtc, string? error,
-        DateTimeOffset? packageListsRefreshedAtUtc = null, bool cacheOnly = false)
+        DateTimeOffset? packageListsRefreshedAtUtc = null, bool cacheOnly = false, string sourcesJson = "[]")
     {
+        SourcesJson = sourcesJson;
         ServerId = serverId;
         PackageManager = packageManager;
         CheckedAtUtc = checkedAtUtc;
@@ -25,4 +26,7 @@ public sealed class UpdateScan
 
     /// <summary>True when the scan used cached lists only (read-only group: no apt-get update, no sudo).</summary>
     public bool CacheOnly { get; private set; }
+
+    /// <summary>The server's configured package sources at the scan (T8.6), JSON.</summary>
+    public string SourcesJson { get; private set; } = "[]";
 }

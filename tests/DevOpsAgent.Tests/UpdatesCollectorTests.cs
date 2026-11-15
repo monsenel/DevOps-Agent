@@ -1,3 +1,4 @@
+using System.Text.Json;
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Discovery;
 using DevOpsAgent.Domain.Servers;
@@ -17,7 +18,10 @@ public sealed class UpdatesCollectorTests
         var raw = await collector.CollectAsync(new ServerContext(server, runner), CancellationToken.None);
         var parsed = collector.Parse(raw);
 
-        Assert.Equal(2, runner.Calls.Count);
+        // The check for apt, the update scan, and (T8.6) the read-only list of package sources.
+        Assert.Equal(3, runner.Calls.Count);
+        Assert.Equal(DevOpsAgent.Infrastructure.Parsers.PackageSourcesParser.AptSourcesCommand, runner.Calls[2].Command);
+        Assert.False(runner.Calls[2].Options.UseSudo);
         var updateCall = runner.Calls[1];
         Assert.Equal(TimeSpan.FromSeconds(300), updateCall.Options.Timeout);
         Assert.True(updateCall.Options.UseSudo);
@@ -62,6 +66,43 @@ public sealed class UpdatesCollectorTests
         Assert.NotEmpty(dnfCalls);
         Assert.All(dnfCalls, call => Assert.StartsWith("dnf -C ", call.Command, StringComparison.Ordinal));
         Assert.All(runner.Calls, call => Assert.False(call.Options.UseSudo));
+    }
+
+    [Fact]
+    public async Task AptScan_ReadsSourcesAndOrigins_WithoutSudo_AndLabelsEachPackage()
+    {
+        string Fixture(string name) => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", name));
+        var runner = new ScriptedRunner(command =>
+            command.Contains("update_output=$(", StringComparison.Ordinal) ? "Listing...\ndocker-ce/jammy 5:25.0.0-1~ubuntu.22.04~jammy amd64 [upgradable from: 5:24.0.7-1~ubuntu.22.04~jammy]\nopenssl/jammy-security 3.0.2-0ubuntu1.19 amd64 [upgradable from: 3.0.2-0ubuntu1.18]\n"
+            : command.StartsWith("for f in /etc/apt/", StringComparison.Ordinal) ? Fixture("apt-sources.txt")
+            : command.StartsWith("apt-cache policy", StringComparison.Ordinal) ? Fixture("apt-cache-policy.txt")
+            : string.Empty);
+        var collector = new UpdatesCollector(new UpdateCollectorOptions());
+        var server = new Server("srv-app", "srv-app", 22, "dva", "key", "staging");
+
+        var raw = await collector.CollectAsync(new ServerContext(server, runner), CancellationToken.None);
+        var packages = collector.Parse(raw).Data!.Value.Deserialize<DevOpsAgent.Application.Updates.UpdatePackageDto[]>()!;
+        var output = System.Text.Json.JsonSerializer.Deserialize<DevOpsAgent.Application.Updates.UpdateCollectionOutput>(raw.StandardOutput)!;
+
+        Assert.Equal("Docker CE · jammy", packages.Single(item => item.Name == "docker-ce").Repository);
+        Assert.Equal("Ubuntu · jammy-security", packages.Single(item => item.Name == "openssl").Repository);
+        Assert.True(packages.Single(item => item.Name == "openssl").IsSecurity);
+        Assert.Equal(7, UpdatesCollector.ParseSources(output).Count);
+        Assert.Contains(runner.Calls, call => call.Command.StartsWith("apt-cache policy", StringComparison.Ordinal)
+            && call.Command.Contains("-- 'docker-ce' 'openssl'", StringComparison.Ordinal));
+        Assert.All(runner.Calls.Where(call => !call.Command.Contains("update_output=$(", StringComparison.Ordinal)),
+            call => Assert.False(call.Options.UseSudo));
+    }
+
+    private sealed class ScriptedRunner(Func<string, string> output) : ISshRunner
+    {
+        public List<(string Command, SshRunOptions Options)> Calls { get; } = [];
+
+        public Task<RemoteCommandResult> RunAsync(Guid serverId, string command, SshRunOptions options, CancellationToken cancellationToken)
+        {
+            Calls.Add((command, options));
+            return Task.FromResult(new RemoteCommandResult(0, output(command), string.Empty, TimeSpan.FromMilliseconds(5)));
+        }
     }
 
     [Theory]

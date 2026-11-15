@@ -36,8 +36,20 @@
     {
         @foreach (var group in _servers.GroupBy(item => item.Group).OrderBy(group => group.Key))
         {
+            var selectable = group.Where(item => !item.ReadOnly && item.Error is null && item.Packages.Count > 0).ToArray();
             <section class="updates-group">
-                <h3>@group.Key</h3>
+                <div class="updates-group-header">
+                    <h3>@group.Key</h3>
+                    @if (selectable.Length > 0)
+                    {
+                        @* T8.6: selection across the group's servers; each server is still reviewed and approved on its own. *@
+                        <label class="updates-select-all">
+                            <input type="checkbox" checked="@selectable.All(AllSelected)" @onchange="args => SelectAll(selectable, IsChecked(args))" />
+                            Select all in @group.Key
+                        </label>
+                        <button class="ui-button secondary compact" type="button" @onclick="() => SelectSecurityOnly(selectable)">Security only in @group.Key</button>
+                    }
+                </div>
                 @foreach (var server in group.OrderBy(item => item.ServerName))
                 {
                     <article class="updates-server">
@@ -58,6 +70,30 @@
                                 }
                             </div>
                         </header>
+                        @if (server.Sources is { Count: > 0 } sources)
+                        {
+                            @* T8.6: where this server's packages come from (read-only: source files, dnf -C repolist). *@
+                            <details class="updates-sources" open>
+                                <summary>Package sources (@sources.Count)</summary>
+                                <div class="updates-package-table-wrap">
+                                    <table class="updates-package-table updates-sources-table">
+                                        <thead><tr><th>URI</th><th>@(server.PackageManager == PackageManagerKind.Dnf ? "Repository" : "Suite")</th><th>Components</th><th>Signed by</th><th>@(server.PackageManager == PackageManagerKind.Dnf ? "Name" : "File")</th></tr></thead>
+                                        <tbody>
+                                            @foreach (var source in sources)
+                                            {
+                                                <tr class="@(source.Enabled ? null : "muted")">
+                                                    <td class="mono">@source.Type @source.Uri</td>
+                                                    <td class="mono">@source.Suite@(source.Enabled ? null : " (disabled)")</td>
+                                                    <td class="mono">@(source.Components.Count == 0 ? "—" : string.Join(' ', source.Components))</td>
+                                                    <td class="mono">@(source.SignedBy ?? "—")</td>
+                                                    <td class="mono">@source.File</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </details>
+                        }
                         @if (!string.IsNullOrWhiteSpace(server.Error))
                         {
                             <div class="settings-message error" role="alert">@server.Error</div>
@@ -70,7 +106,7 @@
                         {
                             <div class="updates-package-table-wrap">
                                 <table class="updates-package-table">
-                                    <thead><tr>@if (!server.ReadOnly) { <th>Select</th> }<th>Package</th><th>Installed</th><th>Candidate</th><th>Source</th><th>Type</th></tr></thead>
+                                    <thead><tr>@if (!server.ReadOnly) { <th><input type="checkbox" aria-label="Select all updates on @server.ServerName" checked="@AllSelected(server)" @onchange="args => SelectAll([server], IsChecked(args))" /></th> }<th>Package</th><th>Installed</th><th>Candidate</th><th>Source</th><th>Type</th></tr></thead>
                                     <tbody>
                                         @foreach (var package in server.Packages.OrderByDescending(item => item.IsSecurity).ThenBy(item => item.Name))
                                         {
@@ -102,6 +138,8 @@
                                 {
                                     <button class="ui-button primary" type="button" disabled="@(_busy || !_selected.Any(item => item.ServerId == server.ServerId))"
                                             @onclick="() => ProposeAsync(server)">Review selected updates</button>
+                                    <button class="ui-button secondary" type="button" disabled="@(!server.Packages.Any(item => item.IsSecurity))"
+                                            @onclick="() => SelectSecurityOnly([server])">Select security only</button>
                                 }
                             </div>
                         }
@@ -163,6 +201,32 @@
         }
         catch (Exception exception) { _message = exception.Message; _isError = true; }
         finally { _scanning = false; }
+    }
+
+    private static bool IsChecked(ChangeEventArgs args) =>
+        args.Value is true || string.Equals(args.Value?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+
+    private bool AllSelected(ServerUpdateStatus server) =>
+        server.Packages.Count > 0 && server.Packages.All(item => _selected.Contains((server.ServerId, item.Name)));
+
+    // Read-only servers are never selectable (D-027); their rows have no checkbox either.
+    private void SelectAll(IEnumerable<ServerUpdateStatus> servers, bool selected)
+    {
+        foreach (var server in servers.Where(item => !item.ReadOnly))
+        foreach (var package in server.Packages)
+        {
+            if (selected) _selected.Add((server.ServerId, package.Name));
+            else _selected.Remove((server.ServerId, package.Name));
+        }
+    }
+
+    private void SelectSecurityOnly(IEnumerable<ServerUpdateStatus> servers)
+    {
+        foreach (var server in servers.Where(item => !item.ReadOnly))
+        {
+            _selected.RemoveWhere(item => item.ServerId == server.ServerId);
+            foreach (var package in server.Packages.Where(item => item.IsSecurity)) _selected.Add((server.ServerId, package.Name));
+        }
     }
 
     private void SelectPackage((Guid ServerId, string Package) key, ChangeEventArgs args)

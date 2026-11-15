@@ -1,0 +1,15 @@
+Loaded plugins: builddep, changelog, config-manager, copr, debug, download
+Repo-id            : appstream
+Repo-name          : Rocky Linux 9 - AppStream
+Repo-revision      : 1716884223
+Repo-updated       : Tue 28 May 2024 08:17:03 AM UTC
+Repo-pkgs          : 6,197
+Repo-mirrors       : https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=AppStream-9
+Repo-filename      : /etc/yum.repos.d/rocky.repo
+
+Repo-id            : docker-ce-stable
+Repo-name          : Docker CE Stable - x86_64
+Repo-baseurl       : https://download.docker.com/linux/centos/9/x86_64/stable
+Repo-expire        : 172,800 second(s) (last: Mon 03 Jun 2024 10:01:12 AM UTC)
+Repo-filename      : /etc/yum.repos.d/docker-ce.repo
+Total packages: 6,401

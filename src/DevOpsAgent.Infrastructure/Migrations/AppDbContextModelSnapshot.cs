@@ -859,6 +859,10 @@ namespace DevOpsAgent.Infrastructure.Migrations
                         .HasMaxLength(24)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("SourcesJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.HasKey("ServerId");
 
                     b.ToTable("UpdateScans");

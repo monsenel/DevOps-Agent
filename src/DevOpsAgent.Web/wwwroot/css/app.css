@@ -3311,3 +3311,42 @@ p {
 .assistant-message .chat-markdown :not(pre) > code {
     background: var(--dva-card);
 }
+
+/* Updates: group selection and package sources (T8.6). */
+.updates-group-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+}
+
+.updates-group-header h3 {
+    margin: 0;
+    margin-right: auto;
+    font-size: 16px;
+}
+
+.updates-select-all {
+    display: inline-flex;
+    min-height: var(--dva-control-h);
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+}
+
+.updates-select-all input {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--dva-accent);
+}
+
+.updates-sources summary {
+    min-height: 32px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.updates-sources-table td {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}

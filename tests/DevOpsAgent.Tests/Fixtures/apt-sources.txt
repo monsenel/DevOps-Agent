@@ -1,0 +1,29 @@
+__DVA_SOURCE_FILE__ /etc/apt/sources.list
+# See http://help.ubuntu.com/community/UpgradeNotes for how to upgrade to
+deb http://archive.ubuntu.com/ubuntu/ jammy main restricted
+deb http://archive.ubuntu.com/ubuntu/ jammy-updates main restricted universe
+# deb-src http://archive.ubuntu.com/ubuntu/ jammy main restricted
+deb http://security.ubuntu.com/ubuntu jammy-security main restricted
+
+__DVA_SOURCE_FILE__ /etc/apt/sources.list.d/docker.list
+deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu jammy stable
+
+__DVA_SOURCE_FILE__ /etc/apt/sources.list.d/pgdg.sources
+Types: deb
+URIs: https://apt.postgresql.org/pub/repos/apt
+Suites: jammy-pgdg
+Components: main
+Signed-By:
+ -----BEGIN PGP PUBLIC KEY BLOCK-----
+ .
+ mQINBE6XR8IBEACVdDKT2HEH1IyHzXkb4nIWAY7echjRxo7MTcj4vbXAyBKOfjja
+ -----END PGP PUBLIC KEY BLOCK-----
+
+# Disabled testing source
+Types: deb deb-src
+URIs: http://deb.debian.org/debian
+Suites: trixie
+Components: main contrib
+Enabled: no
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+

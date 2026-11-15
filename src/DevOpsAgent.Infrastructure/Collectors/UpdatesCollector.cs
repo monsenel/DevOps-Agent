@@ -43,11 +43,16 @@ public sealed class UpdatesCollector : ICollector
                 new SshRunOptions(_options.CommandTimeout, UseSudo: !_cacheOnly), cancellationToken);
             var unreachable = result.StandardOutput.Contains(RepositoriesUnreachableMarker, StringComparison.Ordinal);
             var refreshedAt = unreachable || result.ExitCode != 0 ? null : await ReadRefreshTimeAsync(context, cancellationToken);
+            // T8.6, read-only on every group (no sudo): the configured sources, and where each upgradable package comes from.
+            var sources = await ReadOnlyAsync(context, PackageSourcesParser.AptSourcesCommand, cancellationToken);
+            var names = unreachable || result.ExitCode != 0 ? [] : UpdatesParser.ParseApt(result.StandardOutput).Select(item => item.Name).Take(500).ToArray();
+            var policy = names.Length == 0 ? string.Empty : await ReadOnlyAsync(context, PackageSourcesParser.AptPolicyCommand(names), cancellationToken);
             var output = unreachable
-                ? new UpdateCollectionOutput("", "", "", "Repositories unreachable (apt): one or more configured package repositories could not be reached.", null, _cacheOnly)
+                ? new UpdateCollectionOutput("", "", "", "Repositories unreachable (apt): one or more configured package repositories could not be reached.", null, _cacheOnly,
+                    sources)
                 : new UpdateCollectionOutput(result.StandardOutput, "", "",
                     result.ExitCode == 0 ? null : string.IsNullOrWhiteSpace(result.StandardError) ? "apt-get update or apt list failed." : result.StandardError,
-                    refreshedAt, _cacheOnly);
+                    refreshedAt, _cacheOnly, sources, policy);
             return new CollectorOutput(JsonSerializer.Serialize(output), result.StandardError, result.ExitCode == 0 || unreachable ? 0 : result.ExitCode, result.Duration);
         }
 
@@ -74,8 +79,9 @@ public sealed class UpdatesCollector : ICollector
         var error = dnfResult.ExitCode == 0 || dnfResult.ExitCode == 100 ? null
             : string.IsNullOrWhiteSpace(dnfResult.StandardError) ? "dnf check-update failed." : dnfResult.StandardError;
         var dnfRefreshedAt = error is null ? await ReadRefreshTimeAsync(context, cancellationToken) : null;
+        var dnfSources = await ReadOnlyAsync(context, PackageSourcesParser.DnfSourcesCommand, cancellationToken);
         return new CollectorOutput(JsonSerializer.Serialize(new UpdateCollectionOutput("", dnfResult.StandardOutput,
-            security.StandardOutput, error, dnfRefreshedAt, _cacheOnly)), dnfResult.StandardError + security.StandardError,
+            security.StandardOutput, error, dnfRefreshedAt, _cacheOnly, dnfSources)), dnfResult.StandardError + security.StandardError,
             error is null ? 0 : dnfResult.ExitCode, dnfResult.Duration + security.Duration);
     }
 
@@ -86,7 +92,29 @@ public sealed class UpdatesCollector : ICollector
         if (data.Error is not null) return new CollectorResult(Error: data.Error);
         var packages = data.AptOutput.Length > 0 ? UpdatesParser.ParseApt(data.AptOutput)
             : UpdatesParser.ParseDnf(data.DnfOutput, data.SecurityOutput);
+        // apt's own suite name ("jammy") is the same for Ubuntu and, say, Docker's repository: the origin label tells them apart.
+        var origins = PackageSourcesParser.ParseAptOrigins(data.AptPolicyOutput);
+        if (origins.Count > 0)
+            packages = packages.Select(item => origins.TryGetValue(item.Name, out var origin) ? item with { Repository = origin } : item).ToArray();
         return new CollectorResult(JsonSerializer.SerializeToElement(packages));
+    }
+
+    /// <summary>Configured sources of a collected output (T8.6).</summary>
+    public static IReadOnlyList<PackageSourceDto> ParseSources(UpdateCollectionOutput output) =>
+        output.SourcesOutput.Contains(PackageSourcesParser.FileMarker, StringComparison.Ordinal)
+            ? PackageSourcesParser.ParseApt(output.SourcesOutput)
+            : PackageSourcesParser.ParseDnf(output.SourcesOutput);
+
+    // Best effort, read-only, no sudo: a failure only leaves the extra information out.
+    private static async Task<string> ReadOnlyAsync(ServerContext context, string command, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await context.SshRunner.RunAsync(context.Server.Id, command, new SshRunOptions(TimeSpan.FromSeconds(20)), cancellationToken);
+            return result.ExitCode == 0 ? result.StandardOutput : string.Empty;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception) { return string.Empty; }
     }
 
     // Read-only on every group: no sudo, no writes. The timestamp is best effort; unknown when the probe fails.

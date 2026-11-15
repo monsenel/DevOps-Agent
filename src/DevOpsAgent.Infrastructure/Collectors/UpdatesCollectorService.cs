@@ -27,6 +27,6 @@ public sealed class UpdatesCollectorService(
             ?? throw new InvalidOperationException("Update scan output is invalid.");
         var manager = output.AptOutput.Length > 0 ? PackageManagerKind.Apt : PackageManagerKind.Dnf;
         return new(manager, JsonSerializer.Serialize(parsed.Data.Value.Deserialize<UpdatePackageDto[]>() ?? []),
-            output.PackageListsRefreshedAtUtc, output.CacheOnly);
+            output.PackageListsRefreshedAtUtc, output.CacheOnly, JsonSerializer.Serialize(UpdatesCollector.ParseSources(output)));
     }
 }

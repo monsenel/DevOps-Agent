@@ -1,0 +1,39 @@
+Package files:
+ 100 /var/lib/dpkg/status
+     release a=now
+ 500 https://download.docker.com/linux/ubuntu jammy/stable amd64 Packages
+     release o=Docker,a=jammy,l=Docker CE,c=stable,b=amd64
+     origin download.docker.com
+ 500 http://security.ubuntu.com/ubuntu jammy-security/main amd64 Packages
+     release v=22.04,o=Ubuntu,a=jammy-security,n=jammy,l=Ubuntu,c=main,b=amd64
+     origin security.ubuntu.com
+ 500 http://archive.ubuntu.com/ubuntu jammy/main amd64 Packages
+     release v=22.04,o=Ubuntu,a=jammy,n=jammy,l=Ubuntu,c=main,b=amd64
+     origin archive.ubuntu.com
+Pinned packages:
+
+__DVA_APT_POLICY_PACKAGES__
+docker-ce:
+  Installed: 5:24.0.7-1~ubuntu.22.04~jammy
+  Candidate: 5:25.0.0-1~ubuntu.22.04~jammy
+  Version table:
+     5:25.0.0-1~ubuntu.22.04~jammy 500
+        500 https://download.docker.com/linux/ubuntu jammy/stable amd64 Packages
+ *** 5:24.0.7-1~ubuntu.22.04~jammy 100
+        100 /var/lib/dpkg/status
+openssl:
+  Installed: 3.0.2-0ubuntu1.18
+  Candidate: 3.0.2-0ubuntu1.19
+  Version table:
+     3.0.2-0ubuntu1.19 500
+        500 http://security.ubuntu.com/ubuntu jammy-security/main amd64 Packages
+ *** 3.0.2-0ubuntu1.18 100
+        100 /var/lib/dpkg/status
+     3.0.2-0ubuntu1 500
+        500 http://archive.ubuntu.com/ubuntu jammy/main amd64 Packages
+mystery:
+  Installed: 1.0
+  Candidate: 1.1
+  Version table:
+     1.1 500
+        500 http://mirror.example.org/extra jammy/main amd64 Packages
