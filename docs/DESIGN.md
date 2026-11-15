@@ -47,7 +47,7 @@ Rules:
 - `data-theme="light|dark"` on `<html>`.
 - Default: `prefers-color-scheme`. User choice persisted in `localStorage` key `dva-theme` (wrap access in try/catch).
 - Set the attribute in an inline script in `<head>` before CSS loads, to avoid a flash.
-- Toggle button in the top bar: "Theme: Light" / "Theme: Dark".
+- Toggle button in the top bar (T8.3): icon only, 44 × 44 px secondary button with an inline SVG (moon in the light theme, sun in the dark theme), `aria-label` and tooltip "Switch to dark theme" / "Switch to light theme". No text label.
 - Cytoscape cannot read CSS variables: `graph.js` reads computed token values with `getComputedStyle(document.documentElement)` and re-applies the stylesheet when the theme changes (listen for a `dva-theme-changed` event).
 
 ## 3. Typography

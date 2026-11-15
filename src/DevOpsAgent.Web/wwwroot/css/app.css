@@ -499,6 +499,18 @@ p {
     text-decoration: none;
 }
 
+/* Icon-only buttons (T8.3 theme toggle): a 44 px square target. */
+.ui-button.icon-button {
+    width: var(--dva-control-h);
+    flex: 0 0 auto;
+    padding: 0;
+}
+
+.ui-button.icon-button .icon {
+    width: 20px;
+    height: 20px;
+}
+
 .ui-button.primary {
     background: var(--dva-accent);
     color: var(--dva-on-accent);
