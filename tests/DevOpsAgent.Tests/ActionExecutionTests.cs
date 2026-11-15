@@ -50,6 +50,24 @@ public sealed class ActionExecutionTests
     }
 
     [Fact]
+    public async Task ActionOutputIsRedactedBeforeItIsStored()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var servers = await AddServersAsync(database.Context, 1, "staging");
+        var action = AddProposedAction(database.Context, "run_shell", servers, "{\"command\":\"cat /srv/app/.config\"}");
+        var runner = new TestSshRunner(output: "DB_PASSWORD=hunter2\nAuthorization: Bearer abcdef1234567890abcdef");
+        var execution = CreateService(database.Context, runner);
+
+        await execution.ApproveAndRunAsync(action.Id, "owner", CancellationToken.None);
+
+        var stored = await database.Context.ActionRecords.AsNoTracking().SingleAsync();
+        Assert.DoesNotContain("hunter2", stored.ResultsJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("abcdef1234567890abcdef", stored.ResultsJson, StringComparison.Ordinal);
+        Assert.Contains("DB_PASSWORD", Assert.Single((await execution.ListAsync(CancellationToken.None)).Single().Results).StandardOutput,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task FailedRemoteResultIsRecordedWithoutLosingOtherServerOutput()
     {
         await using var database = await CreateDatabaseAsync();
@@ -275,7 +293,7 @@ public sealed class ActionExecutionTests
         }
     }
 
-    private sealed class TestSshRunner(Guid? failureServer = null) : ISshRunner
+    private sealed class TestSshRunner(Guid? failureServer = null, string output = "updated") : ISshRunner
     {
         private int _active;
         private int _maximumConcurrent;
@@ -293,7 +311,7 @@ public sealed class ActionExecutionTests
                 await Task.Delay(40, cancellationToken);
                 return serverId == failureServer
                     ? new(2, string.Empty, "command failed", TimeSpan.FromMilliseconds(25))
-                    : new(0, "updated", string.Empty, TimeSpan.FromMilliseconds(25));
+                    : new(0, output, string.Empty, TimeSpan.FromMilliseconds(25));
             }
             finally
             {

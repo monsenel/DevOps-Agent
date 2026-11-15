@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DevOpsAgent.Application.Abstractions;
+using DevOpsAgent.Application.Chat;
 using DevOpsAgent.Domain.Agent;
 using DevOpsAgent.Domain.Servers;
 
@@ -188,7 +189,9 @@ public sealed class ActionExecutionService(
             acquired = true;
             var result = await sshRunner.RunAsync(server.Id, plan.Command,
                 new SshRunOptions(TimeSpan.FromMinutes(10), plan.UseSudo), cancellationToken);
-            return new(server.Id, server.Name, plan.Command, result.ExitCode, result.StandardOutput, result.StandardError,
+            // Output is masked before it is stored, so the Action log, chat and model never see raw secrets.
+            return new(server.Id, server.Name, plan.Command, result.ExitCode,
+                ChatContentRedactor.Redact(result.StandardOutput), ChatContentRedactor.Redact(result.StandardError),
                 (long)result.Duration.TotalMilliseconds, null, Endpoint(server), plan.UseSudo);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

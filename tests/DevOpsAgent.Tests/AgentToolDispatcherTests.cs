@@ -33,6 +33,16 @@ public sealed class AgentToolDispatcherTests
         Assert.Contains("CONTAINER-OK", result.Summary, StringComparison.Ordinal);
         Assert.Contains("[broken] error:", result.Summary, StringComparison.Ordinal);
         Assert.Contains("connection refused", result.Summary, StringComparison.Ordinal);
+        // Both targets count towards "Ran N read-only tools on M servers", including the one that failed.
+        Assert.Equal(new[] { healthy.Id, broken.Id }.Order(), result.ReadOnlyServerIds!.Order());
+    }
+
+    [Fact]
+    public void RanReadOnlyLineCountsToolsAndServers()
+    {
+        Assert.Equal("Ran 1 read-only tool on 1 server", DevOpsAgent.Application.Chat.ChatService.RanReadOnlyLine(1, 1));
+        Assert.Equal("Ran 3 read-only tools on 2 servers", DevOpsAgent.Application.Chat.ChatService.RanReadOnlyLine(3, 2));
+        Assert.Equal("Ran 1 read-only tool on 0 servers", DevOpsAgent.Application.Chat.ChatService.RanReadOnlyLine(1, 0));
     }
 
     private static AgentToolDispatcher CreateDispatcher(AppDbContext context, ISshRunner runner)

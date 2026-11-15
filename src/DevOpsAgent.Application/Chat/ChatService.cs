@@ -133,21 +133,36 @@ public sealed class ChatService(
             }
 
             if (!provider.NativeToolCallingEnabled) history.RemoveAt(history.Count - 1);
+            var readOnlyRuns = 0;
+            var readOnlyServers = new HashSet<Guid>();
             foreach (var call in calls.Take(8))
             {
                 var result = await dispatcher.DispatchAsync(call.Name, call.Args, conversationId, cancellationToken);
-                var visible = $"{call.Name}: {result.Summary}";
+                if (result.ReadOnlyServerIds is { } ranOn)
+                {
+                    readOnlyRuns++;
+                    readOnlyServers.UnionWith(ranOn);
+                }
+                // Tool output is server data: secrets are masked before it is stored, shown or sent to any model.
+                var summary = ChatContentRedactor.Redact(result.Summary);
+                var visible = $"{call.Name}: {summary}";
                 var role = result.NeedsApproval ? "action_proposed" : "tool_run";
                 var transcript = result.NeedsApproval
-                    ? JsonSerializer.Serialize(new { actionId = result.ActionId, tool = call.Name, summary = result.Summary })
+                    ? JsonSerializer.Serialize(new { actionId = result.ActionId, tool = call.Name, summary })
                     : visible;
                 var record = conversation.AddMessage(role, transcript, timeProvider.GetUtcNow());
                 await conversations.SaveMessageAsync(record, cancellationToken);
                 yield return new ChatStreamEvent(role, visible, result.ActionId, result.NeedsApproval);
                 if (provider.NativeToolCallingEnabled)
-                    history.Add(new ChatMessage(ChatRole.Tool, [new FunctionResultContent(call.Id ?? Guid.NewGuid().ToString("N"), Prepare(result.Summary))]));
+                    history.Add(new ChatMessage(ChatRole.Tool, [new FunctionResultContent(call.Id ?? Guid.NewGuid().ToString("N"), Prepare(summary))]));
                 else
-                    history.Add(new ChatMessage(ChatRole.User, $"Tool result for {call.Name}: {Prepare(result.Summary)}"));
+                    history.Add(new ChatMessage(ChatRole.User, $"Tool result for {call.Name}: {Prepare(summary)}"));
+            }
+            if (readOnlyRuns > 0)
+            {
+                var ran = RanReadOnlyLine(readOnlyRuns, readOnlyServers.Count);
+                await conversations.SaveMessageAsync(conversation.AddMessage("tool_run", ran, timeProvider.GetUtcNow()), cancellationToken);
+                yield return new ChatStreamEvent("tool_run", ran);
             }
             if (round == MaxToolRounds - 1) finalText = "Tool limit reached. Review the results above and ask a follow-up if needed.";
         }
@@ -159,6 +174,9 @@ public sealed class ChatService(
             if (!finalTextStreamed) yield return new ChatStreamEvent("text", finalText);
         }
     }
+
+    public static string RanReadOnlyLine(int tools, int servers) =>
+        $"Ran {tools} read-only tool{(tools == 1 ? string.Empty : "s")} on {servers} server{(servers == 1 ? string.Empty : "s")}";
 
     private static AIFunctionDeclaration CreateDeclaration(ToolDescriptor descriptor)
     {

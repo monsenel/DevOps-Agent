@@ -4,7 +4,9 @@ using DevOpsAgent.Application.Discovery;
 
 namespace DevOpsAgent.Application.Agent;
 
-public sealed record AgentToolResult(string ToolName, string Summary, Guid? ActionId = null, bool NeedsApproval = false);
+/// <param name="ReadOnlyServerIds">Set when a read-only tool actually ran: the servers it ran on (empty for app-local tools).</param>
+public sealed record AgentToolResult(string ToolName, string Summary, Guid? ActionId = null, bool NeedsApproval = false,
+    IReadOnlyList<Guid>? ReadOnlyServerIds = null);
 
 public sealed class AgentToolDispatcher(
     ToolRegistry tools,
@@ -32,7 +34,8 @@ public sealed class AgentToolDispatcher(
         if (name == "list_servers")
         {
             var inventory = await servers.ListAsync(cancellationToken);
-            return new(name, JsonSerializer.Serialize(inventory.Select(server => new { server.Id, server.Name, server.Host, server.Group, server.OsInfo })));
+            return new(name, JsonSerializer.Serialize(inventory.Select(server => new { server.Id, server.Name, server.Host, server.Group, server.OsInfo })),
+                ReadOnlyServerIds: []);
         }
         if (name == "query_graph")
         {
@@ -44,17 +47,19 @@ public sealed class AgentToolDispatcher(
             var entries = graph.Nodes.Select(node => node.Data.ToString()).Concat(graph.Edges.Select(edge => edge.Data.ToString()));
             var result = string.IsNullOrWhiteSpace(query.Query) ? string.Join("\n", entries)
                 : string.Join("\n", entries.Where(entry => entry.Contains(query.Query, StringComparison.OrdinalIgnoreCase)));
-            return new(name, result.Length > 16000 ? result[..16000] : result);
+            return new(name, result.Length > 16000 ? result[..16000] : result, ReadOnlyServerIds: []);
         }
         if (name == "run_discovery")
         {
             var request = (RunDiscoveryArgs)validated;
             if (request.ServerIds is null || request.ServerIds.Count == 0)
-                return new(name, $"Discovery completed. Snapshot { (await discovery.RunAsync(null, cancellationToken)).Id}.");
+                return new(name, $"Discovery completed. Snapshot { (await discovery.RunAsync(null, cancellationToken)).Id}.",
+                    ReadOnlyServerIds: (await servers.ListAsync(cancellationToken)).Select(server => server.Id).ToArray());
             var snapshotsCreated = new List<Guid>();
             foreach (var serverId in request.ServerIds)
                 snapshotsCreated.Add((await discovery.RunServerAndMergeAsync(serverId, null, cancellationToken)).Id);
-            return new(name, $"Discovery completed for {snapshotsCreated.Count} server(s). Snapshot {snapshotsCreated.Last()}.");
+            return new(name, $"Discovery completed for {snapshotsCreated.Count} server(s). Snapshot {snapshotsCreated.Last()}.",
+                ReadOnlyServerIds: request.ServerIds.Distinct().ToArray());
         }
 
         var serverIds = (validated as IServerTargetArgs)?.ServerIds?.Distinct().ToArray() ?? [];
@@ -95,6 +100,6 @@ public sealed class AgentToolDispatcher(
             }
             finally { throttle.Release(); }
         }));
-        return new(name, string.Join("\n", output));
+        return new(name, string.Join("\n", output), ReadOnlyServerIds: selected.Select(server => server.Id).ToArray());
     }
 }
