@@ -34,7 +34,7 @@ The app container has `host.docker.internal` mapped to the Docker host gateway. 
 
 ### Test lab and safe first run
 
-The disposable lab script (`dva-testlab.sh`, kept outside this repository) can create the staging SSH targets used for acceptance checks. Start and inspect only the lab containers you need, then add their SSH key and verified host-key entries as described above. For a host-published SSH port, use `host.docker.internal` as the server address from the app. Do not register `srv-search` when checking the Unknown-node journey; it should be discovered as an unregistered peer.
+The disposable lab script (`tools/dva-testlab.sh`) can create the staging SSH targets used for acceptance checks. It uses fixed addresses on 10.88.10.0/24 (public), 10.88.20.0/24 (private) and 10.88.30.0/24 (egress). `LAB_DIR` (default `$PWD/dva-testlab-fixed-data`) controls where its data and generated SSH key go; run it from a directory outside this repository, or set `LAB_DIR`, so they never land in the repo. Start and inspect only the lab containers you need, then add their SSH key and verified host-key entries as described above. For a host-published SSH port, use `host.docker.internal` as the server address from the app. Do not register `srv-search` when checking the Unknown-node journey; it should be discovered as an unregistered peer.
 
 For a first run against real servers, add one server in **read-only** execution mode and run discovery before enabling Agent actions. Review the resulting inventory and graph, then configure notifications and an LLM provider as needed. Keep the app and its SSH access behind a VPN or WireGuard; do not expose the login or SSH keys to the public internet.
 

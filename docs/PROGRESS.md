@@ -6,7 +6,7 @@
 
 - Push: `v0.1.0` on `origin` points at `6b4d044` (before the review fixes). The release is tagged `v0.1.1` locally and has not been pushed.
 - The local dev database `src/DevOpsAgent.Web/data/devops-agent.db` holds a `prod` server whose group has no stored execution mode; since D-029 that group is read-only. Nothing in that database was changed.
-- Lab: `~/Downloads/dva-testlab-fixed.sh` (a copy of the lab script with fixed private IPs 10.88.10/20/30.0/24, used for T7.R1–R3) replaces the original for testing; its lab data is in `~/Downloads/dva-testlab-fixed-data`. The original `dva-testlab.sh` bakes srv-db's address into the workers with `--add-host` at start-up, so after the lab containers restart with new IPs `worker-pg`/`worker-redis` restart-loop against srv-search's address; and its `attack` profile prints `ssh` usage errors without making any login attempt.
+- Lab: the single lab script is now `tools/dva-testlab.sh` (fixed private IPs 10.88.10/20/30.0/24). Existing lab data still lives in `~/Downloads/dva-testlab-fixed-data`; run the script with `LAB_DIR=~/Downloads/dva-testlab-fixed-data` to keep using it. The old Downloads copies (`dva-testlab.sh`, `dva-testlab-fixed.sh`) are obsolete. History: the original script baked srv-db's address into the workers with `--add-host` at start-up, so after a restart with new IPs `worker-pg`/`worker-redis` restart-looped; its `attack` profile printed `ssh` usage errors without making any login attempt.
 
 ---
 
@@ -149,6 +149,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 ## Session log
 
 One line per session: date · tool/model · tasks touched · result.
+
+- 2026-11-15 · ZCode / Claude · lab script moved to tools/dva-testlab.sh · no task touched; single lab script kept in the repo (behaviour unchanged, LAB_DIR default kept), .gitignore and README updated; lab not run, no containers touched
 
 - 2026-11-15 · ZCode / Claude · independent review of T7.R1–T7.R3 · static review by three read-only reviewers plus live re-run on the fixed-IP lab (isolated `/tmp` DB, no new containers): discovery with a 192.0.2.1 entry 13.3–15.4 s (0.6 s while it is in backoff), metric cycles 15.7 s first then 16–278 ms, edge down → only srv-edge is attempted, Retry now 0.8 s (srv-app) / 0.3 s (srv-db), srv-db outage stale + 0 new listeners, restart-loop alert opened on the third restart and resolved after 10 quiet minutes; 6 `fix(review-r)` commits + tests (build 0 warnings, 367 tests); T7.R15–T7.R19 filed (T7.R15 high)
 
