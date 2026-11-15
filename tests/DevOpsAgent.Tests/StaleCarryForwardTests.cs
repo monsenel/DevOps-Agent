@@ -53,6 +53,49 @@ public sealed class StaleCarryForwardTests
     }
 
     [Fact]
+    public async Task AServerWhoseLoginFailedIsCarriedForwardStaleLikeAnUnreachableOneAndTheRunNamesTheCause()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var app = AddServer(database.Context, "srv-app", "10.88.20.20");
+        var db = AddServer(database.Context, "srv-db", "10.88.20.30");
+        var runner = new SwitchableRunner();
+        var discovery = CreateDiscovery(database.Context, runner);
+        var drift = new DriftService(new SnapshotRepository(database.Context), new GraphRepository(database.Context));
+
+        var before = await discovery.RunAsync(null, CancellationToken.None);
+        runner.AuthFailed.Add(db.Id);
+        var during = await discovery.RunAsync(null, CancellationToken.None);
+
+        var graph = (await new GraphRepository(database.Context).GetAsync(during.Id, GraphView.All, CancellationToken.None))!;
+        var dbNodes = graph.Nodes.Select(element => element.Data).Where(node => ServerId(node) == db.Id).ToArray();
+        Assert.NotEmpty(dbNodes);
+        Assert.All(dbNodes, node => Assert.True(StaleCarryForward.IsStale(node.GetProperty("attributes"))));
+        Assert.Contains(graph.Listeners, listener => listener.Port == 5432);
+        Assert.All(graph.Nodes.Select(element => element.Data).Where(node => ServerId(node) == app.Id),
+            node => Assert.False(StaleCarryForward.IsStale(node.GetProperty("attributes"))));
+        Assert.Equal(SnapshotStatus.Partial, during.Status);
+        // Not drift, as for an unreachable server.
+        Assert.Empty((await drift.CompareAsync(before.Id, during.Id, CancellationToken.None)).Changes);
+
+        // The run records the login failure, in words, for every collector it skipped.
+        var runs = await database.Context.CollectorRuns.Where(run => run.SnapshotId == during.Id && run.ServerId == db.Id).ToArrayAsync();
+        Assert.Equal(2, runs.Length);
+        Assert.All(runs, run =>
+        {
+            Assert.Equal(CollectorRunStatus.Failed, run.Status);
+            Assert.StartsWith("server: authentication failed (key file not found).", run.Error, StringComparison.Ordinal);
+            Assert.DoesNotContain("unreachable", run.Error, StringComparison.OrdinalIgnoreCase);
+        });
+
+        // Fixing the login recovers: no stale marker, nothing added.
+        runner.AuthFailed.Clear();
+        var after = await discovery.RunAsync(null, CancellationToken.None);
+        var recovered = (await new GraphRepository(database.Context).GetAsync(after.Id, GraphView.All, CancellationToken.None))!;
+        Assert.All(recovered.Nodes, node => Assert.False(StaleCarryForward.IsStale(node.Data.GetProperty("attributes"))));
+        Assert.Empty((await drift.CompareAsync(during.Id, after.Id, CancellationToken.None)).Changes);
+    }
+
+    [Fact]
     public async Task StaleNodesKeepTheTimeTheyWereReallyLastSeenAcrossSeveralOutageRuns()
     {
         await using var database = await CreateDatabaseAsync();
@@ -132,9 +175,19 @@ public sealed class StaleCarryForwardTests
     private sealed class SwitchableRunner : ISshRunner
     {
         public HashSet<Guid> Unreachable { get; } = [];
+        /// <summary>Servers whose login fails (T7.R19): skipped by the pool in the same way, with a distinct state.</summary>
+        public HashSet<Guid> AuthFailed { get; } = [];
 
         public Task<RemoteCommandResult> RunAsync(Guid serverId, string command, SshRunOptions options, CancellationToken cancellationToken)
         {
+            if (AuthFailed.Contains(serverId))
+            {
+                var now = DateTimeOffset.UtcNow;
+                throw new HostUnreachableException(serverId, "server",
+                    new HostReachabilityState(serverId, now, now.AddMinutes(1), 1, "key file not found", false,
+                        new SshAuthFailedException(SshAuthFailure.KeyFileNotFound), HostFailureKind.AuthFailed, "key file not found"));
+            }
+
             if (Unreachable.Contains(serverId))
             {
                 var now = DateTimeOffset.UtcNow;

@@ -59,6 +59,25 @@ public sealed class HealthCheckServiceTests
     }
 
     [Fact]
+    public async Task ChecksOfAServerWhoseSshLoginFailedAreSkippedLikeThoseOfAnUnreachableOne()
+    {
+        var fixture = new ServiceFixture();
+        _ = await fixture.Service.CreateAsync(fixture.Server.Id,
+            new HealthCheckInput("Web", HealthCheckType.Http, "http://app.example.test/health", 60), CancellationToken.None);
+        await fixture.Service.RunDueAsync(CancellationToken.None);
+
+        fixture.Clock.Set(fixture.Clock.GetUtcNow().AddSeconds(61));
+        fixture.Reachability.RecordFailure(fixture.Server.Id, new DevOpsAgent.Application.Abstractions.SshAuthFailedException(
+            DevOpsAgent.Application.Abstractions.SshAuthFailure.KeyFileNotFound));
+        await fixture.Service.RunDueAsync(CancellationToken.None);
+
+        var item = Assert.Single(await fixture.Service.ListAsync(fixture.Server.Id, CancellationToken.None));
+        Assert.Equal(HealthCheckStatus.Healthy, item.Status);
+        Assert.Null(item.Error);
+        Assert.Equal(1, fixture.Probe.Count);
+    }
+
+    [Fact]
     public async Task ScheduledChecksRunOnlyWhenTheirIntervalIsDue()
     {
         var fixture = new ServiceFixture();

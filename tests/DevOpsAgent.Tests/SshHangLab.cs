@@ -51,6 +51,10 @@ internal sealed class HangLab : IDisposable
     public SshRunner Runner { get; }
     public IReadOnlyList<Server> Inventory => _servers;
 
+    /// <summary>The inventory as the Servers page reads reachability from it (name and jump host per server).</summary>
+    public IReadOnlyDictionary<Guid, (string Name, Guid? JumpServerId)> Map() =>
+        _servers.ToDictionary(server => server.Id, server => (server.Name, server.JumpServerId));
+
     public Server Add(string name, string host, Action<HostScript>? script = null, Server? jump = null)
     {
         var server = new Server(name, host, 22, "dva", "key", "staging");
@@ -121,6 +125,11 @@ internal sealed class HostScript
     public bool ConnectNeverEnds { get; set; }
     /// <summary>When set, a connect fails with this exception once <see cref="ConnectDelay"/> has passed (T7.R19).</summary>
     public Func<Exception>? ConnectFails { get; set; }
+    /// <summary>
+    /// When set, a connect waits for this task (a test-controlled gate, no timing involved) before it fails or succeeds. It
+    /// honours the connect's token only when <see cref="ConnectHonoursToken"/> is set.
+    /// </summary>
+    public Task? ConnectGate { get; set; }
     public CommandMode Commands { get; set; } = CommandMode.Ok;
 }
 
@@ -135,6 +144,8 @@ internal sealed class ScriptedTransports : ISshTransportFactory
     public int Attempts(Server server) => _attempts.GetValueOrDefault(server.Host);
     public int Commands(Server server) => _commands.GetValueOrDefault(server.Host);
     public IReadOnlyList<ScriptedTransport> Created => _created.ToArray();
+    /// <summary>Clients that were opened and not closed: a leak when it is not zero after the pool is gone.</summary>
+    public int LiveClients => _created.Count(item => !item.Disposed);
     public IReadOnlyList<ScriptedTransport> CreatedFor(Server server) => _created.Where(item => item.Host == server.Host).ToArray();
 
     internal void CountCommand(string host) => _commands.AddOrUpdate(host, 1, static (_, count) => count + 1);
@@ -146,6 +157,7 @@ internal sealed class ScriptedTransports : ISshTransportFactory
         var token = script.ConnectHonoursToken ? cancellationToken : CancellationToken.None;
         if (script.ConnectNeverEnds) await Task.Delay(Timeout.Infinite, token);
         else if (script.ConnectDelay > TimeSpan.Zero) await Task.Delay(script.ConnectDelay, token);
+        if (script.ConnectGate is { } gate) await gate.WaitAsync(token);
         if (script.ConnectFails is { } failure) throw failure();
 
         var transport = new ScriptedTransport(this, server.Host, script);
