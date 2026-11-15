@@ -12,8 +12,8 @@
 
 ## Current
 
-- **Task:** T7.R1–T7.R3, T7.R15, T7.R17 and T7.R18 done (R17 and R18 were done ahead of T7.R7 on the owner's order); next T7.R4
-- **Status:** T7.R19 in progress (owner's scope: auth/key failures as their own state, real cause in Test connection, single-flight first failure, pool shutdown races)
+- **Task:** T7.R1–T7.R3, T7.R15, T7.R17–T7.R19 done (R17–R19 were done ahead of T7.R7 on the owner's order); next T7.R4
+- **Status:** —
 - **Last updated:** 2026-11-15 by ZCode
 
 ## WIP notes
@@ -36,7 +36,7 @@ The 2026-11-15 review fixed small issues in `fix(review): …` commits (build 0 
 | T7.R11 | medium | Manual real-browser recheck of forms, 390 px and contrast |
 | T7.R14 | medium | Privileged commands as direct argv so sudoers can pin them |
 | T7.R16 | medium | Stale carry-forward: fresh→stale edges, stale hosts' other addresses, last-seen time, new-listener guard |
-| T7.R19 | low | SSH failure classification (auth/key errors are not "unreachable"), single-flight first failure, shutdown races |
+| T7.R19 | low | Remaining after the owner's scope: claim token for a cancelled caller, target's own backoff before its jump host, Servers "Not tested" label |
 | T7.R12 | low | Test gaps (chat send loop, discovery parallelism, unix sockets, dnf, no-sudo path) |
 
 ### Live acceptance run (2026-11-15, single agent; replaces earlier overlapping results)
@@ -137,7 +137,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T7.R16 | Stale carry-forward correctness | todo | |
 | T7.R17 | Cycle deadlines and alert stalls | done | `feat(T7.R17): hung commands back a host off, one deadline per call, shutdown abandons SSH work` |
 | T7.R18 | Restart-loop rule follow-ups | done | `feat(T7.R18): container states, stale-data hold, partial inspect, docker permission failures, history pruning` |
-| T7.R19 | SSH failure classification and reachability UI | in-progress | |
+| T7.R19 | SSH failure classification and reachability UI | done | `feat(T7.R19): login and key failures are auth failed, not unreachable; single-flight connects; safe shutdown` |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
 
@@ -146,6 +146,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 ## Session log
 
 One line per session: date · tool/model · tasks touched · result.
+
+- 2026-11-15 · ZCode / Claude · T7.R19 done · D-039: login and key errors (server rejects the key, key file missing/unreadable/invalid, passphrase missing or wrong) are `HostFailureKind.AuthFailed` ("auth failed"): retried every minute and never longer (the minute ends 1 s early so the 30 s cycles do not make it 90 s), cleared by Retry now, a server edit and a later success, fixed safe wording (no key text, path, passphrase, user or library message), Servers badge "Auth failed", Test connection shows the real cause, `server-unreachable` alert reused with title "<server>: SSH authentication failed" (notification still says `server-unreachable`, D-028), dependents read "via jump host X: authentication failed (…)", stale carry-forward/metric/alert/health handle it unchanged through `HostUnreachableException.Kind`; connects are single-flight (`ConnectFlight`), pool shutdown audited (idempotent `Dispose`; the new race tests found and fixed a lock-order inversion that hung the pool); live on the lab (isolated DB, published Release, :5199, no container created or paused, all four lab containers running afterwards, a throwaway sshd on 127.0.0.1:2222 stopped): 1) srv-edge with an unauthorised key: first failure 13:54:04.956 "authentication failed (the server rejected the SSH key)" shown as "Auth failed" on the Servers page, alert "srv-edge: SSH authentication failed" High, srv-app/srv-db "via jump host srv-edge: authentication failed", Test connection verbatim "srv-edge: authentication failed (the server rejected the SSH key). Since 2026-11-15 13:54:04 UTC, next retry 2026-11-15 13:56:05 UTC. Check the identity key file, its passphrase, and that the key is authorised for the user on the server."; edit to the good key through the real edit form saved 13:55:26.9 -> srv-edge connected 13:55:34.95 (8.0 s, next cycle), srv-app/srv-db 13:55:35.1, the three alerts resolved 13:55:34.8; retry cadence measured against a private sshd on 127.0.0.1:2222 instead of srv-edge (see report: fail2ban on srv-edge bans the host's docker gateway for 1 h, it did not count the failures here: 0 failed/0 banned throughout): 14:22:50.6, 14:23:50.1, 14:24:50.1, 14:25:50.1, 14:26:50.1, 14:27:50.1 (5 retries, 60.0 s apart; the first build, without the slack, retried every 89-90 s); 2) messages: missing key file "key file not found", garbage file "wrong passphrase or invalid key file", encrypted key without passphrase "the key needs a passphrase and none is stored", wrong passphrase (set through the edit form) "wrong passphrase or invalid key file", (d) behind a bad-key jump host "srv-app via jump host srv-edge: authentication failed (the server rejected the SSH key)"; 3) single-flight (throwaway harness outside the repo, real pool/runner/SSH.NET, 6 simultaneous first calls to 192.0.2.1 behind srv-edge): new code 1 connect attempt, all callers ended at 15.04 s (normal and Retry now); control 131e5a0 in a worktree: normal calls also 1 attempt/15.02 s (the first-failure queue the owner described did not exist for normal callers), Retry now calls 6 attempts one after another, callers ending at 15/30/45/60/75/90 s; a short-deadline (200 ms) starter ended the control's attempt at 212 ms, backed the host off and failed five patient callers although the connect would have succeeded at 800 ms (unit-level, new code lets them succeed); 4) SIGTERM with the blackhole connect in flight, 5 runs: exit 0.089, 0.094, 0.110, 0.096, 0.093 s, log after "Hosting stopping" 5-6 lines each, zero matches for Exception|ObjectDisposed|fail|crit; 5) blackhole backoff 14:24:05, 14:26:35, 14:31:05 (1, 2, 4 min), discovery of srv-edge/app/db 3 succeeded (after the capability probe; the other 8 deliberately broken entries failed); build 0 warnings, 517/517 tests (76 new), full suite 40/40, touched SSH classes under 36 busy loops 50/50
 
 - 2026-11-15 · ZCode / Claude · started T7.R19 · owner scope: (1) authentication and key errors are an `AuthFailed` state of their own (constant 1 min retry, never "unreachable"), (2) Test connection shows the real safe cause, (3) first failure of a host is single-flight, (4) pool shutdown never throws; not in scope: claim token for a cancelled caller, checking the target's own backoff before its jump host, the Servers "Not tested" label; baseline build 0 warnings, 441/441 tests (HEAD 131e5a0)
 
