@@ -1452,8 +1452,14 @@ p {
 
 .topology-search {
     display: flex;
-    flex: 1 1 210px;
+    flex: 1 1 260px;
+    align-items: end;
+    gap: 8px;
     min-width: 180px;
+}
+
+.topology-search .ui-button {
+    flex: 0 0 auto;
 }
 
 .topology-search input,

@@ -21,17 +21,19 @@
         </div>
         <form class="topology-trace" @onsubmit="TraceAsync" @onsubmit:preventDefault>
             <label for="topology-trace-input">Trace domain</label>
-            <input id="topology-trace-input" type="text" placeholder="api.example.com or URL" @bind="_traceQuery" />
+            @* oninput keeps the value current, so Enter or the Trace button always submits what was typed. *@
+            <input id="topology-trace-input" type="text" placeholder="api.example.com or URL" @bind="_traceQuery" @bind:event="oninput" />
             <button class="ui-button secondary" type="submit" disabled="@(_graph is null)">Trace</button>
             @if (_tracedNodeIds.Count > 0)
             {
                 <button class="ui-button secondary" type="button" @onclick="ClearTraceAsync">Clear trace</button>
             }
         </form>
-        <label class="topology-search">
-            <span class="visually-hidden">Search topology</span>
-            <input type="search" placeholder="Search name, IP, port…" value="@_search" @oninput="SearchChanged" />
-        </label>
+        <form class="topology-search" role="search" @onsubmit="ApplySearchAsync" @onsubmit:preventDefault>
+            <label for="topology-search-input" class="visually-hidden">Search topology</label>
+            <input id="topology-search-input" type="search" placeholder="Search name, IP, port…" value="@_search" @oninput="SearchChanged" />
+            <button class="ui-button secondary" type="submit" disabled="@(_graph is null)">Search</button>
+        </form>
         <label class="topology-filter">
             <span class="visually-hidden">Filter by tag</span>
             <select value="@_selectedTag" @onchange="TagChanged">
@@ -362,8 +364,12 @@
     private async Task SearchChanged(ChangeEventArgs args)
     {
         _search = args.Value?.ToString() ?? string.Empty;
-        if (_graphModule is not null) await _graphModule.InvokeVoidAsync("search", _search);
+        await ApplySearchAsync();
     }
+
+    private Task ApplySearchAsync() => _graphModule is null
+        ? Task.CompletedTask
+        : _graphModule.InvokeVoidAsync("search", _search).AsTask();
 
     private async Task TagChanged(ChangeEventArgs args)
     {
