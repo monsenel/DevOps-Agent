@@ -10,8 +10,8 @@ public interface ISshRunner
 
     /// <summary>
     /// The owner's sudo check ("Test connection", "Retry now"): <c>sudo -n true</c>, or on a server with a stored sudo password
-    /// <c>sudo -S -p '' true</c> with the password on stdin. Because only the owner runs it, it first lifts a rejection of the
-    /// stored password and then tries it exactly once (T7.R24).
+    /// <c>sudo -S -p '' true</c> with the password on stdin (T7.R24). A rejected password is not tried: the probe returns the
+    /// "not run" result without contacting the server (D-040 amendment, pam_faillock).
     /// </summary>
     Task<RemoteCommandResult> ProbeSudoAsync(Guid serverId, SshRunOptions options, CancellationToken cancellationToken) =>
         RunAsync(serverId, RemoteCommand.SudoProbe, options with { UseSudo = false }, cancellationToken);

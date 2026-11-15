@@ -38,8 +38,8 @@ public sealed class Server
     public string? ProtectedSudoPassword { get; private set; }
 
     /// <summary>
-    /// When the stored sudo password was rejected. While set no sudo command is sent to the server (pam_faillock), until the
-    /// password is edited or the owner presses "Retry now" / "Test connection".
+    /// When the stored sudo password was rejected. While set no sudo command is sent to the server (pam_faillock), not even by
+    /// "Retry now" / "Test connection", until the password is edited or removed (D-040).
     /// </summary>
     public DateTimeOffset? SudoPasswordRejectedAtUtc { get; private set; }
 
@@ -94,11 +94,11 @@ public sealed class Server
 
     public void RecordSudoPasswordRejected(DateTimeOffset rejectedAtUtc) => SudoPasswordRejectedAtUtc ??= rejectedAtUtc;
 
-    public void ClearSudoPasswordRejection() => SudoPasswordRejectedAtUtc = null;
-
-    public void RecordCapabilities(bool sudoCapable, string? osInfo, DateTimeOffset lastSeenAtUtc)
+    /// <param name="sudoCapable">The sudo probe's result; null when the probe was not run (a rejected sudo password), which
+    /// keeps the previous value.</param>
+    public void RecordCapabilities(bool? sudoCapable, string? osInfo, DateTimeOffset lastSeenAtUtc)
     {
-        SudoCapable = sudoCapable;
+        if (sudoCapable is { } capable) SudoCapable = capable;
         OsInfo = osInfo;
         LastSeenAtUtc = lastSeenAtUtc;
     }

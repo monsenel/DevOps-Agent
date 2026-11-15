@@ -198,33 +198,79 @@ public sealed class SudoPasswordTests
     }
 
     [Fact]
-    public async Task RetryNow_TriesTheRejectedPasswordExactlyOncePerPress()
+    public async Task RetryNowAndTestConnection_NeverTryARejectedPassword_KeepSudoCapability()
+    {
+        await using var lab = await SudoLab.CreateAsync(Password);
+        var capability = new ServerCapabilityService(lab.Runner, lab.Repository, TimeProvider.System);
+        Assert.True((await capability.TestAsync(lab.ServerId, CancellationToken.None)).SudoCapable);
+        lab.Session.AcceptedPassword = "changed-on-the-server"; // the stored password no longer works
+        await lab.Runner.RunAsync(lab.ServerId, "ss -tulpnH", Sudo, CancellationToken.None);
+        Assert.Equal(2, lab.Session.SudoAttempts);
+
+        // "Retry now" and "Test connection" are the same call on the Servers page: pressed three times, no sudo is sent.
+        for (var press = 0; press < 3; press++)
+        {
+            var result = await capability.TestAsync(lab.ServerId, CancellationToken.None);
+            Assert.True(result.Reachable);
+            Assert.True(result.SudoProbeSkipped);
+            Assert.True(result.SudoPasswordRejected);
+            Assert.True(result.SudoCapable); // the last real probe's answer is kept, not overwritten with "no sudo"
+        }
+
+        var probe = await lab.Runner.ProbeSudoAsync(lab.ServerId, Plain, CancellationToken.None);
+        Assert.Equal(SudoPasswordGate.PausedMessage, probe.StandardError);
+        Assert.Equal(2, lab.Session.SudoAttempts);
+        Assert.Equal(4, lab.Session.Calls.Count(call => call.Command == "uptime -p")); // the other probe steps still ran
+        var server = await lab.GetServerAsync();
+        Assert.NotNull(server.SudoPasswordRejectedAtUtc);
+        Assert.True(server.SudoCapable);
+        Assert.False(server.CanUseSudo);
+        var status = (await lab.ListSummaryAsync()).Sudo;
+        Assert.True(status.Paused);
+        Assert.Contains("edited or removed", status.Detail, StringComparison.Ordinal);
+        Assert.Contains("pam_faillock", ServerSudoStatus.RetryBlockedReason, StringComparison.Ordinal);
+
+        // Only an edit lifts the pause; then sudo is used at once (capability kept) and Test connection probes again.
+        await lab.EditAsync(lab.Input("db") with { SudoPassword = "changed-on-the-server" });
+        Assert.Equal(0, (await lab.Runner.RunAsync(lab.ServerId, "ss -tulpnH", Sudo, CancellationToken.None)).ExitCode);
+        var afterEdit = await capability.TestAsync(lab.ServerId, CancellationToken.None);
+        Assert.False(afterEdit.SudoProbeSkipped);
+        Assert.True(afterEdit.SudoCapable);
+        Assert.Equal(4, lab.Session.SudoAttempts);
+        lab.AssertPasswordNowhere(Password, "changed-on-the-server");
+    }
+
+    [Fact]
+    public async Task TestConnection_WithANeverTriedWrongPassword_TriesOnce_ThenNotAgain()
     {
         await using var lab = await SudoLab.CreateAsync(WrongPassword);
-        await lab.Runner.RunAsync(lab.ServerId, "ss -tulpnH", Sudo, CancellationToken.None);
         var capability = new ServerCapabilityService(lab.Runner, lab.Repository, TimeProvider.System);
 
-        // "Retry now" and "Test connection" are the same call on the Servers page.
         var first = await capability.TestAsync(lab.ServerId, CancellationToken.None);
-        Assert.Equal(2, lab.Session.SudoAttempts);
-        Assert.True(first.Reachable);
-        Assert.False(first.SudoCapable);
-        Assert.True(first.SudoPasswordUsed);
-        Assert.True(first.SudoPasswordRejected);
-        Assert.Equal("LC_ALL=C sudo -S -p '' true", lab.Session.Calls.Last(call => call.IsSudo).Command);
-
-        await lab.Runner.RunAsync(lab.ServerId, "ss -tulpnH", Sudo, CancellationToken.None);
-        Assert.Equal(2, lab.Session.SudoAttempts); // paused again after the press
-
-        lab.Session.AcceptedPassword = WrongPassword; // the owner fixed the password on the server
         var second = await capability.TestAsync(lab.ServerId, CancellationToken.None);
-        Assert.Equal(3, lab.Session.SudoAttempts);
-        Assert.True(second.SudoCapable);
-        Assert.False(second.SudoPasswordRejected);
-        var server = await lab.GetServerAsync();
-        Assert.True(server.CanUseSudo);
-        Assert.Equal("sudo: password", (await lab.ListSummaryAsync()).Sudo.Label);
-        lab.AssertPasswordNowhere(WrongPassword);
+
+        Assert.Equal(1, lab.Session.SudoAttempts);
+        Assert.False(first.SudoProbeSkipped);
+        Assert.True(first.SudoPasswordRejected);
+        Assert.False(first.SudoCapable);
+        Assert.Equal("LC_ALL=C sudo -S -p '' true", lab.Session.Calls.Single(call => call.IsSudo).Command);
+        Assert.True(second.SudoProbeSkipped);
+        Assert.True(second.SudoPasswordRejected);
+    }
+
+    [Fact]
+    public async Task RemovingARejectedPassword_LiftsThePause_AndProbesWithSudoN()
+    {
+        await using var lab = await SudoLab.CreateAsync(WrongPassword);
+        var capability = new ServerCapabilityService(lab.Runner, lab.Repository, TimeProvider.System);
+        await capability.TestAsync(lab.ServerId, CancellationToken.None);
+
+        await lab.EditAsync(lab.Input("db") with { RemoveSudoPassword = true });
+        var result = await capability.TestAsync(lab.ServerId, CancellationToken.None);
+
+        Assert.False(result.SudoProbeSkipped);
+        Assert.False(result.SudoPasswordUsed);
+        Assert.Equal("sudo -n true", lab.Session.Calls[^2].Command);
     }
 
     [Fact]

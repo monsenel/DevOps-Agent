@@ -23,16 +23,25 @@ public sealed class ServerCapabilityService(
                 new SshRunOptions(ProbeTimeout, BypassBackoff: true), cancellationToken);
             var uptime = await sshRunner.RunAsync(serverId, UptimeCommand,
                 new SshRunOptions(ProbeTimeout, BypassBackoff: true), cancellationToken);
-            // `sudo -n true`, or with a stored sudo password one `sudo -S` attempt (which also lifts an earlier rejection:
-            // this is the owner's "Test connection" / "Retry now", T7.R24).
-            var sudo = await sshRunner.ProbeSudoAsync(serverId,
+            var server = await serverRepository.GetAsync(serverId, cancellationToken);
+            if (server is null)
+            {
+                return new ServerCapabilityResult(serverId, false, null, null, null, [], "Server no longer exists.", testedAt);
+            }
+
+            // `sudo -n true`, or with a stored sudo password one `sudo -S` attempt. A password that was already rejected is not
+            // tried again, not even from here (D-040 amendment): one wrong password can cost two pam_faillock failures, so only
+            // an edit or removal of the password lifts the pause. The previous sudo capability is then kept.
+            var sudoSkipped = server.HasSudoPassword && server.SudoPasswordRejectedAtUtc is not null;
+            var sudo = sudoSkipped ? null : await sshRunner.ProbeSudoAsync(serverId,
                 new SshRunOptions(ProbeTimeout, BypassBackoff: true), cancellationToken);
             var availableCommands = await sshRunner.RunAsync(serverId, AvailableCommandsCommand,
                 new SshRunOptions(ProbeTimeout, BypassBackoff: true), cancellationToken);
 
             var osInfo = ParseOsInfo(osRelease.StandardOutput);
-            var sudoCapable = sudo.ExitCode == 0;
-            var server = await serverRepository.GetAsync(serverId, cancellationToken);
+            bool? sudoCapable = sudo is null ? null : sudo.ExitCode == 0;
+            // Reloaded: the probe may just have recorded a rejection in another scope.
+            server = await serverRepository.GetAsync(serverId, cancellationToken);
             if (server is null)
             {
                 return new ServerCapabilityResult(serverId, false, null, null, null, [], "Server no longer exists.", testedAt);
@@ -40,9 +49,9 @@ public sealed class ServerCapabilityService(
 
             server.RecordCapabilities(sudoCapable, osInfo, testedAt);
             await serverRepository.SaveAsync(server, cancellationToken);
-            return new ServerCapabilityResult(serverId, true, osInfo, uptime.StandardOutput.Trim(), sudoCapable,
+            return new ServerCapabilityResult(serverId, true, osInfo, uptime.StandardOutput.Trim(), sudoCapable ?? server.SudoCapable,
                 ParseAvailableCommands(availableCommands.StandardOutput), null, testedAt,
-                server.HasSudoPassword, server.HasSudoPassword && server.SudoPasswordRejectedAtUtc is not null);
+                server.HasSudoPassword, server.HasSudoPassword && server.SudoPasswordRejectedAtUtc is not null, sudoSkipped);
         }
         catch (OperationCanceledException exception) when (exception is SshShutdownException || cancellationToken.IsCancellationRequested)
         {

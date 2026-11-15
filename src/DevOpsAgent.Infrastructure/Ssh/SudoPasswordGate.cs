@@ -11,9 +11,10 @@ namespace DevOpsAgent.Infrastructure.Ssh;
 /// the server sends back. Used by <see cref="SshRunner"/> only; nothing else ever sees the plain password.
 /// <para>
 /// A rejected password is stored on the server (<c>SudoPasswordRejectedAtUtc</c>): from then on no sudo command is sent to that
-/// server (pam_faillock counts every wrong attempt) until the owner edits the password or presses "Retry now" / "Test
-/// connection". Password sudo on a server runs one at a time while it authenticates, so two commands can never both be the
-/// first to find out that the password is wrong.
+/// server (pam_faillock counts every wrong attempt, twice with sudo's default <c>passwd_tries=3</c>) until the owner edits or
+/// removes the password; "Retry now" and "Test connection" do not try it again (D-040 amendment). Password sudo on a server
+/// runs one at a time while it authenticates, so two commands can never both be the first to find out that the password is
+/// wrong.
 /// </para>
 /// </summary>
 public sealed partial class SudoPasswordGate(
@@ -32,7 +33,7 @@ public sealed partial class SudoPasswordGate(
 
     /// <summary>What a sudo command gets instead of running while the server's sudo password is rejected.</summary>
     public const string PausedMessage =
-        "sudo: not run: the saved sudo password for this server was rejected; sudo is paused until the password is edited or Retry now is pressed.";
+        "sudo: not run: the saved sudo password for this server was rejected; sudo is paused until the password is edited or removed.";
 
     public const string UnusableMessage =
         "sudo: not run: the saved sudo password for this server cannot be decrypted; enter it again in the server settings.";
@@ -91,20 +92,8 @@ public sealed partial class SudoPasswordGate(
         if (server is null || server.ProtectedSudoPassword != protectedValue) return;
         server.RecordSudoPasswordRejected(timeProvider.GetUtcNow());
         await repository.SaveAsync(server, CancellationToken.None);
-        logger.LogWarning("{ServerName}: the sudo password was rejected; no sudo is used on this server until its sudo password is edited or Retry now is pressed",
+        logger.LogWarning("{ServerName}: the sudo password was rejected; no sudo is used on this server until its sudo password is edited or removed",
             server.Name);
-    }
-
-    /// <summary>Lifts a rejection: the owner pressed "Retry now" or "Test connection".</summary>
-    internal async Task ClearRejectionAsync(Guid serverId, CancellationToken cancellationToken)
-    {
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var repository = scope.ServiceProvider.GetRequiredService<IServerRepository>();
-        var server = await repository.GetAsync(serverId, cancellationToken);
-        if (server?.SudoPasswordRejectedAtUtc is null) return;
-        server.ClearSudoPasswordRejection();
-        await repository.SaveAsync(server, cancellationToken);
-        logger.LogInformation("{ServerName}: sudo password rejection cleared by the owner; trying it once", server.Name);
     }
 
     /// <summary>
@@ -138,7 +127,7 @@ internal enum SudoCredentialKind
     /// <summary>No sudo password stored: <c>sudo -n</c>, as always.</summary>
     None,
     WithPassword,
-    /// <summary>The stored password was rejected: no sudo until edit or "Retry now".</summary>
+    /// <summary>The stored password was rejected: no sudo until the password is edited or removed.</summary>
     Paused,
     /// <summary>The stored password cannot be decrypted (Data Protection keys lost): no sudo.</summary>
     Unusable

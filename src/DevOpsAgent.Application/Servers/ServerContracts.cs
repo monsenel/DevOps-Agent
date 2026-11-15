@@ -43,15 +43,22 @@ public sealed record ServerSummary(
 /// <summary>How a server uses sudo, as the Servers page shows it (T7.R24).</summary>
 /// <param name="Label">"sudo: NOPASSWD", "sudo: password", "sudo: none", with "not tested" or "rejected" where it applies.</param>
 /// <param name="Detail">One sentence for the tooltip and screen readers.</param>
-/// <param name="Paused">The stored password was rejected and no sudo is used until it is edited or "Retry now" is pressed.</param>
+/// <param name="Paused">The stored password was rejected and no sudo is used until it is edited or removed.</param>
 public sealed record ServerSudoStatus(string Label, string Detail, bool Paused)
 {
+    /// <summary>
+    /// Why "Retry now" (and Test connection's sudo step) does nothing while the password is rejected (D-040 amendment). Shown
+    /// next to the disabled button.
+    /// </summary>
+    public const string RetryBlockedReason =
+        "Sudo is not retried: each wrong sudo password can count twice in pam_faillock (lockout risk). Edit or remove the sudo password first.";
+
     public static ServerSudoStatus Describe(bool? sudoCapable, bool hasSudoPassword, DateTimeOffset? sudoPasswordRejectedAtUtc)
     {
         if (hasSudoPassword && sudoPasswordRejectedAtUtc is { } rejectedAt)
         {
             return new("sudo: password — rejected", $"The sudo password was rejected at {rejectedAt:yyyy-MM-dd HH:mm:ss} UTC. "
-                + "No sudo is used on this server until the password is edited or Retry now is pressed.", true);
+                + "No sudo is used on this server, and it is not retried, until the password is edited or removed.", true);
         }
 
         return (hasSudoPassword, sudoCapable) switch

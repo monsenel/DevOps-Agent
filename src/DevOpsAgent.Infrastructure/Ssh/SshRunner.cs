@@ -61,13 +61,9 @@ public sealed class SshRunner(
             return await ExecuteAsync(serverId, RemoteCommand.SudoProbe, null, options, cancellationToken);
         }
 
-        if (credential.Kind == SudoCredentialKind.Paused)
-        {
-            // Only the owner probes ("Test connection", "Retry now"): that is the reset, and this probe is its one attempt.
-            await sudoPasswords.ClearRejectionAsync(serverId, cancellationToken);
-            credential = await sudoPasswords.ReadAsync(serverId, cancellationToken);
-        }
-
+        // A rejected password is not tried again by the probe either (D-040 amendment): one wrong password can cost two
+        // pam_faillock failures, so only an edit or removal of the password lifts the pause. RunWithSudoPasswordAsync
+        // returns the "not run" result for a paused credential without contacting the server.
         return await RunWithSudoPasswordAsync(serverId, RemoteCommand.SudoPasswordProbe, RemoteCommand.SudoProbe,
             credential, options, cancellationToken);
     }
