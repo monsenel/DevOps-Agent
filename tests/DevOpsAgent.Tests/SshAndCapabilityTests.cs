@@ -39,6 +39,8 @@ public sealed class SshAndCapabilityTests
     {
         Assert.Equal("Debian", ServerCapabilityService.ParseOsInfo("ID=debian\nNAME='Debian'\nPRETTY_NAME=Debian GNU/Linux"));
         Assert.Equal(new[] { "ip", "nginx" }, ServerCapabilityService.ParseAvailableCommands("nginx\nunknown\nip\nnginx\n"));
+        Assert.Equal(new[] { "iptables", "nft" }, ServerCapabilityService.ParseAvailableCommands("nft\niptables\n"));
+        Assert.Contains("PATH=\"$PATH:/usr/sbin:/sbin\"", ServerCapabilityService.AvailableCommandsCommand, StringComparison.Ordinal);
         Assert.Null(ServerCapabilityService.ParseOsInfo("VERSION_ID=24.04\n"));
     }
 

@@ -11,7 +11,9 @@ public sealed class ServerCapabilityService(
     private const string OsReleaseCommand = "cat /etc/os-release";
     private const string UptimeCommand = "uptime -p";
     private const string SudoProbeCommand = "sudo -n true";
-    private const string AvailableCommandsCommand = "for cmd in docker nginx systemctl ss ip; do command -v \"$cmd\" >/dev/null 2>&1 && printf '%s\\n' \"$cmd\"; done";
+    // Admin tools such as nginx, iptables and nft live in /usr/sbin or /sbin, which a non-root SSH session's PATH often omits.
+    private static readonly string[] ProbedCommands = ["docker", "nginx", "systemctl", "ss", "ip", "iptables", "nft"];
+    public const string AvailableCommandsCommand = "PATH=\"$PATH:/usr/sbin:/sbin\"; for cmd in docker nginx systemctl ss ip iptables nft; do command -v \"$cmd\" >/dev/null 2>&1 && printf '%s\\n' \"$cmd\"; done";
 
     public async Task<ServerCapabilityResult> TestAsync(Guid serverId, CancellationToken cancellationToken)
     {
@@ -93,7 +95,7 @@ public sealed class ServerCapabilityService(
 
     public static IReadOnlyList<string> ParseAvailableCommands(string output)
     {
-        var expected = new HashSet<string>(["docker", "nginx", "systemctl", "ss", "ip"], StringComparer.Ordinal);
+        var expected = new HashSet<string>(ProbedCommands, StringComparer.Ordinal);
         return output.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
             .Where(expected.Contains)
             .Distinct(StringComparer.Ordinal)
