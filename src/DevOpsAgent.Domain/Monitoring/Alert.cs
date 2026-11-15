@@ -1,6 +1,6 @@
 namespace DevOpsAgent.Domain.Monitoring;
 
-public enum AlertSeverity { Low, Medium, High }
+public enum AlertSeverity { Low, Medium, High, Critical }
 public enum AlertState { Open, Acknowledged, Resolved }
 
 public sealed class Alert

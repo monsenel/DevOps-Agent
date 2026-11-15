@@ -81,7 +81,7 @@
 
     private static string SeverityClass(AlertSeverity severity) => severity switch
     {
-        AlertSeverity.High => "danger",
+        AlertSeverity.Critical or AlertSeverity.High => "danger",
         AlertSeverity.Medium => "warn",
         _ => "neutral"
     };

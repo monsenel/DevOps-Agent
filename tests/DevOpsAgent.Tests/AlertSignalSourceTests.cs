@@ -41,7 +41,7 @@ public sealed class AlertSignalSourceTests
         var conditions = await source.GetActiveConditionsAsync(CancellationToken.None);
 
         var mismatch = Assert.Single(conditions, condition => condition.Rule == "ssh-host-key-mismatch");
-        Assert.Equal(AlertSeverity.High, mismatch.Severity);
+        Assert.Equal(AlertSeverity.Critical, mismatch.Severity);
         Assert.Equal(server.Id, mismatch.ServerId);
         Assert.Contains("SHA256:abc123", mismatch.Details, StringComparison.Ordinal);
         Assert.DoesNotContain(conditions, condition => condition.Rule == "server-unreachable");

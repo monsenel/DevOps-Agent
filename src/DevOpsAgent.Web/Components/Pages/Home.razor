@@ -114,8 +114,8 @@
                 <div class="overview-alert-list">
                     @foreach (var alert in _openAlerts.Take(3))
                     {
-                        <a class="overview-alert-row @(alert.Severity == AlertSeverity.High ? "high" : null)" href="/alerts">
-                            <Badge Variant="@(alert.Severity == AlertSeverity.High ? "warn" : "soft")">@alert.Severity</Badge>
+                        <a class="overview-alert-row @(alert.Severity >= AlertSeverity.High ? "high" : null)" href="/alerts">
+                            <Badge Variant="@(alert.Severity >= AlertSeverity.High ? "warn" : "soft")">@alert.Severity</Badge>
                             <span>@alert.Title</span>
                             <small>@alert.Target</small>
                         </a>
@@ -239,7 +239,7 @@
         {
             _servers = await ServersService.ListAsync(cancellationToken);
             _openAlerts = await AlertManager.ListAsync(AlertState.Open, cancellationToken);
-            _highAlerts = _openAlerts.Count(alert => alert.Severity == AlertSeverity.High);
+            _highAlerts = _openAlerts.Count(alert => alert.Severity >= AlertSeverity.High);
             _defaultProvider = (await Providers.ListAsync(cancellationToken)).FirstOrDefault(provider => provider.IsDefault);
 
             var updates = await UpdatesManager.ListAsync(cancellationToken);

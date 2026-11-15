@@ -38,7 +38,7 @@ public sealed class AlertSignalSource(
             else if (hostKeyMismatch is not null)
             {
                 // A changed host key is a possible impersonation, not an outage: report it distinctly from "unreachable".
-                result.Add(Condition("ssh-host-key-mismatch", server.Id.ToString("N"), AlertSeverity.High, server.Id, server.Host,
+                result.Add(Condition("ssh-host-key-mismatch", server.Id.ToString("N"), AlertSeverity.Critical, server.Id, server.Host,
                     $"{server.Name} presented an unexpected SSH host key",
                     $"The host key of {hostKeyMismatch.Host}:{hostKeyMismatch.Port} does not match the pinned key; the connection was refused. "
                     + $"Presented fingerprint: {hostKeyMismatch.Fingerprint ?? "unknown"}. Verify the server before trusting the new key."));

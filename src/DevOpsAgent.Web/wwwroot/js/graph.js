@@ -46,6 +46,7 @@ function applyStyles() {
             "shape": "round-rectangle", "border-width": 1, "border-color": c.line,
             "padding": 12, "text-halign": "center", "text-valign": "center"
         } },
+        { selector: 'node[alertSeverity = "Critical"]', style: { "border-width": 3, "border-color": c.danger } },
         { selector: 'node[alertSeverity = "High"]', style: { "border-width": 2, "border-color": c.danger } },
         { selector: 'node[alertSeverity = "Medium"]', style: { "border-width": 2, "border-color": c.warn } },
         { selector: "edge", style: {
