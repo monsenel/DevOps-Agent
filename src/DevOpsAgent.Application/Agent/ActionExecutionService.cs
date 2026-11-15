@@ -21,7 +21,7 @@ public sealed record ActionServerResult(
 {
     /// <summary>The command as the operator should review it, including the sudo wrapper that is applied when it runs.</summary>
     [JsonIgnore]
-    public string DisplayCommand => UseSudo ? $"sudo {Command}" : Command;
+    public string DisplayCommand => RemoteCommand.Wrap(Command, UseSudo);
 }
 
 public sealed record ActionLogEntry(

@@ -43,7 +43,7 @@ public sealed class ActionExecutionTests
         Assert.All(logEntry.Results, result =>
         {
             Assert.True(result.UseSudo);
-            Assert.StartsWith("sudo systemctl restart", result.DisplayCommand, StringComparison.Ordinal);
+            Assert.StartsWith("sudo -n -- sh -c 'systemctl restart", result.DisplayCommand, StringComparison.Ordinal);
             Assert.EndsWith(":22", result.Endpoint, StringComparison.Ordinal);
         });
         Assert.Contains("nginx.service", completed.CommandsJson, StringComparison.Ordinal);
@@ -85,8 +85,8 @@ public sealed class ActionExecutionTests
         var pending = Assert.Single(await execution.ListAsync(CancellationToken.None));
         var preview = Assert.Single(pending.PendingCommandPreviews);
         Assert.Equal("systemctl restart -- 'nginx'", preview.Command);
-        // Approvers must see the sudo wrapper and the real endpoint, not only the display name.
-        Assert.Equal("sudo systemctl restart -- 'nginx'", preview.DisplayCommand);
+        // Approvers must see the exact text sent over SSH, including the sudo wrapper, and the real endpoint.
+        Assert.Equal(@"sudo -n -- sh -c 'systemctl restart -- '\''nginx'\'''", preview.DisplayCommand);
         Assert.Equal("192.0.2.10:22", preview.Endpoint);
         var rejected = await execution.RejectAsync(action.Id, "admin", CancellationToken.None);
         Assert.Equal(ActionRecordStatus.Rejected, rejected.Status);

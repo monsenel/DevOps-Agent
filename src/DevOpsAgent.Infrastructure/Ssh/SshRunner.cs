@@ -21,12 +21,8 @@ public sealed class SshRunner(ISshConnectionPool connectionPool) : ISshRunner
             throw new ArgumentException("Command is required.", nameof(command));
         }
 
-        var wrappedCommand = options.UseSudo
-            ? $"sudo -n -- sh -c {ShellQuote(command)}"
-            : command;
+        var wrappedCommand = RemoteCommand.Wrap(command, options.UseSudo);
         var session = await connectionPool.GetSessionAsync(serverId, cancellationToken);
         return await session.ExecuteAsync(wrappedCommand, options.Timeout, cancellationToken);
     }
-
-    private static string ShellQuote(string value) => $"'{value.Replace("'", "'\\''", StringComparison.Ordinal)}'";
 }
