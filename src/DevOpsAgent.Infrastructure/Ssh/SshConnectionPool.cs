@@ -193,7 +193,7 @@ public sealed class SshConnectionPool(
                 outcomeRecorded = true;
                 // The new entry holds its own lease on the jump entry until it is disposed, so the tunnel it runs through
                 // outlives every command on it.
-                var created = new ConnectionEntry(server.Id, server.Name, transport, jumpConnection, jumpLease?.Entry.Retain(), logger, Forget);
+                var created = new ConnectionEntry(server.Id, server.Name, transport, jumpConnection, jumpLease?.Entry.RetainAsJump(), logger, Forget);
                 _live[created] = 0;
                 var lease = created.Retain();
                 if (_disposed)
@@ -274,16 +274,21 @@ public sealed class SshConnectionPool(
     private sealed class EntryLease : IDisposable
     {
         private readonly ConnectionEntry _entry;
+        private readonly bool _isReference;
         private int _released;
 
-        public EntryLease(ConnectionEntry entry) => _entry = entry;
+        public EntryLease(ConnectionEntry entry, bool isReference)
+        {
+            _entry = entry;
+            _isReference = isReference;
+        }
 
         public ConnectionEntry Entry => _entry;
         public bool IsReleased => Volatile.Read(ref _released) != 0;
 
         public void Dispose()
         {
-            if (Interlocked.Exchange(ref _released, 1) == 0) _entry.Release();
+            if (Interlocked.Exchange(ref _released, 1) == 0) _entry.Release(_isReference);
         }
     }
 
@@ -298,7 +303,8 @@ public sealed class SshConnectionPool(
         private readonly ILogger _logger;
         private readonly Action<ConnectionEntry> _onDisposed;
         private readonly EntryLease? _jumpLease;
-        private int _leases;
+        private int _leases;      // every lease: commands and dependents' jump references
+        private int _references; // the part of _leases held by dependent entries (jump tunnels)
         private bool _retired;
         private bool _disposed;
 
@@ -326,9 +332,10 @@ public sealed class SshConnectionPool(
         public ConnectionEntry? JumpConnection { get; }
         public SshTimeoutTracker Timeouts { get; } = new();
 
+        /// <summary>Commands currently running on this client (jump references held by dependent entries are not counted).</summary>
         public int Leases
         {
-            get { lock (_sync) return _leases; }
+            get { lock (_sync) return _leases - _references; }
         }
 
         /// <summary>Length of the jump chain behind this entry (0 for a direct connection).</summary>
@@ -341,17 +348,31 @@ public sealed class SshConnectionPool(
             {
                 if (_retired) return null;
                 _leases++;
-                return new EntryLease(this);
+                return new EntryLease(this, isReference: false);
             }
         }
 
-        /// <summary>A new lease for a caller that already holds one (or that created the entry), even if the entry is retired.</summary>
+        /// <summary>A new command lease for the caller that created the entry.</summary>
         public EntryLease Retain()
         {
             lock (_sync)
             {
                 _leases++;
-                return new EntryLease(this);
+                return new EntryLease(this, isReference: false);
+            }
+        }
+
+        /// <summary>
+        /// A reference held by a dependent entry whose tunnel runs through this one. Only for a caller that already holds a
+        /// lease, so it is valid even if the entry has been retired meanwhile.
+        /// </summary>
+        public EntryLease RetainAsJump()
+        {
+            lock (_sync)
+            {
+                _leases++;
+                _references++;
+                return new EntryLease(this, isReference: true);
             }
         }
 
@@ -381,12 +402,13 @@ public sealed class SshConnectionPool(
         }
 
         // Called only by EntryLease.Dispose, exactly once per lease.
-        public void Release()
+        public void Release(bool isReference)
         {
             bool disposeNow;
             lock (_sync)
             {
                 _leases--;
+                if (isReference) _references--;
                 disposeNow = _retired && _leases == 0 && !_disposed;
                 if (disposeNow) _disposed = true;
             }
