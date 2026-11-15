@@ -56,6 +56,12 @@ public sealed class SshConnectionPool(
     /// <summary>Clients that are open: pooled ones and retired ones still finishing a command (diagnostics and tests).</summary>
     public int LiveClients => _live.Count;
 
+    /// <summary>Callers currently waiting for the connect attempt in flight to a server, 0 when none (diagnostics and tests).</summary>
+    public int ConnectWaiters(Guid serverId)
+    {
+        lock (_flightSync) return _flights.TryGetValue(serverId, out var flight) ? flight.Waiters : 0;
+    }
+
     // Cancelled when the host starts stopping (SIGTERM): the point after which nothing may start or keep waiting. Checked
     // through the host's own token (immediate), while waits are linked to StoppingSignal (delivered on a pool thread).
     private CancellationToken Stopping => lifetime?.ApplicationStopping ?? CancellationToken.None;
@@ -622,6 +628,11 @@ public sealed class SshConnectionPool(
 
         public Task<FlightOutcome> Result => _result.Task;
 
+        public int Waiters
+        {
+            get { lock (_sync) return _finished ? 0 : _waiters; }
+        }
+
         public FlightAbandon AbandonReason
         {
             get { lock (_sync) return _abandon; }
@@ -681,8 +692,12 @@ public sealed class SshConnectionPool(
             lock (_sync)
             {
                 _finished = true;
-                _cancellation.Dispose();
             }
+
+            // Never under the lock: disposing a linked source unregisters from its parent, which can wait for a callback
+            // that is running on another thread (see CancelNow).
+            try { _cancellation.Dispose(); }
+            catch (Exception) { /* already released */ }
 
             if (unexpected is not null) _result.TrySetException(unexpected);
             else _result.TrySetResult(outcome);
@@ -698,9 +713,15 @@ public sealed class SshConnectionPool(
             lock (_sync)
             {
                 if (_finished) return;
-                try { _cancellation.Cancel(); }
-                catch (Exception) { /* a callback of the connect threw: the attempt is ending anyway */ }
             }
+
+            // Not under the lock: cancelling runs the callbacks of the connect (and, through them, continuations of the
+            // attempt itself) inline on this thread. Holding the lock then, while the pool's own lock is taken by those
+            // continuations and the pool takes this lock under its own, is a lock-order inversion (found by the shutdown
+            // race tests). The attempt may finish and release the source meanwhile; that is not an error.
+            try { _cancellation.Cancel(); }
+            catch (ObjectDisposedException) { }
+            catch (Exception) { /* a callback of the connect threw: the attempt is ending anyway */ }
         }
     }
 

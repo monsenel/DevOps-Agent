@@ -130,6 +130,8 @@ internal sealed class HostScript
     /// honours the connect's token only when <see cref="ConnectHonoursToken"/> is set.
     /// </summary>
     public Task? ConnectGate { get; set; }
+    /// <summary>Closing the client throws (a socket that is already gone): shutdown must still go on and not throw.</summary>
+    public bool DisposeThrows { get; set; }
     public CommandMode Commands { get; set; } = CommandMode.Ok;
 }
 
@@ -193,7 +195,11 @@ internal sealed class ScriptedTransport(ScriptedTransports owner, string host, H
             string.Empty, TimeSpan.FromMilliseconds(1));
     }
 
-    public void Dispose() => Interlocked.Exchange(ref _disposed, 1);
+    public void Dispose()
+    {
+        Interlocked.Exchange(ref _disposed, 1);
+        if (script.DisposeThrows) throw new InvalidOperationException("closing the client failed");
+    }
 }
 
 internal sealed class HangServers(List<Server> servers) : IServerRepository
