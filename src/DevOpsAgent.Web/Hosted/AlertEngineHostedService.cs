@@ -1,3 +1,4 @@
+using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Monitoring;
 using DevOpsAgent.Domain.Monitoring;
 
@@ -9,8 +10,10 @@ public sealed class AlertEngineHostedService(IServiceScopeFactory scopes, AlertS
     protected override async Task ExecuteAsync(CancellationToken serviceStopping)
     {
         // The token of a hosted service is only cancelled when the host reaches that service in its sequential stop, which
-        // can be long after SIGTERM while an earlier service is still stopping (T7.R17). ApplicationStopping fires first.
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(serviceStopping, lifetime.ApplicationStopping);
+        // can be long after SIGTERM while an earlier service is still stopping (T7.R17). ApplicationStopping fires first; it is
+        // re-delivered on a pool thread so the SIGTERM thread never runs this service's unwinding.
+        using var shutdown = new DetachedCancellation(lifetime.ApplicationStopping);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(serviceStopping, shutdown.Token);
         var stoppingToken = linked.Token;
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
         do
@@ -23,7 +26,7 @@ public sealed class AlertEngineHostedService(IServiceScopeFactory scopes, AlertS
                 await service.EvaluateAsync(stoppingToken);
                 status.Set(await service.GetOpenCountAsync(stoppingToken));
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            catch (OperationCanceledException exception) when (exception is SshShutdownException || stoppingToken.IsCancellationRequested) { break; }
             catch (Exception exception) { logger.LogError(exception, "Alert evaluation failed."); }
             logger.LogInformation("Alert evaluation finished in {ElapsedMs} ms", started.ElapsedMilliseconds);
         } while (await timer.WaitForNextTickAsync(stoppingToken));

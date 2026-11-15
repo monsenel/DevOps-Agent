@@ -12,8 +12,10 @@ public sealed class DiscoveryScheduler(
     protected override async Task ExecuteAsync(CancellationToken serviceStopping)
     {
         // The token of a hosted service is only cancelled when the host reaches that service in its sequential stop, which
-        // can be long after SIGTERM while an earlier service is still stopping (T7.R17). ApplicationStopping fires first.
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(serviceStopping, lifetime.ApplicationStopping);
+        // can be long after SIGTERM while an earlier service is still stopping (T7.R17). ApplicationStopping fires first; it is
+        // re-delivered on a pool thread so the SIGTERM thread never runs this service's unwinding.
+        using var shutdown = new DetachedCancellation(lifetime.ApplicationStopping);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(serviceStopping, shutdown.Token);
         var stoppingToken = linked.Token;
         var lastAttemptAt = timeProvider.GetUtcNow();
         try
@@ -25,7 +27,7 @@ public sealed class DiscoveryScheduler(
                 lastAttemptAt = latest.StartedAtUtc;
             }
         }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        catch (OperationCanceledException exception) when (exception is SshShutdownException || stoppingToken.IsCancellationRequested)
         {
             return;
         }
@@ -54,7 +56,7 @@ public sealed class DiscoveryScheduler(
                 logger.LogInformation("Scheduled discovery {SnapshotId} completed with {SucceededServers} succeeded and {FailedServers} failed servers.",
                     snapshot.Id, snapshot.SucceededServerCount, snapshot.FailedServerCount);
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            catch (OperationCanceledException exception) when (exception is SshShutdownException || stoppingToken.IsCancellationRequested)
             {
                 break;
             }

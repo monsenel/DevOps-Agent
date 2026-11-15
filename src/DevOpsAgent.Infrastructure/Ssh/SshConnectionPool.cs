@@ -39,6 +39,10 @@ public sealed class SshConnectionPool(
     private readonly ConcurrentDictionary<Guid, int> _generations = new();
     // Every client that has not been disposed yet: the pooled ones plus retired ones still draining their last leases.
     private readonly ConcurrentDictionary<ConnectionEntry, byte> _live = new();
+    // ApplicationStopping, re-delivered on a thread-pool thread: everything the pool cancels (and every continuation of an
+    // abandoned wait) then runs there, never inline on the thread that handles SIGTERM. Left undisposed on purpose: calls in
+    // flight when the pool closes may still hold a token from it, and it lives exactly as long as the host.
+    private readonly DetachedCancellation? _stopSignal = lifetime is null ? null : new DetachedCancellation(lifetime.ApplicationStopping);
     private bool _disposed;
 
     /// <summary>Commands currently running on pooled clients (diagnostics and tests).</summary>
@@ -47,8 +51,11 @@ public sealed class SshConnectionPool(
     /// <summary>Clients that are open: pooled ones and retired ones still finishing a command (diagnostics and tests).</summary>
     public int LiveClients => _live.Count;
 
-    // Cancelled when the host starts stopping (SIGTERM): the point after which nothing may start or keep waiting.
+    // Cancelled when the host starts stopping (SIGTERM): the point after which nothing may start or keep waiting. Checked
+    // through the host's own token (immediate), while waits are linked to StoppingSignal (delivered on a pool thread).
     private CancellationToken Stopping => lifetime?.ApplicationStopping ?? CancellationToken.None;
+
+    private CancellationToken StoppingSignal => _stopSignal?.Token ?? CancellationToken.None;
 
     private bool IsStopping => _disposed || Stopping.IsCancellationRequested;
 
@@ -65,7 +72,7 @@ public sealed class SshConnectionPool(
         if (IsStopping) throw new SshShutdownException();
 
         var startedAt = Stopwatch.GetTimestamp();
-        using var scope = new CallScope(cancellationToken, Stopping, deadline);
+        using var scope = new CallScope(cancellationToken, Stopping, StoppingSignal, deadline);
         try
         {
             var lease = await GetOrConnectAsync(serverId, [], bypassBackoff, scope);
@@ -208,9 +215,13 @@ public sealed class SshConnectionPool(
         try
         {
             var gate = _connectionLocks.GetOrAdd(server.Id, static _ => new SemaphoreSlim(1, 1));
-            await gate.WaitAsync(scope.Token);
+            // ForceYielding: when this wait is cancelled, what follows must not run on the thread that cancelled it.
+            await gate.WaitAsync(scope.Token).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
             try
             {
+                // Another caller's abandoned attempt released the gate because the host is stopping: nothing starts now.
+                if (IsStopping) throw new SshShutdownException();
+
                 if (TryReuse(server.Id, jumpConnection) is { } current) return current;
 
                 // Waited behind an attempt that just failed: do not try again until the backoff expires.
@@ -311,10 +322,13 @@ public sealed class SshConnectionPool(
     // closed here, so an abandoned connect never leaks a client or keeps the host alive.
     private async Task<ISshTransport> ConnectAbandonableAsync(Server server, ISshTransport? jump, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (IsStopping) throw new SshShutdownException();
+
         var connecting = transportFactory.ConnectAsync(server, jump, cancellationToken);
         try
         {
-            return await connecting.WaitAsync(cancellationToken);
+            return await connecting.WaitAsync(cancellationToken).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -367,12 +381,13 @@ public sealed class SshConnectionPool(
         private readonly CancellationTokenSource _deadline = new();
         private readonly CancellationTokenSource _linked;
 
-        public CallScope(CancellationToken caller, CancellationToken stopping, TimeSpan deadline)
+        // stopping answers "is the host stopping" at once; stoppingSignal is what the call's waits are linked to.
+        public CallScope(CancellationToken caller, CancellationToken stopping, CancellationToken stoppingSignal, TimeSpan deadline)
         {
             _caller = caller;
             _stopping = stopping;
             if (deadline != Timeout.InfiniteTimeSpan) _deadline.CancelAfter(deadline);
-            _linked = CancellationTokenSource.CreateLinkedTokenSource(caller, stopping, _deadline.Token);
+            _linked = CancellationTokenSource.CreateLinkedTokenSource(caller, stoppingSignal, _deadline.Token);
         }
 
         public CancellationToken Token => _linked.Token;
@@ -605,8 +620,8 @@ public sealed class SshConnectionPool(
 
             ObjectDisposedException.ThrowIf(lease.IsReleased, this);
             // After shutdown began nothing new starts, on a client leased earlier as well.
-            var stopping = pool.Stopping;
             if (pool.IsStopping) throw new SshShutdownException();
+            var stopping = pool.Stopping;
 
             timeout = WithinCallDeadline(timeout);
             var transport = Entry.Transport;
@@ -614,11 +629,11 @@ public sealed class SshConnectionPool(
             // command on a dead peer, and Dispose does not wake a command already running (T7.R15 live run). The wait is
             // abandoned when the deadline passes, the caller cancels or the host stops; a late result is discarded.
             using var deadline = new CancellationTokenSource(timeout);
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, stopping, deadline.Token);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, pool.StoppingSignal, deadline.Token);
             var running = transport.ExecuteAsync(command, timeout, linked.Token);
             try
             {
-                var result = await running.WaitAsync(linked.Token);
+                var result = await running.WaitAsync(linked.Token).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
                 Timeouts.RecordSuccess();
                 pool.Reachability.RecordCommandSuccess(serverId);
                 return result;

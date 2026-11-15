@@ -86,7 +86,7 @@ public sealed class SshNetTransportFactory(
             var connecting = client.ConnectAsync(timeout.Token);
             try
             {
-                await connecting.WaitAsync(timeout.Token);
+                await connecting.WaitAsync(timeout.Token).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
@@ -103,17 +103,31 @@ public sealed class SshNetTransportFactory(
         }
         catch (Exception) when (rejectedFingerprint is not null)
         {
-            client?.Dispose();
-            privateKey?.Dispose();
-            SshNetTransport.ReleaseTunnel(tunnel, jumpTransport);
+            CleanUp();
             throw new SshHostKeyMismatchException(server.Host, server.Port, rejectedFingerprint);
         }
-        catch
+        catch (Exception exception)
         {
-            client?.Dispose();
-            privateKey?.Dispose();
-            SshNetTransport.ReleaseTunnel(tunnel, jumpTransport);
+            // Disposing an SshClient that is still connecting blocks until its socket gives up (the connect timeout, for a
+            // blackholed route), and this catch can run inline on the thread that cancelled the attempt - on shutdown, the
+            // SIGTERM thread. An abandoned attempt is therefore cleaned up in the background.
+            if (exception is OperationCanceledException or SshOperationTimeoutException) _ = Task.Run(CleanUp);
+            else CleanUp();
             throw;
+        }
+
+        void CleanUp()
+        {
+            try
+            {
+                client?.Dispose();
+                privateKey?.Dispose();
+                SshNetTransport.ReleaseTunnel(tunnel, jumpTransport);
+            }
+            catch (Exception)
+            {
+                // Best effort: the attempt is over either way and nothing is waiting for the cleanup.
+            }
         }
     }
 }
