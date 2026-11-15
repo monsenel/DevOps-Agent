@@ -25,6 +25,11 @@ namespace DevOpsAgent.Infrastructure.Ssh;
 /// the same backoff as a failed connect; and once the host application is stopping (<paramref name="lifetime"/>) no new
 /// connection or command starts and the ones in flight are abandoned at once, whatever token their caller passed.
 /// </para>
+/// <para>
+/// T7.R19 (D-039): a connect attempt is one <c>ConnectFlight</c> per server, shared by the callers that may share it; a failed
+/// login (rejected key, missing, unreadable or invalid key, passphrase) is recorded as <see cref="HostFailureKind.AuthFailed"/>
+/// and retried every minute, not as an outage; and closing the pool never throws into the host.
+/// </para>
 /// </summary>
 public sealed class SshConnectionPool(
     IServiceScopeFactory scopeFactory,
@@ -699,7 +704,12 @@ public sealed class SshConnectionPool(
             try { _cancellation.Dispose(); }
             catch (Exception) { /* already released */ }
 
-            if (unexpected is not null) _result.TrySetException(unexpected);
+            if (unexpected is not null)
+            {
+                _result.TrySetException(unexpected);
+                // Observed here: when every caller has already left, nobody else would read it.
+                _ = _result.Task.Exception;
+            }
             else _result.TrySetResult(outcome);
         }
 
