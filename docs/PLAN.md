@@ -223,7 +223,7 @@ Requirement IDs (LLM-1, DSC-2 …) refer to `docs/PRD.md`.
 Raised by the 2026-11-15 MVP review. Small issues were fixed directly (`fix(review): …` commits); these are the larger ones. Ordered by severity. They fix gaps against existing PRD/PLAN requirements; they are not new features.
 
 ### T7.R1 SSH connection lifecycle (INV-5, NFR-2) — high
-- **Do:** Lease/ref-count pooled clients so a client (or a jump tunnel) is never disposed while another caller is mid-command. Single-flight connect per server plus a short negative cache (30–60 s) for unreachable hosts and jump hosts. Detect silently dead sessions (blackholed peer, `IsConnected` still true) with a liveness rule — e.g. recycle after N consecutive command timeouts with no success — without recycling on one slow command. Skip a server's remaining collectors after a connection-level failure; per-call deadline that includes connect time. The review added a 3-consecutive-timeout recycle (`SshTimeoutTracker`); cover the pool wiring (generation counter, identity-checked invalidation, timeout recycle) with fake-transport tests.
+- **Do:** Per-host backoff: single-flight connect per server plus a short negative cache (30–60 s) for unreachable hosts, and a dead jump host short-circuits every server behind it instead of each timing out. Skip a server's remaining collectors after a connection-level failure; per-call deadline that includes connect time, so the metric (60 s) and alert (30 s) cycles finish within their interval. Lease/ref-count pooled clients so a client (or a jump tunnel) is never disposed while another caller is mid-command. Already done in review: keepalive 30 s, recycle after 3 consecutive command timeouts (`SshTimeoutTracker`), eviction only when connection fields change; cover that pool wiring with fake-transport tests.
 - **Done when:** Unit tests with a fake transport for leases, single-flight and negative cache. On the disposable lab with one TEST-NET (192.0.2.1) inventory entry behind `srv-edge`: discovery of the other servers is not delayed by more than one connect timeout, and the 60 s metric cycle does not overrun.
 - **Depends on:** —
 
@@ -238,12 +238,12 @@ Raised by the 2026-11-15 MVP review. Small issues were fixed directly (`fix(revi
 - **Depends on:** —
 
 ### T7.R4 Agent action guardrails (AGT-3/4) — medium
-- **Do:** Force approval for any mutating call in a turn whose context includes untrusted tool output (prompt-injection guard for groups in auto mode). Remove `unblock_ip` from the auto allowlist. `block_ip` refuses the app host's, jump hosts' and the operator's own addresses; `restart_service` refuses `sshd`/`ssh`/`docker` unless explicitly confirmed. Record in DECISIONS whether `restart_container` (added in D-024, not in AGT-1) stays.
+- **Do:** `restart_service` refuses `sshd`/`ssh`/`docker` unless explicitly confirmed. Record in DECISIONS whether `restart_container` (added in D-024, not in AGT-1) stays. Done in review: Auto mode removed (D-026), `block_ip` guard (D-030).
 - **Done when:** Policy matrix tests cover the new rules.
 - **Depends on:** —
 
 ### T7.R5 Secret handling gaps (LLM-7, MON-6) — medium
-- **Do:** Treat the ntfy topic as a secret (protected at rest, masked in UI like the bot token). Require HTTPS (or a private/loopback host) for endpoints that receive tokens or API keys. Redact secret-looking arguments in Docker `Cmd`/`Entrypoint`/labels and credentials in raw `nginx -T` output before raw collector output is stored.
+- **Do:** Require HTTPS (or a private/loopback host) for endpoints that receive tokens or API keys. Redact secret-looking arguments in Docker `Cmd`/`Entrypoint`/labels and credentials in raw `nginx -T` output before raw collector output is stored. Done in review: ntfy topic protected and masked, notifications minimised (D-028).
 - **Done when:** Tests; existing stored ntfy settings migrate without loss.
 - **Depends on:** —
 
@@ -282,13 +282,11 @@ Raised by the 2026-11-15 MVP review. Small issues were fixed directly (`fix(revi
 - **Done when:** Tests green.
 - **Depends on:** —
 
-### T7.R13 Owner decisions — blocked on owner
-- **Do:** Record in DECISIONS: (a) whether the `prod` group defaults to read-only execution mode (today an unconfigured group is Confirm); (b) whether update scans (`sudo apt-get update`) may run on `prod` servers; (c) whether `/dev/components` stays reachable outside Development; (d) login throttling.
-- **Done when:** Decisions recorded and implemented.
-- **Depends on:** owner
+### T7.R13 Owner decisions — done
+- Resolved 2026-11-15: read-only default (D-029), no server writes in read-only groups (D-027), Auto disabled (D-026), minimal notifications (D-028); `/dev/components` is Development-only and login is rate-limited (review fix).
 
 ---
 
 ## v2 backlog (do not start without being told)
 
-App-config/connection-string collector · Nexus collector · PostgreSQL/Redis client collectors · firewall collector · HAProxy/Traefik/Caddy · TLS collector · task routing + fallback · rolling patches by graph order · CVE scan (Trivy/Grype) · file integrity · runbooks · incident mode · anomaly baselines · daily digest · Prometheus/VictoriaLogs read · LLM-inferred edges · consider decomposing HealthCheck for maintainability.
+App-config/connection-string collector · Nexus collector · PostgreSQL/Redis client collectors · firewall collector · HAProxy/Traefik/Caddy · TLS collector · task routing + fallback · rolling patches by graph order · CVE scan (Trivy/Grype) · file integrity · runbooks · incident mode · anomaly baselines · daily digest · Prometheus/VictoriaLogs read · LLM-inferred edges · consider decomposing HealthCheck for maintainability · execution mode "auto within allowlist" (removed from MVP, D-026; needs command pinning and per-tool scopes).
