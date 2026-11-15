@@ -13,7 +13,7 @@
 ## Current
 
 - **Task:** T7.R25 and T7.R26 done (owner order 2026-11-16); T8.1–T8.9 next. T7.R4 and T7.R16 still held by the owner.
-- **Status:** T7.R25 and T7.R26 done; next T8.1–T8.9 (owner order 2026-11-16)
+- **Status:** T8.1 in progress
 - **Last updated:** 2026-11-16 by ZCode
 
 ## WIP notes
@@ -148,7 +148,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T7.R24 | Optional sudo password per server | done | `feat(T7.R24): optional per-server sudo password over stdin; one rejected attempt pauses sudo` |
 | T7.R25 | Unknown-outcome sudo password attempts | done | `feat(T7.R25): a password sudo is confirmed only by its marker; an unknown outcome pauses until Retry now` |
 | T7.R26 | Sudo password redaction across servers | done | `feat(T7.R26): every stored sudo password is redacted from every server's output, alerts and LLM input; live sudo column` |
-| T8.1 | Bugs seen in screenshots | todo | |
+| T8.1 | Bugs seen in screenshots | in-progress | |
 | T8.2 | Global search | todo | |
 | T8.3 | Theme toggle icon button | todo | |
 | T8.4 | Automatic known_hosts (TOFU) | todo | |
