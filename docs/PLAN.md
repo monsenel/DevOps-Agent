@@ -255,7 +255,7 @@ Raised by the 2026-11-15 MVP review. Small issues were fixed directly (`fix(revi
 - **Depends on:** —
 
 ### T7.R7 Monitoring throughput — medium
-- **Do:** Alert engine checks servers with bounded parallelism and skips the auth-log scan when the status probe fails. Notifications go through a background channel so a down Telegram/ntfy endpoint doesn't stall evaluation. Push metric time predicates into SQL (decide the `DateTimeOffset` storage/converter approach in DECISIONS; migration if needed). De-duplicate sudo events seen in both journald and auth.log. The auth-log cursor uses the app clock while `--since` runs on the server clock and advances even when the journal query fails silently; fix both so events aren't skipped.
+- **Do:** Alert engine checks servers with bounded parallelism (already 8 at a time, T7.R1) and skips the auth-log scan when the status probe fails (delivered by T7.R17, D-037). Notifications go through a background channel so a down Telegram/ntfy endpoint doesn't stall evaluation. Push metric time predicates into SQL (decide the `DateTimeOffset` storage/converter approach in DECISIONS; migration if needed). De-duplicate sudo events seen in both journald and auth.log. The auth-log cursor uses the app clock while `--since` runs on the server clock and advances even when the journal query fails silently; fix both so events aren't skipped.
 - **Done when:** Tests; on the lab with one unreachable entry, alert evaluation for the others stays within its 30 s cycle.
 - **Depends on:** T7.R1
 
