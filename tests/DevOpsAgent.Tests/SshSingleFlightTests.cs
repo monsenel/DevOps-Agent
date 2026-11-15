@@ -25,7 +25,7 @@ public sealed class SshSingleFlightTests
         var dead = lab.Add("dead", "192.0.2.1", script => { script.ConnectGate = gate.Task; script.ConnectFails = TimedOut; });
 
         var calls = Enumerable.Range(0, 10).Select(_ => Start(lab, dead, Long)).ToArray();
-        await WaitUntil(() => lab.Pool.ConnectWaiters(dead.Id) == 10);
+        await WaitUntilConnecting(lab, dead, 10);
         Assert.Equal(1, lab.Transports.Attempts(dead));
         Assert.All(calls, call => Assert.False(call.Task.IsCompleted));
 
@@ -71,7 +71,7 @@ public sealed class SshSingleFlightTests
         var host = lab.Add("web", "10.0.0.1", script => script.ConnectGate = gate.Task);
 
         var calls = Enumerable.Range(0, 10).Select(_ => StartSession(lab, host, Long)).ToArray();
-        await WaitUntil(() => lab.Pool.ConnectWaiters(host.Id) == 10);
+        await WaitUntilConnecting(lab, host, 10);
         gate.SetResult();
         var sessions = await Task.WhenAll(calls);
 
@@ -114,7 +114,7 @@ public sealed class SshSingleFlightTests
         var dead = lab.Add("dead", "192.0.2.1", script => { script.ConnectGate = gate.Task; script.ConnectFails = TimedOut; });
 
         var calls = new[] { Start(lab, dead, Long), Start(lab, dead, Long, bypass: true), Start(lab, dead, Long, bypass: true), Start(lab, dead, Long) };
-        await WaitUntil(() => lab.Pool.ConnectWaiters(dead.Id) == 4);
+        await WaitUntilConnecting(lab, dead, 4);
         gate.SetResult();
         var results = await Task.WhenAll(calls.Select(call => call.Task));
 
@@ -133,7 +133,7 @@ public sealed class SshSingleFlightTests
         lab.Transports.Script(dead.Host).ConnectGate = gate.Task;
 
         var retries = Enumerable.Range(0, 5).Select(_ => Start(lab, dead, Long, bypass: true)).ToArray();
-        await WaitUntil(() => lab.Pool.ConnectWaiters(dead.Id) == 5);
+        await WaitUntilConnecting(lab, dead, 5);
         // A normal caller is not part of someone's "Retry now": it is skipped at once, as before.
         var normal = await Assert.ThrowsAsync<HostUnreachableException>(() => lab.Run(dead, Long));
         Assert.Contains("retry in progress", normal.Message, StringComparison.Ordinal);
@@ -157,7 +157,7 @@ public sealed class SshSingleFlightTests
         lab.Transports.Script(dead.Host).ConnectGate = gate.Task;
 
         var claimant = Start(lab, dead, Long);
-        await WaitUntil(() => lab.Pool.ConnectWaiters(dead.Id) == 1);
+        await WaitUntilConnecting(lab, dead, 1);
         var stopwatch = Stopwatch.StartNew();
         var skipped = await Assert.ThrowsAsync<HostUnreachableException>(() => lab.Run(dead, Long));
         Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(3), "a normal caller must not wait for someone else's retry");
@@ -183,7 +183,7 @@ public sealed class SshSingleFlightTests
         var host = lab.Add("web", "10.0.0.1", script => script.ConnectGate = gate.Task);
 
         var patient = Enumerable.Range(0, 3).Select(_ => StartSession(lab, host, Long)).ToArray();
-        await WaitUntil(() => lab.Pool.ConnectWaiters(host.Id) == 3);
+        await WaitUntilConnecting(lab, host, 3);
         var impatient = Start(lab, host, TimeSpan.FromMilliseconds(250));
 
         var result = await impatient.Task.WaitAsync(TimeSpan.FromSeconds(20));
@@ -209,9 +209,9 @@ public sealed class SshSingleFlightTests
 
         // The impatient caller is the one that starts the connect; the patient ones join it.
         var impatient = Start(lab, host, TimeSpan.FromSeconds(3));
-        await WaitUntil(() => lab.Pool.ConnectWaiters(host.Id) == 1);
+        await WaitUntilConnecting(lab, host, 1);
         var patient = Enumerable.Range(0, 4).Select(_ => StartSession(lab, host, Long)).ToArray();
-        await WaitUntil(() => lab.Pool.ConnectWaiters(host.Id) == 5);
+        await WaitUntilConnecting(lab, host, 5);
 
         var result = await impatient.Task.WaitAsync(TimeSpan.FromSeconds(30));
         Assert.IsType<SshOperationTimeoutException>(result.Failure);
@@ -235,7 +235,7 @@ public sealed class SshSingleFlightTests
         var stopwatch = Stopwatch.StartNew();
         // The caller with the longest deadline starts the attempt, so it cannot end before the others have joined it.
         var last = Start(lab, host, TimeSpan.FromSeconds(3));
-        await WaitUntil(() => lab.Pool.ConnectWaiters(host.Id) == 1);
+        await WaitUntilConnecting(lab, host, 1);
         var first = Start(lab, host, TimeSpan.FromMilliseconds(600));
         var second = Start(lab, host, TimeSpan.FromMilliseconds(1200));
 
@@ -266,7 +266,7 @@ public sealed class SshSingleFlightTests
         var first = Start(lab, host, Long, cancellation: cancelFirst.Token);
         var second = Start(lab, host, Long, cancellation: cancelSecond.Token);
         var survivor = StartSession(lab, host, Long);
-        await WaitUntil(() => lab.Pool.ConnectWaiters(host.Id) == 3);
+        await WaitUntilConnecting(lab, host, 3);
 
         await cancelFirst.CancelAsync();
         Assert.IsAssignableFrom<OperationCanceledException>((await first.Task).Failure);
@@ -283,12 +283,12 @@ public sealed class SshSingleFlightTests
         var held = lab2.Add("held", "10.0.0.2", script => script.ConnectGate = new TaskCompletionSource().Task);
         using var cancelAll = new CancellationTokenSource();
         var calls = Enumerable.Range(0, 3).Select(_ => Start(lab2, held, Long, cancellation: cancelAll.Token)).ToArray();
-        await WaitUntil(() => lab2.Pool.ConnectWaiters(held.Id) == 3);
+        await WaitUntilConnecting(lab2, held, 3);
         await cancelAll.CancelAsync();
         var results = await Task.WhenAll(calls.Select(call => call.Task));
 
         Assert.All(results, result => Assert.IsAssignableFrom<OperationCanceledException>(result.Failure));
-        await WaitUntil(() => lab2.Pool.ConnectWaiters(held.Id) == 0);
+        await WaitUntilConnecting(lab2, held, 0);
         Assert.Null(lab2.Reachability.Get(held.Id));
         lab2.Transports.Script(held.Host).ConnectGate = null;
         using var next = await StartSession(lab2, held, Long);
@@ -303,7 +303,7 @@ public sealed class SshSingleFlightTests
         var host = lab.Add("web", "10.0.0.1", script => script.ConnectGate = new TaskCompletionSource().Task);
 
         var calls = Enumerable.Range(0, 5).Select(_ => StartSession(lab, host, Long)).ToArray();
-        await WaitUntil(() => lab.Pool.ConnectWaiters(host.Id) == 5);
+        await WaitUntilConnecting(lab, host, 5);
 
         // The corrected settings connect at once; the old attempt is ended, not waited for.
         lab.Transports.Script(host.Host).ConnectGate = null;
@@ -326,7 +326,7 @@ public sealed class SshSingleFlightTests
         var behind = Enumerable.Range(1, 5).Select(index => lab.Add($"app-{index}", $"10.1.0.{index}", jump: edge)).ToArray();
 
         var calls = behind.Select(server => StartSession(lab, server, Long)).ToArray();
-        await WaitUntil(() => lab.Pool.ConnectWaiters(edge.Id) == 5);
+        await WaitUntilConnecting(lab, edge, 5);
         gate.SetResult();
         var sessions = await Task.WhenAll(calls);
 
@@ -345,7 +345,7 @@ public sealed class SshSingleFlightTests
         var behind = Enumerable.Range(1, 5).Select(index => lab.Add($"app-{index}", $"10.1.0.{index}", jump: edge)).ToArray();
 
         var calls = behind.Select(server => Start(lab, server, Long)).ToArray();
-        await WaitUntil(() => lab.Pool.ConnectWaiters(edge.Id) == 5);
+        await WaitUntilConnecting(lab, edge, 5);
         gate.SetResult();
         var results = await Task.WhenAll(calls.Select(call => call.Task));
 
@@ -385,6 +385,13 @@ public sealed class SshSingleFlightTests
 
     private static Task<ISshCommandSession> StartSession(HangLab lab, DevOpsAgent.Domain.Servers.Server server, TimeSpan deadline) =>
         Task.Run(() => lab.Pool.GetSessionAsync(server.Id, false, deadline, CancellationToken.None));
+
+    /// <summary>
+    /// Waits until <paramref name="callers"/> callers wait for the connect to the server AND the connect has really begun: the
+    /// caller that starts the attempt can be descheduled for a moment between registering it and calling the transport.
+    /// </summary>
+    private static Task WaitUntilConnecting(HangLab lab, DevOpsAgent.Domain.Servers.Server server, int callers) =>
+        WaitUntil(() => lab.Pool.ConnectWaiters(server.Id) == callers && lab.Transports.Attempts(server) >= 1);
 
     private static async Task WaitUntil(Func<bool> condition)
     {
