@@ -128,3 +128,8 @@ Format: `D-<number> · <date> · <title>` then Decision / Why / Consequences.
 - **Decision:** Telegram and ntfy alert notifications carry only server name, rule, severity and state (`[High] srv-edge · ssh-unusual-sudo · opened`). Alert titles, targets and details never leave the app; they can hold IPs, user names, commands and sudo arguments. The ntfy topic is stored protected with Data Protection like the bot and ntfy tokens, is never returned to the browser (`HasNtfyTopic` only), and is entered in a masked field where blank keeps the stored value. Settings saved earlier with a plain-text topic are protected on first read without losing the topic.
 - **Why:** Owner decision 2026-11-15. Notifications go to third-party services; anyone who knows an ntfy topic can read it.
 - **Consequences:** Details are read in the app's Alerts page. Changing the topic requires re-entering it.
+
+### D-029 · 2026-11-15 · Read-only is the default execution mode
+- **Decision:** A server group without a stored execution mode, and every group while the stored setting is unreadable, is `ReadOnly`. Saving one group writes only that group's entry, so it can never change another group's mode. Supersedes the "confirm each change (default)" part of AGT-3.
+- **Why:** Owner decision 2026-11-15. A newly added group, including `prod`, must not allow mutating actions until the owner opts in.
+- **Consequences:** After upgrading, groups that never had a mode saved (previously Confirm) become read-only; switch a group to "Confirm each change" in Settings › Execution modes to allow approved actions there. Read-only groups also get cache-only update scans (D-027).

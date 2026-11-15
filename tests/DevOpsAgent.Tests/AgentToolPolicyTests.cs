@@ -443,7 +443,7 @@ public sealed class AgentToolPolicyTests
     }
 
     [Fact]
-    public async Task ExecutionModeSettingsPersistWithConfirmAsDefault()
+    public async Task ExecutionModeSettingsPersistWithReadOnlyAsDefault()
     {
         await using var database = await CreateDatabaseAsync();
         var server = await AddServerAsync(database.Context, "staging");
@@ -452,11 +452,28 @@ public sealed class AgentToolPolicyTests
 
         var defaultPolicy = Assert.Single(await service.ListAsync(CancellationToken.None));
         Assert.Equal("staging", defaultPolicy.Group);
-        Assert.Equal(ExecutionMode.Confirm, defaultPolicy.Mode);
-        await service.SaveAsync(new ExecutionModePolicy("staging", ExecutionMode.ReadOnly), CancellationToken.None);
-        Assert.Equal(ExecutionMode.ReadOnly, (await service.GetForGroupAsync(server.Group, CancellationToken.None)).Mode);
+        Assert.Equal(ExecutionMode.ReadOnly, defaultPolicy.Mode);
         await service.SaveAsync(new ExecutionModePolicy("staging", ExecutionMode.Confirm), CancellationToken.None);
         Assert.Equal(ExecutionMode.Confirm, (await service.GetForGroupAsync(server.Group, CancellationToken.None)).Mode);
+        await service.SaveAsync(new ExecutionModePolicy("staging", ExecutionMode.ReadOnly), CancellationToken.None);
+        Assert.Equal(ExecutionMode.ReadOnly, (await service.GetForGroupAsync(server.Group, CancellationToken.None)).Mode);
+    }
+
+    [Fact]
+    public async Task SavingOneGroupNeverChangesAnotherGroup()
+    {
+        await using var database = await CreateDatabaseAsync();
+        await AddServerAsync(database.Context, "prod");
+        await AddServerAsync(database.Context, "staging");
+        var service = new ExecutionModeService(new AppSettingRepository(database.Context),
+            new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
+
+        await service.SaveAsync(new ExecutionModePolicy("staging", ExecutionMode.Confirm), CancellationToken.None);
+        Assert.Equal(ExecutionMode.ReadOnly, (await service.GetForGroupAsync("prod", CancellationToken.None)).Mode);
+        await service.SaveAsync(new ExecutionModePolicy("prod", ExecutionMode.Confirm), CancellationToken.None);
+        await service.SaveAsync(new ExecutionModePolicy("staging", ExecutionMode.ReadOnly), CancellationToken.None);
+        Assert.Equal(ExecutionMode.Confirm, (await service.GetForGroupAsync("prod", CancellationToken.None)).Mode);
+        Assert.Equal(ExecutionMode.ReadOnly, (await service.GetForGroupAsync("staging", CancellationToken.None)).Mode);
     }
 
     [Fact]
@@ -474,7 +491,7 @@ public sealed class AgentToolPolicyTests
 
         await service.SaveAsync(new ExecutionModePolicy("prod", ExecutionMode.Confirm), CancellationToken.None);
         Assert.Equal(ExecutionMode.Confirm, (await service.GetForGroupAsync("prod", CancellationToken.None)).Mode);
-        Assert.Equal(ExecutionMode.Confirm, (await service.GetForGroupAsync("unknown-group", CancellationToken.None)).Mode);
+        Assert.Equal(ExecutionMode.ReadOnly, (await service.GetForGroupAsync("unknown-group", CancellationToken.None)).Mode);
     }
 
     [Fact]

@@ -21,17 +21,17 @@ public sealed class ExecutionModeService(
             .Select(server => server.Group)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Order(StringComparer.OrdinalIgnoreCase);
-        var (configured, corrupt) = await ReadAsync(cancellationToken);
+        var (configured, _) = await ReadAsync(cancellationToken);
         return serverGroups.Select(group => configured.TryGetValue(group, out var policy)
             ? policy with { Group = group }
-            : Default(group, corrupt)).ToArray();
+            : Default(group)).ToArray();
     }
 
     public async Task<ExecutionModePolicy> GetAsync(string group, CancellationToken cancellationToken)
     {
         ValidateGroup(group);
-        var (configured, corrupt) = await ReadAsync(cancellationToken);
-        return configured.TryGetValue(group, out var policy) ? policy with { Group = group } : Default(group, corrupt);
+        var (configured, _) = await ReadAsync(cancellationToken);
+        return configured.TryGetValue(group, out var policy) ? policy with { Group = group } : Default(group);
     }
 
     public async Task SaveAsync(ExecutionModePolicy policy, CancellationToken cancellationToken)
@@ -44,29 +44,18 @@ public sealed class ExecutionModeService(
         }
 
         var normalized = policy with { Group = policy.Group.Trim().ToLowerInvariant() };
-        var (configured, corrupt) = await ReadAsync(cancellationToken);
-        if (corrupt)
-        {
-            // Rewriting an unreadable setting must not silently lift the fail-closed state of the other groups:
-            // pin every other known group to read-only explicitly so only the saved group changes.
-            foreach (var group in (await servers.ListAsync(cancellationToken)).Select(server => server.Group.Trim().ToLowerInvariant()).Distinct())
-            {
-                if (!string.Equals(group, normalized.Group, StringComparison.OrdinalIgnoreCase))
-                {
-                    configured[group] = new ExecutionModePolicy(group, ExecutionMode.ReadOnly);
-                }
-            }
-        }
-
+        // Only the saved group's entry changes. Groups without an entry (including every group of an unreadable setting,
+        // which is rewritten here) read as ReadOnly, so saving one group can never loosen another (D-029).
+        var (configured, _) = await ReadAsync(cancellationToken);
         configured[normalized.Group] = normalized;
         await settings.SetAsync(SettingKey, JsonSerializer.Serialize(configured, JsonOptions), cancellationToken);
     }
 
     public async Task<ExecutionModePolicy> GetForGroupAsync(string group, CancellationToken cancellationToken)
     {
-        var (configured, corrupt) = await ReadAsync(cancellationToken);
+        var (configured, _) = await ReadAsync(cancellationToken);
         var normalized = group.Trim().ToLowerInvariant();
-        return configured.TryGetValue(normalized, out var policy) ? policy : Default(normalized, corrupt);
+        return configured.TryGetValue(normalized, out var policy) ? policy : Default(normalized);
     }
 
     /// <summary>True when the stored policies cannot be read, in which case every group is treated as read-only.</summary>
@@ -127,8 +116,8 @@ public sealed class ExecutionModeService(
         }
     }
 
-    private static ExecutionModePolicy Default(string group, bool failClosed = false) =>
-        new(group, failClosed ? ExecutionMode.ReadOnly : ExecutionMode.Confirm);
+    // D-029: a group with no stored policy, and every group while the setting is unreadable, is ReadOnly.
+    private static ExecutionModePolicy Default(string group) => new(group, ExecutionMode.ReadOnly);
 
     private static void ValidateGroup(string group)
     {

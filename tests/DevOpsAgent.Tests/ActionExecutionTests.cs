@@ -223,7 +223,13 @@ public sealed class ActionExecutionTests
     {
         var serverRepository = new ServerRepository(context);
         var registry = new ToolRegistry();
-        executionModes ??= new ExecutionModeService(new AppSettingRepository(context), serverRepository, NullLogger<ExecutionModeService>.Instance);
+        if (executionModes is null)
+        {
+            // Groups default to read-only (D-029); these tests exercise approved execution, so their groups are set to Confirm.
+            executionModes = new ExecutionModeService(new AppSettingRepository(context), serverRepository, NullLogger<ExecutionModeService>.Instance);
+            foreach (var group in context.Servers.Select(server => server.Group).Distinct().ToList())
+                executionModes.SaveAsync(new ExecutionModePolicy(group, ExecutionMode.Confirm), CancellationToken.None).GetAwaiter().GetResult();
+        }
         return new ActionExecutionService(new ActionRecordRepository(context), serverRepository, registry, executionModes,
             new ToolCommandBuilder(registry), runner, TimeProvider.System);
     }

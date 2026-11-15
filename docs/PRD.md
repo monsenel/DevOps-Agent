@@ -113,7 +113,7 @@ DevOps Agent is a self-hosted web app, shipped as a Docker image, that connects 
 |---|---|
 | AGT-1 | Typed tools: `list_servers`, `query_graph`, `run_discovery`, `service_status`, `restart_service`, `docker_ps`, `docker_logs`, `tail_log`, `read_file`, `disk_usage`, `list_updates`, `apply_updates`, `block_ip`, `unblock_ip`, `list_bans`, `run_shell` |
 | AGT-2 | Each tool declares read-only or mutating |
-| AGT-3 | Execution modes per server group: read-only / confirm each change (default). Auto within allowlist is deferred to v2 (D-026). |
+| AGT-3 | Execution modes per server group: read-only (default, D-029) / confirm each change. Auto within allowlist is deferred to v2 (D-026). |
 | AGT-4 | Mutating calls produce a "Proposed action" card showing exact commands and servers; Approve/Reject |
 | AGT-5 | `run_shell` always requires approval |
 | AGT-6 | Action log: tool, servers, command, stdout/stderr, exit code, conversation, approved by, timestamps |
@@ -155,7 +155,7 @@ DevOps Agent is a self-hosted web app, shipped as a Docker image, that connects 
 2. Settings › LLM connection: add Ollama (`http://ollama:11434/v1`) or OpenRouter; Test connection shows reachable, models, tool calling.
 3. Servers: paste `~/.ssh/config` or add servers; choose a jump server for private ones; key files picked from `/keys`.
 4. The app tests each connection, shows OS, uptime, sudo availability, and which collectors will run with reduced detail.
-5. Tag servers; set execution mode per group (default: confirm each change).
+5. Tag servers; set execution mode per group (default: read-only; switch a group to confirm each change to allow approved actions).
 6. Run first discovery.
 
 ### J2 — Discover and expand the map
