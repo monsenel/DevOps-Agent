@@ -12,9 +12,9 @@
 
 ## Current
 
-- **Task:** T7.R24 Optional sudo password per server done (owner order; filed as "T7.R20", renumbered because T7.R20 exists). T7.R1–T7.R3, T7.R15, T7.R17–T7.R19 done; T7.R4 and T7.R16 held by the owner
+- **Task:** T7.R24 Optional sudo password per server done (owner order; filed as "T7.R20", renumbered because T7.R20 exists). T7.R1–T7.R3, T7.R15, T7.R17–T7.R19 done; T7.R4 and T7.R16 held by the owner. Review-r3 of v0.1.3..HEAD done (2 fixes, T7.R25/T7.R26 filed; T7.R25 is high and needs an owner decision)
 - **Status:** —
-- **Last updated:** 2026-11-15 by ZCode
+- **Last updated:** 2026-11-16 by ZCode
 
 ## WIP notes
 
@@ -40,6 +40,8 @@ The 2026-11-15 review fixed small issues in `fix(review): …` commits (build 0 
 | T7.R21 | medium | Deadline/timeout semantics: budget-cut commands count as hung, short deadlines back hosts off, long commands vs short timeouts, wording, notification phase unbounded |
 | T7.R22 | low | Shutdown/lease hardening: shutdown during an action or update scan, serial client disposal, reuse re-check, grace and docs |
 | T7.R23 | low | Auth-failed follow-ups: topology badge cause, jump hint, decrypt-error wording, flap policy, generation re-checks |
+| T7.R25 | high | A password sudo whose outcome is unknown (timeout, cancel, drop after the write) is tried again; owner decision on pausing unknown outcomes; fail-open rejection lines; password left on stdin |
+| T7.R26 | medium | Sudo password redaction is per server (plain text in another entry's auth-scan state); short passwords; stale sudo column |
 | T7.R12 | low | Test gaps (chat send loop, discovery parallelism, unix sockets, dnf, no-sudo path) |
 
 ### Live acceptance run (2026-11-15, single agent; replaces earlier overlapping results)
@@ -146,6 +148,8 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T7.R22 | Shutdown and lease hardening | todo | |
 | T7.R23 | Auth-failed follow-ups | todo | |
 | T7.R24 | Optional sudo password per server | done | `feat(T7.R24): optional per-server sudo password over stdin; one rejected attempt pauses sudo` |
+| T7.R25 | Unknown-outcome sudo password attempts | todo | |
+| T7.R26 | Sudo password redaction across servers | todo | |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
 
@@ -154,6 +158,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 ## Session log
 
 One line per session: date · tool/model · tasks touched · result.
+
+- 2026-11-16 · ZCode / Claude · independent review of v0.1.3..HEAD (auth-retry cap, `ssh-auth-failed`, T7.R24 sudo password, lockout safety, `sudo-auth-failed`) · one read-only reviewer plus a live run (isolated `/tmp` DB, published Release on 127.0.0.1:5199, srv-db as `dvapw` (password sudo) and `dva` (NOPASSWD), private sshd on 127.0.0.1:2222 rejecting the key, TEST-NET 192.0.2.1, ntfy pointed at a local listener, no container created): password never in srv-db process args (90 s `ps` sampling, `sudo -S -p  -- sh -c …` only), app log, DB files (only `CfDJ8…`), alerts, notifications, server→browser SignalR frames (42 frames) or prerendered pages; wrong password = 1 `pam_unix` failure, rejection recorded 21:05:01, Test connection twice "Not tried", Retry now disabled, 0 further attempts over 3 min and an app restart; `sudo-auth-failed` Medium opened/resolved with notifications `[Medium] db-pw · sudo-auth-failed · opened|resolved`; removing the password -> `sudo -n true` ("a password is required", no auth attempt), text byte-identical to v0.1.3; auth cap: 3 logins 60 s apart then paused, Retry now and Test connection 1 login each, restart allows 3 more (documented), alert/notification `ssh-auth-failed` vs `server-unreachable` for the blackhole; found: an unknown sudo outcome is retried (srv-db frozen inside PAM's delay -> 2 failures for one wrong password, T7.R25), redaction is per server (T7.R26); 2 `fix(review-r3)` commits (authentication window starts at the send; a rejection that cannot be stored still pauses sudo in memory), re-verified live on the fixed build (1 failure, Test connection "Not tried", correct password "Available (password)"); build 0 warnings, 594 tests
 
 - 2026-11-16 · ZCode / Claude · owner fix (no task) · `fix(alerts)`: a rejected sudo password opens a Medium `sudo-auth-failed` alert per server (D-028 notification text, fixed details), from stored state `Server.SudoAuthFailedSinceUtc` (migration `AddServerSudoAuthFailedSince` with a backfill for already-paused servers, checked on a scratch DB); kept across a password edit, resolved by the next password sudo that exits 0 or by removing the password (D-040 amendment 2, README, PLAN T5.3 rule list); build 0 warnings, 592/592 tests (3 new; removing the success recording is caught); tagged v0.1.5 locally (not pushed)
 - 2026-11-16 · ZCode / Claude · owner fix (no task) · pushed `main` (af9e0b2..0832244) and tags v0.1.1–v0.1.4 over SSH on the owner's request (from now on no push unless asked); `fix(sudo)`: a rejected sudo password is never retried by Retry now or Test connection (two pam_faillock failures per wrong password, common limit 3): the sudo probe is skipped and `SudoCapable` kept, Retry now shown disabled with the reason, only an edit or removal of the password lifts the pause (D-040 amendment 1, README); build 0 warnings, 589/589 tests (3 new/replaced in `SudoPasswordTests`, mutation of the skip caught)

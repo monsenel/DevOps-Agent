@@ -17,6 +17,11 @@ Independent review of the SSH lifecycle work (T7.R15, T7.R17–T7.R19) and the a
 - Health checks of a host whose login failed keep running (they use no SSH).
 - A container query that fails half-way is a failed sample; a stored container history with a missing field is reported as corrupt instead of stopping every alert evaluation.
 
+Independent review of the sudo password (T7.R24), its lockout safety and alert, and the auth-retry cap:
+
+- The 15 s sudo authentication window starts when the password is sent; a slow connect no longer uses it up and lets a second password sudo start while the first is still being checked.
+- A wrong sudo password whose rejection cannot be stored (database error) still pauses sudo on that server in the running app instead of being sent again.
+
 ## 0.1.2 — 2026-11-15
 
 - T7.R1: per-host SSH backoff (1 min doubling to 15 min, reset on success); servers behind an unreachable jump host are reported unreachable without a connection attempt; alerts, metrics and health checks run 8 servers in parallel; "Retry now" on Servers bypasses the backoff. With a blackholed host, discovery takes ~15 s and metric cycles stay well under 60 s.
