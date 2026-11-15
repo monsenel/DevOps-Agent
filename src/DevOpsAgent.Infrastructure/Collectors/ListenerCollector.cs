@@ -8,7 +8,8 @@ public sealed class ListenerCollector : ICollector
 {
     public const string Command = "ss -tulpnH";
 
-    private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(15);
+    // More than the 20 s a password sudo needs left (T7.R25); `ss` itself answers in well under a second.
+    private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(30);
 
     public string Name => "listeners";
 

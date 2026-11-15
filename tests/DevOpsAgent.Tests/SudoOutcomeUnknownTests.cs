@@ -263,3 +263,46 @@ public sealed partial class SudoPasswordTests
         Assert.False(AppSudoCommands.IsAppCommand("/usr/bin/sh -c 'true'"));
     }
 }
+
+/// <summary>
+/// T7.R25 follow-up: every caller that may use password sudo leaves it more than the 20 s it needs (found live: the listener
+/// collector's 15 s timeout meant it never ran with a password).
+/// </summary>
+public sealed class SudoCallerTimeoutTests
+{
+    [Fact]
+    public async Task SudoCollectors_GiveAPasswordSudoMoreThanTwentySeconds()
+    {
+        var runner = new TimeoutRecordingRunner();
+        var server = new DevOpsAgent.Domain.Servers.Server("db", "db.test", 22, "dvapw", "key", "staging");
+        server.RecordCapabilities(true, null, DateTimeOffset.UnixEpoch);
+        var context = new DevOpsAgent.Application.Abstractions.ServerContext(server, runner);
+        DevOpsAgent.Application.Abstractions.ICollector[] collectors =
+        [
+            new DevOpsAgent.Infrastructure.Collectors.ListenerCollector(),
+            new DevOpsAgent.Infrastructure.Collectors.NginxCollector(),
+            new DevOpsAgent.Infrastructure.Collectors.DockerCollector(),
+            new DevOpsAgent.Infrastructure.Collectors.ConnectionCollector()
+        ];
+
+        foreach (var collector in collectors)
+        {
+            try { await collector.CollectAsync(context, CancellationToken.None); } catch (Exception) { /* only the timeouts matter */ }
+        }
+
+        Assert.NotEmpty(runner.SudoTimeouts);
+        Assert.All(runner.SudoTimeouts, timeout => Assert.True(timeout > SudoPasswordGate.MinimumTimeLeft, timeout.ToString()));
+        Assert.True(AuthLogScanner.CommandTimeout > SudoPasswordGate.MinimumTimeLeft);
+    }
+
+    private sealed class TimeoutRecordingRunner : ISshRunner
+    {
+        public List<TimeSpan> SudoTimeouts { get; } = [];
+
+        public Task<RemoteCommandResult> RunAsync(Guid serverId, string command, SshRunOptions options, CancellationToken cancellationToken)
+        {
+            if (options.UseSudo) SudoTimeouts.Add(options.Timeout);
+            return Task.FromResult(new RemoteCommandResult(0, string.Empty, string.Empty, TimeSpan.Zero));
+        }
+    }
+}
