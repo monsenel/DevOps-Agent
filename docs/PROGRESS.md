@@ -36,7 +36,6 @@ The 2026-11-15 review fixed small issues in `fix(review): …` commits (build 0 
 | T7.R11 | medium | Manual real-browser recheck of forms, 390 px and contrast |
 | T7.R14 | medium | Privileged commands as direct argv so sudoers can pin them |
 | T7.R16 | medium | Stale carry-forward: fresh→stale edges, stale hosts' other addresses, last-seen time, new-listener guard |
-| T7.R19 | low | Remaining after the owner's scope: claim token for a cancelled caller, target's own backoff before its jump host, Servers "Not tested" label |
 | T7.R12 | low | Test gaps (chat send loop, discovery parallelism, unix sockets, dnf, no-sudo path) |
 
 ### Live acceptance run (2026-11-15, single agent; replaces earlier overlapping results)
