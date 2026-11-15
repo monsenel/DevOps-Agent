@@ -851,6 +851,25 @@ p {
     gap: 10px;
 }
 
+.provider-empty {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px 16px;
+    border-radius: var(--dva-radius-tile);
+    background: var(--dva-inset);
+}
+
+.provider-empty strong {
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.provider-empty p {
+    color: var(--dva-muted);
+    font-size: 12px;
+}
+
 .provider-list-spacer {
     flex: 1 1 12px;
     min-height: 12px;

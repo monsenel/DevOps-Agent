@@ -13,7 +13,7 @@
 ## Current
 
 - **Task:** T7.R25 and T7.R26 done (owner order 2026-11-16); T8.1–T8.9 next. T7.R4 and T7.R16 still held by the owner.
-- **Status:** T8.1 in progress
+- **Status:** T8.1 done; next T8.2
 - **Last updated:** 2026-11-16 by ZCode
 
 ## WIP notes
@@ -148,7 +148,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T7.R24 | Optional sudo password per server | done | `feat(T7.R24): optional per-server sudo password over stdin; one rejected attempt pauses sudo` |
 | T7.R25 | Unknown-outcome sudo password attempts | done | `feat(T7.R25): a password sudo is confirmed only by its marker; an unknown outcome pauses until Retry now` |
 | T7.R26 | Sudo password redaction across servers | done | `feat(T7.R26): every stored sudo password is redacted from every server's output, alerts and LLM input; live sudo column` |
-| T8.1 | Bugs seen in screenshots | in-progress | |
+| T8.1 | Bugs seen in screenshots | done | `feat(T8.1): provider list and form always agree; read-only updates cannot be selected; header separator` |
 | T8.2 | Global search | todo | |
 | T8.3 | Theme toggle icon button | todo | |
 | T8.4 | Automatic known_hosts (TOFU) | todo | |
@@ -166,6 +166,7 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 
 One line per session: date · tool/model · tasks touched · result.
 
+- 2026-11-16 · ZCode / Claude · T8.1 done · Settings › LLM: `ProviderEditor` keeps list and form in step (selected provider = form values; no providers or Add provider = empty form with no type chosen, heading "Add provider", empty-state tile "No providers yet", `autocomplete=off` on the type/name/URL fields against browser form restore); Updates: `ServerUpdateStatus.ReadOnly` (group read-only, D-027/D-029) hides the select column and disables Review with the reason shown, badge "Read-only group"; header line `apt · <time> · Package lists last refreshed …` (`MetaLine`); build 0 warnings, 630 tests (7 new); browser check on the isolated :5199 app: empty Settings form in dark, Updates in light and dark (a display-only package row inserted into the /tmp DB and removed again)
 - 2026-11-16 · ZCode / Claude · T7.R26 done · D-040 amendment 5: `IKnownSecrets` (all stored sudo passwords, cached, invalidated on edits) applied to every server's results in `SshRunner`, to alert target/title/details (`AlertService`) and to all LLM input (`ChatService`, local providers too, tool summaries stored redacted); sudo passwords < 6 characters refused (form hint, validation message without the parameter suffix); Servers page reloads on `ServerStateEvents` from the gate; new `ChatServiceHarness` for chat tests; build 0 warnings, 623 tests (9 new); live (isolated DB, Release :5199): srv-db added again as `dva` without a password, failed SSH login with canary `R26-canary-…` as user name → `dva` entry's scan state `[REDACTED]`, canary in 0 DB rows/0 DB+WAL bytes/0 log lines; 5-char password refused in the form; with the page open, saving the canary as db-pw's password turned the row into "sudo: password — rejected" 23.5 s later without a reload; canary lines removed from srv-db auth.log in place (inode kept), real password restored (Test connection "Available (password)"), db-again removed
 - 2026-11-16 · ZCode / Claude · T7.R25 done · D-040 amendment 4 (owner decision): password sudo `LC_ALL=C sudo -S -p '' -- sh -c 'exec </dev/null; printf "%s\n" "<marker>"; <cmd>'` with a per-call random marker read from stdout as it arrives (SSH.NET OutputStream checked live), accepted only when the marker comes back; no marker and no rejection lines = outcome unknown (persisted, paused, same Medium sudo-auth-failed alert, Servers "sudo: password — outcome unknown, paused" + Retry now); attempt written down before the password is sent (crash = unknown); turn held until confirmed or stored (15 s window removed); no password sudo with < 20 s left of call or cycle deadline (auth scan 24 s, sudo probe 30 s); AppSudoCommands strips the marker preamble (sudo's logged format verified on srv-db); build 0 warnings, 614 tests (20 new); live (isolated /tmp DB, Release on 127.0.0.1:5199, srv-db as dvapw via srv-edge): correct password → Test connection "Available (password)", no ssh-unusual-sudo alert for the marker commands; run 1 (watcher crashed on tail.kill, srv-db frozen 83 s instead of 35 s, unpaused by hand) and run 2 (frozen 0.58 s after `pam_unix … authentication failure`, unpaused after 35.3 s): each exactly 1 PAM failure, outcome unknown recorded at the 25 s cycle deadline, sudo-auth-failed Medium opened, 0 further attempts over 4 min 46 s; Retry now = exactly 1 attempt → rejected → Retry now disabled; correct password → confirmed, alert resolved 22:04:46; passwords found 0 times in app log and DB files
 - 2026-11-16 · ZCode / Claude · started T7.R25 (owner decision: marker confirmation, unknown outcome pauses, 20 s minimum), then T7.R26 and T8.1–T8.9 · baseline build 0 warnings, 594/594 tests

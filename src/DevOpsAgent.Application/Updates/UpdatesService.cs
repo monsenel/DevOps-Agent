@@ -19,6 +19,7 @@ public sealed class UpdatesService(
         var inventory = await servers.ListAsync(cancellationToken);
         var saved = await packages.ListAsync(cancellationToken);
         var latestScans = (await scans.ListAsync(cancellationToken)).ToDictionary(scan => scan.ServerId);
+        var readOnly = await ReadOnlyGroupsAsync(inventory, cancellationToken);
         return inventory.Select(server =>
         {
             var items = saved.Where(item => item.ServerId == server.Id).ToArray();
@@ -27,8 +28,17 @@ public sealed class UpdatesService(
                 Enum.TryParse<PackageManagerKind>(scan?.PackageManager, true, out var manager) ? manager : null,
                 scan?.CheckedAtUtc,
                 items.Select(item => new UpdatePackageDto(item.Name, item.CurrentVersion, item.CandidateVersion, item.Repository, item.IsSecurity)).ToArray(), scan?.Error,
-                scan?.PackageListsRefreshedAtUtc, scan?.CacheOnly ?? false);
+                scan?.PackageListsRefreshedAtUtc, scan?.CacheOnly ?? false, readOnly.Contains(server.Group));
         }).ToArray();
+    }
+
+    // Read one group at a time: the scoped DbContext must not be used concurrently.
+    private async Task<HashSet<string>> ReadOnlyGroupsAsync(IEnumerable<Domain.Servers.Server> inventory, CancellationToken cancellationToken)
+    {
+        var readOnly = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var group in inventory.Select(server => server.Group).Distinct(StringComparer.Ordinal))
+            if ((await executionModes.GetForGroupAsync(group, cancellationToken)).Mode == ExecutionMode.ReadOnly) readOnly.Add(group);
+        return readOnly;
     }
 
     public async Task<IReadOnlyList<ServerUpdateStatus>> ScanAsync(CancellationToken cancellationToken)
@@ -61,7 +71,8 @@ public sealed class UpdatesService(
             if (item.Error is not null || item.Collected is null)
             {
                 await scans.SaveAsync(new UpdateScan(item.Server.Id, null, checkedAt, item.Error), CancellationToken.None);
-                results.Add(new ServerUpdateStatus(item.Server.Id, item.Server.Name, item.Server.Group, null, checkedAt, [], item.Error));
+                results.Add(new ServerUpdateStatus(item.Server.Id, item.Server.Name, item.Server.Group, null, checkedAt, [], item.Error,
+                    ReadOnly: cacheOnly[item.Server.Id]));
                 continue;
             }
             await packages.ReplaceForServerAsync(item.Server.Id, item.Rows.Select(row => new UpdatePackage(item.Server.Id,
@@ -69,7 +80,7 @@ public sealed class UpdatesService(
             await scans.SaveAsync(new UpdateScan(item.Server.Id, item.Collected.PackageManager.ToString(), checkedAt, null,
                 item.Collected.PackageListsRefreshedAtUtc, item.Collected.CacheOnly), cancellationToken);
             results.Add(new ServerUpdateStatus(item.Server.Id, item.Server.Name, item.Server.Group, item.Collected.PackageManager, checkedAt, item.Rows, null,
-                item.Collected.PackageListsRefreshedAtUtc, item.Collected.CacheOnly));
+                item.Collected.PackageListsRefreshedAtUtc, item.Collected.CacheOnly, cacheOnly[item.Server.Id]));
         }
         return results.OrderBy(result => result.ServerName, StringComparer.OrdinalIgnoreCase).ToArray();
     }

@@ -44,15 +44,14 @@
                         <header class="updates-server-header">
                             <div>
                                 <h4>@server.ServerName</h4>
-                                <span class="muted">@(server.PackageManager?.ToString().ToLowerInvariant() ?? "Not scanned")
-                                    · @(server.CheckedAtUtc?.ToLocalTime().ToString("g") ?? "No scan yet")</span>
-                                @if (server.CheckedAtUtc is not null)
-                                {
-                                    <span class="muted updates-freshness">@PackageListProbe.Describe(server.PackageListsRefreshedAtUtc, server.CacheOnly, DateTimeOffset.UtcNow)</span>
-                                }
+                                <span class="muted updates-meta">@server.MetaLine(DateTimeOffset.UtcNow, at => at.ToLocalTime().ToString("g"))</span>
                             </div>
                             <div class="updates-server-badges">
                                 <span class="ui-badge neutral">@server.Packages.Count pending</span>
+                                @if (server.ReadOnly)
+                                {
+                                    <span class="ui-badge neutral">Read-only group</span>
+                                }
                                 @if (server.Packages.Any(item => item.IsSecurity))
                                 {
                                     <span class="ui-badge warn">Security updates</span>
@@ -71,14 +70,18 @@
                         {
                             <div class="updates-package-table-wrap">
                                 <table class="updates-package-table">
-                                    <thead><tr><th>Select</th><th>Package</th><th>Installed</th><th>Candidate</th><th>Source</th><th>Type</th></tr></thead>
+                                    <thead><tr>@if (!server.ReadOnly) { <th>Select</th> }<th>Package</th><th>Installed</th><th>Candidate</th><th>Source</th><th>Type</th></tr></thead>
                                     <tbody>
                                         @foreach (var package in server.Packages.OrderByDescending(item => item.IsSecurity).ThenBy(item => item.Name))
                                         {
                                             var key = (server.ServerId, package.Name);
                                             <tr>
-                                                <td><input type="checkbox" aria-label="Select @package.Name on @server.ServerName"
-                                                           checked="@_selected.Contains(key)" @onchange="eventArgs => SelectPackage(key, eventArgs)" /></td>
+                                                @* Read-only groups never apply updates (D-027): no selection, the reason is shown below. *@
+                                                @if (!server.ReadOnly)
+                                                {
+                                                    <td><input type="checkbox" aria-label="Select @package.Name on @server.ServerName"
+                                                               checked="@_selected.Contains(key)" @onchange="eventArgs => SelectPackage(key, eventArgs)" /></td>
+                                                }
                                                 <td class="mono">@package.Name</td>
                                                 <td class="mono">@(string.IsNullOrEmpty(package.CurrentVersion) ? "—" : package.CurrentVersion)</td>
                                                 <td class="mono">@package.CandidateVersion</td>
@@ -90,8 +93,16 @@
                                 </table>
                             </div>
                             <div class="updates-actions">
-                                <button class="ui-button primary" type="button" disabled="@(_busy || !_selected.Any(item => item.ServerId == server.ServerId))"
-                                        @onclick="() => ProposeAsync(server)">Review selected updates</button>
+                                @if (server.ReadOnly)
+                                {
+                                    <button class="ui-button primary" type="button" disabled aria-describedby="updates-readonly-@server.ServerId.ToString("N")">Review selected updates</button>
+                                    <span class="muted updates-readonly-reason" id="updates-readonly-@server.ServerId.ToString("N")">@ServerUpdateStatus.ReadOnlyReason</span>
+                                }
+                                else
+                                {
+                                    <button class="ui-button primary" type="button" disabled="@(_busy || !_selected.Any(item => item.ServerId == server.ServerId))"
+                                            @onclick="() => ProposeAsync(server)">Review selected updates</button>
+                                }
                             </div>
                         }
                     </article>

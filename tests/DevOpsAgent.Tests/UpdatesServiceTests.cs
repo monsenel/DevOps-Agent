@@ -42,6 +42,44 @@ public sealed class UpdatesServiceTests
         Assert.True(Assert.Single(collector.CacheOnlyRequests));
     }
 
+    [Fact]
+    public async Task ReadOnlyGroups_AreMarked_SoTheirUpdatesCannotBeSelectedOrApplied()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var readOnly = new Server("ro", "ro.example.internal", 22, "deploy", "key", "prod");
+        var confirm = new Server("cf", "cf.example.internal", 22, "deploy", "key", "staging");
+        database.Context.Servers.AddRange(readOnly, confirm);
+        await database.Context.SaveChangesAsync();
+        var serverRepo = new ServerRepository(database.Context);
+        var executionModes = new ExecutionModeService(new AppSettingRepository(database.Context), serverRepo,
+            NullLogger<ExecutionModeService>.Instance);
+        await executionModes.SaveAsync(new ExecutionModePolicy("staging", DevOpsAgent.Domain.Agent.ExecutionMode.Confirm), CancellationToken.None);
+        var service = new UpdatesService(serverRepo, new UpdatePackageRepository(database.Context), new UpdateScanRepository(database.Context),
+            new FakeUpdatesCollector("[]"), executionModes, TimeProvider.System);
+
+        var listed = await service.ListAsync(CancellationToken.None);
+        var scanned = await service.ScanAsync(CancellationToken.None);
+
+        Assert.True(listed.Single(item => item.ServerName == "ro").ReadOnly);
+        Assert.False(listed.Single(item => item.ServerName == "cf").ReadOnly);
+        Assert.True(scanned.Single(item => item.ServerName == "ro").ReadOnly);
+        Assert.False(scanned.Single(item => item.ServerName == "cf").ReadOnly);
+        Assert.Contains("Read-only group", ServerUpdateStatus.ReadOnlyReason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HeaderLine_SeparatesScanTimeAndListRefresh()
+    {
+        var now = new DateTimeOffset(2026, 11, 16, 12, 0, 0, TimeSpan.Zero);
+        var scanned = new ServerUpdateStatus(Guid.NewGuid(), "db", "staging", PackageManagerKind.Apt, now.AddMinutes(-5), [], null,
+            now.AddHours(-2), CacheOnly: true);
+        var never = scanned with { PackageManager = null, CheckedAtUtc = null };
+
+        Assert.Equal("apt · 11:55 · Package lists last refreshed 2 h ago · cached lists only (read-only group)",
+            scanned.MetaLine(now, at => at.ToString("HH:mm")));
+        Assert.Equal("Not scanned · No scan yet", never.MetaLine(now, at => at.ToString("HH:mm")));
+    }
+
     private static async Task<SqliteTestDatabase> CreateDatabaseAsync()
     {
         var connection = new SqliteConnection("Data Source=:memory:");

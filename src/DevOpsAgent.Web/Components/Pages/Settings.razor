@@ -159,11 +159,19 @@
         <div class="settings-row llm-main-row">
             <section class="ui-card providers-card" aria-labelledby="providers-heading">
                 <header class="ui-card-header"><h2 id="providers-heading">Providers</h2></header>
+                @if (_editor.Providers.Count == 0)
+                {
+                    @* T8.1: no providers means an empty list and an empty "Add provider" form, never a form that looks saved. *@
+                    <div class="provider-empty">
+                        <strong>No providers yet</strong>
+                        <p>Add Ollama, LM Studio, OpenRouter or any OpenAI-compatible endpoint to enable chat.</p>
+                    </div>
+                }
                 <div class="provider-list">
-                    @foreach (var provider in _providers)
+                    @foreach (var provider in _editor.Providers)
                     {
-                        <button type="button" class="provider-item @(_selectedProviderId == provider.Id ? "selected" : null)"
-                                aria-pressed="@(_selectedProviderId == provider.Id)" @onclick="() => SelectProviderAsync(provider)">
+                        <button type="button" class="provider-item @(_editor.SelectedId == provider.Id ? "selected" : null)"
+                                aria-pressed="@(_editor.SelectedId == provider.Id)" @onclick="() => SelectProviderAsync(provider)">
                             <span class="provider-item-heading"><strong>@provider.Name</strong>
                                 @if (provider.IsDefault) { <span class="ui-badge soft">Default</span> }
                             </span>
@@ -173,15 +181,15 @@
                     }
                 </div>
                 <div class="provider-list-spacer"></div>
-                <Button Variant="secondary" FullWidth="true" OnClick="AddProviderAsync">Add provider</Button>
+                <Button Variant="@(_editor.IsNew ? "primary" : "secondary")" FullWidth="true" OnClick="AddProviderAsync">Add provider</Button>
             </section>
 
             <section class="ui-card connection-card" aria-labelledby="connection-heading">
                 <header class="ui-card-header">
-                    <h2 id="connection-heading">Connection</h2>
-                    @if (!string.IsNullOrWhiteSpace(_form.Name))
+                    <h2 id="connection-heading">@(_editor.IsNew ? "Add provider" : "Connection")</h2>
+                    @if (!_editor.IsNew && _editor.Selected is { } shown)
                     {
-                        <span class="ui-badge soft">@_form.Name</span>
+                        <span class="ui-badge soft">@shown.Name</span>
                     }
                 </header>
 
@@ -197,29 +205,33 @@
                 <div class="connection-form-grid">
                     <div class="select-field">
                         <label for="provider-type">Provider type</label>
-                        <select id="provider-type" @bind="_form.Type" @bind:after="OnTypeChanged">
+                        <select id="provider-type" autocomplete="off" @bind="_editor.Form.Type" @bind:after="OnTypeChanged">
+                            @if (_editor.Form.Type is null)
+                            {
+                                <option value="">Select a provider type</option>
+                            }
                             <option value="Ollama">Ollama</option>
                             <option value="LmStudio">LM Studio</option>
                             <option value="OpenRouter">OpenRouter</option>
                             <option value="OpenAiCompatible">OpenAI-compatible (custom)</option>
                         </select>
                     </div>
-                    <Field Id="provider-name" Label="Display name" @bind-Value="_form.Name" />
-                    <Field Id="provider-url" Label="Base URL" @bind-Value="_form.BaseUrl" Mono="true"
+                    <Field Id="provider-name" Label="Display name" @bind-Value="_editor.Form.Name" Autocomplete="off" />
+                    <Field Id="provider-url" Label="Base URL" @bind-Value="_editor.Form.BaseUrl" Mono="true" Autocomplete="off"
                            Helper="Any endpoint that speaks the OpenAI chat completions API." />
                     <div class="field api-key-field">
                         <label for="provider-key">API key</label>
-                        <input id="provider-key" class="mono" type="password" @bind="_form.ApiKey"
+                        <input id="provider-key" class="mono" type="password" @bind="_editor.Form.ApiKey"
                                @bind:event="oninput" autocomplete="new-password" placeholder="@ApiKeyPlaceholder" />
                         <span class="field-helper">@ApiKeyHelper</span>
                     </div>
                     <div class="select-field model-select-field">
                         <label for="provider-model">Model</label>
                         <div class="model-refresh-row">
-                            <select id="provider-model" class="mono" @bind="_form.Model">
-                                @if (!_modelOptions.Contains(_form.Model, StringComparer.Ordinal))
+                            <select id="provider-model" class="mono" @bind="_editor.Form.Model">
+                                @if (!_modelOptions.Contains(_editor.Form.Model, StringComparer.Ordinal))
                                 {
-                                    <option value="@_form.Model">@(_form.Model.Length == 0 ? "Select model" : _form.Model)</option>
+                                    <option value="@_editor.Form.Model">@(_editor.Form.Model.Length == 0 ? "Select model" : _editor.Form.Model)</option>
                                 }
                                 @foreach (var model in _modelOptions)
                                 {
@@ -231,29 +243,29 @@
                     </div>
                     <div class="field">
                         <label for="context-window">Context window (tokens)</label>
-                        <input id="context-window" class="mono" type="number" min="0" step="1" @bind="_form.ContextWindow" />
+                        <input id="context-window" class="mono" type="number" min="0" step="1" @bind="_editor.Form.ContextWindow" />
                     </div>
                     <div class="field">
                         <label for="temperature">Temperature</label>
-                        <input id="temperature" class="mono" type="number" min="0" max="2" step="0.1" @bind="_form.Temperature" />
+                        <input id="temperature" class="mono" type="number" min="0" max="2" step="0.1" @bind="_editor.Form.Temperature" />
                     </div>
                     <div class="field">
                         <label for="request-timeout">Request timeout (seconds)</label>
-                        <input id="request-timeout" class="mono" type="number" min="1" max="600" step="1" @bind="_form.TimeoutSeconds" />
+                        <input id="request-timeout" class="mono" type="number" min="1" max="600" step="1" @bind="_editor.Form.TimeoutSeconds" />
                     </div>
                 </div>
 
                 <div class="connection-switches">
-                    <SwitchRow Title="Native tool calling" Helper="Off falls back to JSON in the prompt" @bind-Value="_form.NativeToolCallingEnabled" />
-                    <SwitchRow Title="Streaming" Helper="Show answers as they are generated" @bind-Value="_form.StreamingEnabled" />
-                    <SwitchRow Title="Use as default" Helper="For chat and tool calls" @bind-Value="_form.IsDefault" />
+                    <SwitchRow Title="Native tool calling" Helper="Off falls back to JSON in the prompt" @bind-Value="_editor.Form.NativeToolCallingEnabled" />
+                    <SwitchRow Title="Streaming" Helper="Show answers as they are generated" @bind-Value="_editor.Form.StreamingEnabled" />
+                    <SwitchRow Title="Use as default" Helper="For chat and tool calls" @bind-Value="_editor.Form.IsDefault" />
                 </div>
 
                 <div class="connection-actions">
                     <Button Disabled="_isSaving || _isTesting" OnClick="SaveAsync">@(_isSaving ? "Saving…" : "Save")</Button>
                     <Button Variant="secondary" Disabled="_isSaving || _isTesting" OnClick="TestConnectionAsync">@(_isTesting ? "Testing…" : "Test connection")</Button>
                     <span class="actions-spacer"></span>
-                    @if (_selectedProviderId is not null)
+                    @if (!_editor.IsNew)
                     {
                         <Button Variant="ghost-destructive" Disabled="_isSaving || _isTesting" OnClick="RemoveProviderAsync">Remove provider</Button>
                     }
@@ -297,7 +309,7 @@
 
             <section class="ui-card cloud-options-card" aria-labelledby="cloud-options-heading">
                 <header class="ui-card-header"><h2 id="cloud-options-heading">Cloud providers</h2></header>
-                <SwitchRow Title="Redact secrets before sending" Helper="Not applied to local or private-network endpoints" @bind-Value="_form.RedactSecretsBeforeSending" />
+                <SwitchRow Title="Redact secrets before sending" Helper="Not applied to local or private-network endpoints" @bind-Value="_editor.Form.RedactSecretsBeforeSending" />
                 <SwitchRow Title="Keep raw logs local" Helper="Available in v2" Value="false" Disabled="true" />
                 <SwitchRow Title="Fallback on failure" Helper="Available in v2" Value="false" Disabled="true" />
             </section>
@@ -307,10 +319,8 @@
 
 @code {
     private static readonly string[] Sections = ["LLM connection", "Servers and SSH", "Execution modes", "Notifications", "Discovery"];
-    private readonly List<LlmProviderSummary> _providers = [];
+    private readonly ProviderEditor _editor = new();
     private readonly List<string> _modelOptions = [];
-    private ProviderForm _form = new();
-    private Guid? _selectedProviderId;
     private string _section = "LLM connection";
     private string? _error;
     private string? _message;
@@ -345,12 +355,13 @@
     private bool _testingNotifications;
     private string? _notificationMessage;
     private string? _notificationError;
-    private LlmProviderSummary? _selectedProvider => _providers.SingleOrDefault(provider => provider.Id == _selectedProviderId);
+    private LlmProviderSummary? _selectedProvider => _editor.Selected;
 
-    private string ApiKeyPlaceholder => _form.Type switch
+    private string ApiKeyPlaceholder => _editor.Form.Type switch
     {
         ProviderType.Ollama => "Not required for Ollama",
         ProviderType.OpenRouter => "OpenRouter API key",
+        null => "Choose a provider type first",
         _ => "Optional API key"
     };
 
@@ -372,50 +383,40 @@
         _ => "Last test"
     };
 
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync() => LoadProvidersAsync();
+
+    // The list and the form change together (ProviderEditor): the form always shows the selected provider or is empty.
+    private async Task LoadProvidersAsync(Guid? select = null)
     {
-        await LoadProvidersAsync();
-        if (_providers.Count > 0)
-        {
-            await SelectProviderAsync(_providers.FirstOrDefault(provider => provider.IsDefault) ?? _providers[0]);
-        }
-        else
-        {
-            ResetForm();
-        }
+        _editor.Load(await Providers.ListAsync(CancellationToken.None), select);
+        ProviderStatus.Set(_editor.Providers.FirstOrDefault(provider => provider.IsDefault));
+        SyncSelection();
     }
 
-    private async Task LoadProvidersAsync()
+    private void SyncSelection()
     {
-        _providers.Clear();
-        _providers.AddRange(await Providers.ListAsync(CancellationToken.None));
-        ProviderStatus.Set(_providers.FirstOrDefault(provider => provider.IsDefault));
-    }
-
-    private async Task SelectProviderAsync(LlmProviderSummary provider)
-    {
-        _selectedProviderId = provider.Id;
-        _hasSavedApiKey = provider.HasApiKey;
+        _hasSavedApiKey = _editor.Selected?.HasApiKey ?? false;
         _modelOptions.Clear();
-        if (!string.IsNullOrWhiteSpace(provider.Model)) _modelOptions.Add(provider.Model);
-        _form = ProviderForm.From(provider);
-        _error = null;
-        _message = null;
-        await Task.CompletedTask;
+        if (!string.IsNullOrWhiteSpace(_editor.Form.Model)) _modelOptions.Add(_editor.Form.Model);
     }
 
-    private Task AddProviderAsync()
+    private Task SelectProviderAsync(LlmProviderSummary provider)
     {
-        _selectedProviderId = null;
-        _hasSavedApiKey = false;
-        _modelOptions.Clear();
-        ResetForm();
+        _editor.Select(provider.Id);
+        SyncSelection();
         _error = null;
         _message = null;
         return Task.CompletedTask;
     }
 
-    private void ResetForm() => _form = new ProviderForm { IsDefault = _providers.All(provider => !provider.IsDefault) };
+    private Task AddProviderAsync()
+    {
+        _editor.StartNew();
+        SyncSelection();
+        _error = null;
+        _message = null;
+        return Task.CompletedTask;
+    }
 
     private async Task SelectSection(string section)
     {
@@ -569,26 +570,7 @@
         _discoveryIntervalHours = int.TryParse(args.Value?.ToString(), out var hours) ? hours : 0;
     }
 
-    private void OnTypeChanged()
-    {
-        _form.BaseUrl = _form.Type switch
-        {
-            ProviderType.Ollama => "http://ollama:11434/v1",
-            ProviderType.LmStudio => "http://host.docker.internal:1234/v1",
-            ProviderType.OpenRouter => "https://openrouter.ai/api/v1",
-            _ => _form.BaseUrl
-        };
-        if (string.IsNullOrWhiteSpace(_form.Name) || _form.Name == "New provider")
-        {
-            _form.Name = _form.Type switch
-            {
-                ProviderType.Ollama => "Ollama",
-                ProviderType.LmStudio => "LM Studio",
-                ProviderType.OpenRouter => "OpenRouter",
-                _ => "New provider"
-            };
-        }
-    }
+    private void OnTypeChanged() => _editor.Form.ApplyTypeDefaults();
 
     private async Task RefreshModelsAsync()
     {
@@ -597,13 +579,13 @@
         _message = null;
         try
         {
-            var models = await Providers.RefreshModelsAsync(_selectedProviderId, _form.BaseUrl, _form.ApiKey,
-                _form.TimeoutSeconds, CancellationToken.None);
+            var models = await Providers.RefreshModelsAsync(_editor.SelectedId, _editor.Form.BaseUrl, _editor.Form.ApiKey,
+                _editor.Form.TimeoutSeconds, CancellationToken.None);
             _modelOptions.Clear();
             _modelOptions.AddRange(models);
-            if (_modelOptions.Count > 0 && !_modelOptions.Contains(_form.Model, StringComparer.Ordinal))
+            if (_modelOptions.Count > 0 && !_modelOptions.Contains(_editor.Form.Model, StringComparer.Ordinal))
             {
-                _form.Model = _modelOptions[0];
+                _editor.Form.Model = _modelOptions[0];
             }
             _message = $"Found {_modelOptions.Count} model{(_modelOptions.Count == 1 ? string.Empty : "s")}.";
         }
@@ -626,11 +608,17 @@
         _message = null;
         try
         {
-            var hadStoredKey = _hasSavedApiKey && string.IsNullOrWhiteSpace(_form.ApiKey);
-            var input = new LlmProviderInput(_form.Name, _form.Type, _form.BaseUrl, _form.Model,
-                _form.ContextWindow, _form.Temperature, _form.TimeoutSeconds, _form.IsDefault,
-                _form.NativeToolCallingEnabled, _form.StreamingEnabled, _form.RedactSecretsBeforeSending, _form.ApiKey);
-            var saved = _selectedProviderId is { } id
+            if (_editor.Form.Type is not { } type)
+            {
+                _error = "Choose a provider type.";
+                return null;
+            }
+
+            var hadStoredKey = _hasSavedApiKey && string.IsNullOrWhiteSpace(_editor.Form.ApiKey);
+            var input = new LlmProviderInput(_editor.Form.Name, type, _editor.Form.BaseUrl, _editor.Form.Model,
+                _editor.Form.ContextWindow, _editor.Form.Temperature, _editor.Form.TimeoutSeconds, _editor.Form.IsDefault,
+                _editor.Form.NativeToolCallingEnabled, _editor.Form.StreamingEnabled, _editor.Form.RedactSecretsBeforeSending, _editor.Form.ApiKey);
+            var saved = _editor.SelectedId is { } id
                 ? await Providers.UpdateAsync(id, input, CancellationToken.None)
                 : await Providers.CreateAsync(input, CancellationToken.None);
             if (saved is null)
@@ -639,10 +627,7 @@
                 return null;
             }
 
-            _selectedProviderId = saved.Id;
-            _hasSavedApiKey = saved.HasApiKey;
-            _form.ApiKey = string.Empty;
-            await LoadProvidersAsync();
+            await LoadProvidersAsync(saved.Id);
             _message = hadStoredKey && !saved.HasApiKey
                 ? "Provider saved. The stored API key was removed because the base URL changed; enter the key again."
                 : "Provider saved.";
@@ -697,14 +682,6 @@
         if (!confirmed) return;
         await Providers.DeleteAsync(_selectedProvider.Id, CancellationToken.None);
         await LoadProvidersAsync();
-        if (_providers.Count > 0)
-        {
-            await SelectProviderAsync(_providers.FirstOrDefault(provider => provider.IsDefault) ?? _providers[0]);
-        }
-        else
-        {
-            await AddProviderAsync();
-        }
         _message = "Provider removed.";
     }
 
@@ -717,35 +694,4 @@
 
     private static string YesNo(bool value) => value ? "Yes" : "No";
     private static string SupportText(bool? value) => value switch { true => "Supported", false => "Not supported", _ => "—" };
-
-    private sealed class ProviderForm
-    {
-        public ProviderType Type { get; set; } = ProviderType.Ollama;
-        public string Name { get; set; } = "Ollama";
-        public string BaseUrl { get; set; } = "http://ollama:11434/v1";
-        public string Model { get; set; } = string.Empty;
-        public int ContextWindow { get; set; } = 32768;
-        public double Temperature { get; set; } = 0.2;
-        public int TimeoutSeconds { get; set; } = 120;
-        public bool IsDefault { get; set; }
-        public bool NativeToolCallingEnabled { get; set; } = true;
-        public bool StreamingEnabled { get; set; } = true;
-        public bool RedactSecretsBeforeSending { get; set; } = true;
-        public string? ApiKey { get; set; }
-
-        public static ProviderForm From(LlmProviderSummary provider) => new()
-        {
-            Type = provider.Type,
-            Name = provider.Name,
-            BaseUrl = provider.BaseUrl,
-            Model = provider.Model,
-            ContextWindow = provider.ContextWindow,
-            Temperature = provider.Temperature,
-            TimeoutSeconds = provider.TimeoutSeconds,
-            IsDefault = provider.IsDefault,
-            NativeToolCallingEnabled = provider.NativeToolCallingEnabled,
-            StreamingEnabled = provider.StreamingEnabled,
-            RedactSecretsBeforeSending = provider.RedactSecretsBeforeSending
-        };
-    }
 }
