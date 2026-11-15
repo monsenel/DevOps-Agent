@@ -104,6 +104,11 @@ public sealed class SshRunner(
             // Recorded before the turn is released, so a command waiting for it reads the rejection and never tries.
             await gate.RecordRejectedAsync(serverId, credential.ProtectedValue!);
         }
+        else if (credential.AlertOpen && result.ExitCode == 0)
+        {
+            // sudo authenticated and the command worked: the sudo-auth-failed alert resolves.
+            await gate.RecordSucceededAsync(serverId, credential.ProtectedValue!);
+        }
 
         return SudoPasswordGate.Redact(result, credential.Password);
     }

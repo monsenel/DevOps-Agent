@@ -51,7 +51,7 @@ public sealed partial class SudoPasswordGate(
             // A paused password is decrypted too: it is never sent, but it stays on the server's redaction list.
             var password = secretProtector.Unprotect(protectedValue);
             return server.SudoPasswordRejectedAtUtc is null
-                ? SudoCredential.WithPassword(server.Name, protectedValue, password)
+                ? SudoCredential.WithPassword(server.Name, protectedValue, password, server.SudoAuthFailedSinceUtc is not null)
                 : SudoCredential.Paused(server.Name, protectedValue, password);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
@@ -97,6 +97,21 @@ public sealed partial class SudoPasswordGate(
     }
 
     /// <summary>
+    /// Records that sudo worked with the stored password (D-040 amendment 2): the server's sudo-auth-failed alert resolves.
+    /// Only called while that alert is open, so a healthy server costs no write.
+    /// </summary>
+    internal async Task RecordSucceededAsync(Guid serverId, string protectedValue)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IServerRepository>();
+        var server = await repository.GetAsync(serverId, CancellationToken.None);
+        if (server is null || server.ProtectedSudoPassword != protectedValue || server.SudoAuthFailedSinceUtc is null) return;
+        server.RecordSudoPasswordSucceeded();
+        await repository.SaveAsync(server, CancellationToken.None);
+        logger.LogInformation("{ServerName}: sudo works again with the stored sudo password", server.Name);
+    }
+
+    /// <summary>
     /// True when sudo refused the password: sudo exits non-zero and says "Sorry, try again." (each wrong password, also when
     /// pam_faillock has locked the account), "N incorrect password attempt(s)" or "no password was provided". Matched on whole
     /// stderr lines in the C locale (the command sets <c>LC_ALL=C</c>).
@@ -136,18 +151,19 @@ internal enum SudoCredentialKind
 /// <summary>A server's sudo credential. <see cref="ToString"/> never shows the password.</summary>
 internal sealed class SudoCredential
 {
-    private SudoCredential(SudoCredentialKind kind, string? serverName, string? protectedValue, string? password)
+    private SudoCredential(SudoCredentialKind kind, string? serverName, string? protectedValue, string? password, bool alertOpen = false)
     {
         Kind = kind;
         ServerName = serverName;
         ProtectedValue = protectedValue;
         Password = password;
+        AlertOpen = alertOpen;
     }
 
     public static SudoCredential None { get; } = new(SudoCredentialKind.None, null, null, null);
 
-    public static SudoCredential WithPassword(string serverName, string protectedValue, string password) =>
-        new(SudoCredentialKind.WithPassword, serverName, protectedValue, password);
+    public static SudoCredential WithPassword(string serverName, string protectedValue, string password, bool alertOpen = false) =>
+        new(SudoCredentialKind.WithPassword, serverName, protectedValue, password, alertOpen);
 
     public static SudoCredential Paused(string serverName, string protectedValue, string password) =>
         new(SudoCredentialKind.Paused, serverName, protectedValue, password);
@@ -158,6 +174,8 @@ internal sealed class SudoCredential
     public string? ServerName { get; }
     public string? ProtectedValue { get; }
     public string? Password { get; }
+    /// <summary>The server's sudo-auth-failed alert is open (a rejection, then an edit, and no success yet).</summary>
+    public bool AlertOpen { get; }
 
     public override string ToString() => $"{Kind} sudo credential";
 }

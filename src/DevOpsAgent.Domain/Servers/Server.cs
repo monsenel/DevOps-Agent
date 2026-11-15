@@ -43,6 +43,12 @@ public sealed class Server
     /// </summary>
     public DateTimeOffset? SudoPasswordRejectedAtUtc { get; private set; }
 
+    /// <summary>
+    /// Since when the server's "sudo-auth-failed" alert is open: set by a rejection, kept when the password is edited (an edit
+    /// is not proof that sudo works), cleared by the next password sudo that succeeds or by removing the password (D-040).
+    /// </summary>
+    public DateTimeOffset? SudoAuthFailedSinceUtc { get; private set; }
+
     public DateTimeOffset? LastSeenAtUtc { get; private set; }
     public string? OsInfo { get; private set; }
     public DateTimeOffset CreatedAtUtc { get; private set; }
@@ -85,14 +91,22 @@ public sealed class Server
         SudoPasswordRejectedAtUtc = null;
     }
 
-    /// <summary>Removes the stored sudo password; sudo goes back to <c>sudo -n</c>.</summary>
+    /// <summary>Removes the stored sudo password; sudo goes back to <c>sudo -n</c> and the sudo-auth-failed alert resolves.</summary>
     public void ClearSudoPassword()
     {
         ProtectedSudoPassword = null;
         SudoPasswordRejectedAtUtc = null;
+        SudoAuthFailedSinceUtc = null;
     }
 
-    public void RecordSudoPasswordRejected(DateTimeOffset rejectedAtUtc) => SudoPasswordRejectedAtUtc ??= rejectedAtUtc;
+    public void RecordSudoPasswordRejected(DateTimeOffset rejectedAtUtc)
+    {
+        SudoPasswordRejectedAtUtc ??= rejectedAtUtc;
+        SudoAuthFailedSinceUtc ??= rejectedAtUtc;
+    }
+
+    /// <summary>A sudo command with the stored password succeeded: the sudo-auth-failed alert resolves.</summary>
+    public void RecordSudoPasswordSucceeded() => SudoAuthFailedSinceUtc = null;
 
     /// <param name="sudoCapable">The sudo probe's result; null when the probe was not run (a rejected sudo password), which
     /// keeps the previous value.</param>

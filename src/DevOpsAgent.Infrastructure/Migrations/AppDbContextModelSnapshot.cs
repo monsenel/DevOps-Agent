@@ -702,6 +702,9 @@ namespace DevOpsAgent.Infrastructure.Migrations
                         .HasMaxLength(4096)
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTimeOffset?>("SudoAuthFailedSinceUtc")
+                        .HasColumnType("TEXT");
+
                     b.Property<bool?>("SudoCapable")
                         .HasColumnType("INTEGER");
 

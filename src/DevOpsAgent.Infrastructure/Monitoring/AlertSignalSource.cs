@@ -24,6 +24,9 @@ public sealed class AlertSignalSource(
     /// <summary>The alert rule of a failed SSH login (D-039): separate from <c>server-unreachable</c>.</summary>
     public const string AuthFailedRule = "ssh-auth-failed";
 
+    /// <summary>The alert rule of a rejected stored sudo password (D-040 amendment 2), Medium, one per server.</summary>
+    public const string SudoAuthFailedRule = "sudo-auth-failed";
+
     private readonly MonitoringCycleOptions _cycle = cycleOptions ?? new MonitoringCycleOptions();
 
     public async Task<IReadOnlyList<AlertCondition>> GetActiveConditionsAsync(CancellationToken cancellationToken)
@@ -145,6 +148,17 @@ public sealed class AlertSignalSource(
 
         foreach (var server in inventory)
         {
+            // Read from the stored state, not from a probe, so it neither needs nor waits for SSH: open from the rejection until
+            // a password sudo succeeds again or the password is removed (an edit alone is not proof). Fixed text only; never
+            // the password, a command or server output.
+            if (server.HasSudoPassword && server.SudoAuthFailedSinceUtc is { } sudoFailedSince)
+                result.Add(Condition(SudoAuthFailedRule, server.Id.ToString("N"), AlertSeverity.Medium, server.Id, server.Host,
+                    $"{server.Name}: sudo password rejected",
+                    $"The saved sudo password was rejected at {sudoFailedSince:yyyy-MM-dd HH:mm:ss} UTC. "
+                    + (server.SudoPasswordRejectedAtUtc is null
+                        ? "The password has been edited since; the alert resolves when sudo works with it."
+                        : "No sudo is used on this server until its sudo password is edited or removed.")));
+
             foreach (var check in await healthChecks.ListAsync(server.Id, cancellationToken))
             {
                 if (check.LastStatus == HealthCheckStatus.Unhealthy)

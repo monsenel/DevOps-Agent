@@ -274,6 +274,40 @@ public sealed class SudoPasswordTests
     }
 
     [Fact]
+    public async Task SudoAuthFailedState_OpensOnRejection_SurvivesAnEdit_ClosesOnSuccessOrRemoval()
+    {
+        await using var lab = await SudoLab.CreateAsync(WrongPassword);
+        await lab.Runner.RunAsync(lab.ServerId, "ss -tulpnH", Sudo, CancellationToken.None);
+        var since = (await lab.GetServerAsync()).SudoAuthFailedSinceUtc;
+        Assert.NotNull(since);
+
+        await lab.EditAsync(lab.Input("db") with { SudoPassword = Password });
+        var edited = await lab.GetServerAsync();
+        Assert.Null(edited.SudoPasswordRejectedAtUtc); // the pause is lifted ...
+        Assert.Equal(since, edited.SudoAuthFailedSinceUtc); // ... but the alert waits for sudo to work
+
+        await lab.Runner.RunAsync(lab.ServerId, "failing-command", Sudo, CancellationToken.None);
+        Assert.NotNull((await lab.GetServerAsync()).SudoAuthFailedSinceUtc); // a failing command proves nothing
+
+        await lab.Runner.RunAsync(lab.ServerId, "ss -tulpnH", Sudo, CancellationToken.None);
+        Assert.Null((await lab.GetServerAsync()).SudoAuthFailedSinceUtc);
+        Assert.Single(lab.Logs.Messages, message => message.Contains("sudo works again", StringComparison.Ordinal));
+
+        // A healthy server records nothing more on further successes.
+        await lab.Runner.RunAsync(lab.ServerId, "ss -tulpnH", Sudo, CancellationToken.None);
+        Assert.Single(lab.Logs.Messages, message => message.Contains("sudo works again", StringComparison.Ordinal));
+
+        await lab.EditAsync(lab.Input("db") with { SudoPassword = WrongPassword });
+        await lab.Runner.RunAsync(lab.ServerId, "ss -tulpnH", Sudo, CancellationToken.None);
+        Assert.NotNull((await lab.GetServerAsync()).SudoAuthFailedSinceUtc);
+        await lab.EditAsync(lab.Input("db") with { RemoveSudoPassword = true });
+        var removed = await lab.GetServerAsync();
+        Assert.Null(removed.SudoAuthFailedSinceUtc);
+        Assert.Null(removed.SudoPasswordRejectedAtUtc);
+        lab.AssertPasswordNowhere(Password, WrongPassword);
+    }
+
+    [Fact]
     public async Task StoredPassword_IsProtected_AndNeverInASummaryOrInputText()
     {
         await using var lab = await SudoLab.CreateAsync(Password);
@@ -496,6 +530,7 @@ public sealed class SudoPasswordTests
                 if (Delay > TimeSpan.Zero) await Task.Delay(Delay, cancellationToken);
                 if (standardInput != AcceptedPassword + "\n")
                     return Result(1, "", "Sorry, try again.\nsudo: no password was provided\nsudo: 1 incorrect password attempt\n");
+                if (command.Contains("failing-command", StringComparison.Ordinal)) return Result(1, "", "failing-command: not found");
                 return Echo ? Result(0, $"read: {standardInput}", $"note {AcceptedPassword} end") : Result(0, "ok", "");
             }
             finally

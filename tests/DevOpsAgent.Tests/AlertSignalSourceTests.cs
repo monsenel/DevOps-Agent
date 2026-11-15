@@ -73,6 +73,58 @@ public sealed class AlertSignalSourceTests
         Assert.All(unreachable, condition => Assert.Contains("gateway.test:22", condition.Details, StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task RejectedSudoPassword_OpensOneMediumSudoAuthFailedAlert_UntilSuccessOrRemoval()
+    {
+        var db = new Server("db", "db.test", 22, "dvapw", "test_key", "staging");
+        var other = new Server("app", "app.test", 22, "dva", "test_key", "staging");
+        db.SetSudoPassword("protected-secret-token");
+        other.SetSudoPassword("protected-other");
+        var source = Source(db, other);
+        Assert.DoesNotContain(await source.GetActiveConditionsAsync(CancellationToken.None), c => c.Rule == "sudo-auth-failed");
+
+        db.RecordSudoPasswordRejected(new DateTimeOffset(2026, 11, 16, 8, 0, 0, TimeSpan.Zero));
+        var paused = Assert.Single(await source.GetActiveConditionsAsync(CancellationToken.None), c => c.Rule == "sudo-auth-failed");
+        Assert.Equal(AlertSignalSource.SudoAuthFailedRule, paused.Rule);
+        Assert.Equal(AlertSeverity.Medium, paused.Severity);
+        Assert.Equal(db.Id, paused.ServerId);
+        Assert.Equal($"sudo-auth-failed:{db.Id:N}", paused.Key);
+        Assert.Equal("db: sudo password rejected", paused.Title);
+        Assert.DoesNotContain("protected-secret-token", paused.Details, StringComparison.Ordinal);
+
+        // An edit lifts the pause but is no proof that sudo works: the alert stays open (same key, so no new notification).
+        db.SetSudoPassword("protected-secret-token-2");
+        var edited = Assert.Single(await source.GetActiveConditionsAsync(CancellationToken.None), c => c.Rule == "sudo-auth-failed");
+        Assert.Equal(paused.Key, edited.Key);
+        Assert.Contains("edited", edited.Details, StringComparison.Ordinal);
+
+        db.RecordSudoPasswordSucceeded();
+        Assert.DoesNotContain(await source.GetActiveConditionsAsync(CancellationToken.None), c => c.Rule == "sudo-auth-failed");
+
+        db.RecordSudoPasswordRejected(DateTimeOffset.UnixEpoch);
+        Assert.Single(await source.GetActiveConditionsAsync(CancellationToken.None), c => c.Rule == "sudo-auth-failed");
+        db.ClearSudoPassword();
+        Assert.DoesNotContain(await source.GetActiveConditionsAsync(CancellationToken.None), c => c.Rule == "sudo-auth-failed");
+    }
+
+    [Fact]
+    public void SudoAuthFailedNotification_CarriesOnlyServerRuleSeverityAndState()
+    {
+        Assert.Equal("[Medium] db · sudo-auth-failed · opened",
+            DevOpsAgent.Application.Notifications.NotificationService.FormatAlertMessage("db", AlertSignalSource.SudoAuthFailedRule, AlertSeverity.Medium, resolved: false));
+        Assert.Equal("[Medium] db · sudo-auth-failed · resolved",
+            DevOpsAgent.Application.Notifications.NotificationService.FormatAlertMessage("db", AlertSignalSource.SudoAuthFailedRule, AlertSeverity.Medium, resolved: true));
+    }
+
+    private static AlertSignalSource Source(params Server[] servers)
+    {
+        var ssh = new FakeSshRunner();
+        var scanner = new AuthLogScanner(ssh, new FakeSettings(), Options.Create(new SecurityMonitoringOptions()), TimeProvider.System);
+        return new AlertSignalSource(new FakeServers(servers), new FakeMetrics(), new FakeHealthChecks(), new FakeSnapshots(), ssh,
+            scanner, new DriftService(new FakeSnapshots(), null!),
+            new ContainerRestartMonitor(new FakeSettings(), TimeProvider.System, NullLogger<ContainerRestartMonitor>.Instance), TimeProvider.System);
+    }
+
     private sealed class MismatchSshRunner(string mismatchedHost = "edge.test") : ISshRunner
     {
         public Task<RemoteCommandResult> RunAsync(Guid serverId, string command, SshRunOptions options, CancellationToken cancellationToken) =>
