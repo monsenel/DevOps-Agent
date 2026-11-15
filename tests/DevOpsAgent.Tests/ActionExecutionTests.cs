@@ -249,7 +249,7 @@ public sealed class ActionExecutionTests
                 executionModes.SaveAsync(new ExecutionModePolicy(group, ExecutionMode.Confirm), CancellationToken.None).GetAwaiter().GetResult();
         }
         return new ActionExecutionService(new ActionRecordRepository(context), serverRepository, registry, executionModes,
-            new ToolCommandBuilder(registry), runner, TimeProvider.System);
+            new ToolCommandBuilder(registry), runner, TestBanGuard.Create(), TimeProvider.System);
     }
 
     private static ActionRecord AddProposedAction(AppDbContext context, string toolName, IReadOnlyList<Server> servers, string args)

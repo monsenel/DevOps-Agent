@@ -52,9 +52,9 @@ public sealed class AgentToolDispatcherTests
         var actionRepository = new ActionRecordRepository(context);
         var executionModes = new ExecutionModeService(new AppSettingRepository(context), serverRepository, NullLogger<ExecutionModeService>.Instance);
         var commandBuilder = new ToolCommandBuilder(registry);
-        var approvals = new ApprovalService(registry, executionModes, serverRepository, actionRepository, TimeProvider.System);
+        var approvals = new ApprovalService(registry, executionModes, serverRepository, actionRepository, TestBanGuard.Create(), TimeProvider.System);
         var execution = new ActionExecutionService(actionRepository, serverRepository, registry, executionModes, commandBuilder,
-            runner, TimeProvider.System);
+            runner, TestBanGuard.Create(), TimeProvider.System);
         var snapshots = new SnapshotRepository(context);
         var graphs = new GraphRepository(context);
         var discovery = new DiscoveryService(serverRepository, snapshots, graphs, new GraphBuilder(), runner, [], TimeProvider.System);

@@ -40,6 +40,9 @@ builder.Services.AddSingleton<ToolRegistry>();
 builder.Services.AddScoped<DiscoveryTriggerState>();
 builder.Services.AddScoped<ExecutionModeService>();
 builder.Services.AddScoped<ApprovalService>();
+builder.Services.AddSingleton<IOperatorAddressRegistry, DevOpsAgent.Infrastructure.Security.OperatorAddressRegistry>();
+builder.Services.AddSingleton<IProtectedAddressSource, DevOpsAgent.Infrastructure.Security.ProtectedAddressSource>();
+builder.Services.AddScoped<BanTargetGuard>();
 builder.Services.AddScoped<ActionExecutionService>();
 builder.Services.AddSingleton<ToolCommandBuilder>();
 builder.Services.AddScoped<GraphBuilder>();
@@ -123,6 +126,13 @@ if (!app.Environment.IsDevelopment())
 }
 app.UseAuthentication();
 app.UseAuthorization();
+// block_ip must never ban the operator (D-030): remember the client addresses of authenticated requests.
+app.Use(async (context, next) =>
+{
+    if (context.User.Identity?.IsAuthenticated == true && context.Connection.RemoteIpAddress is { } client)
+        context.RequestServices.GetRequiredService<IOperatorAddressRegistry>().Record(client);
+    await next();
+});
 app.UseRateLimiter();
 app.UseAntiforgery();
 

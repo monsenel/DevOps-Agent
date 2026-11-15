@@ -38,6 +38,7 @@ public sealed class ActionExecutionService(
     ExecutionModeService executionModes,
     ToolCommandBuilder commandBuilder,
     ISshRunner sshRunner,
+    BanTargetGuard banGuard,
     TimeProvider timeProvider)
 {
     private const int MaxParallelServers = 4;
@@ -105,6 +106,14 @@ public sealed class ActionExecutionService(
         if (groupPolicies.Any(policy => policy.Mode == ExecutionMode.ReadOnly))
         {
             throw new InvalidOperationException("A target server group is now in read-only mode; the action cannot run.");
+        }
+
+        // Re-checked at approval: the inventory or the operator's address may have changed since the proposal.
+        if (action.ToolName == "block_ip"
+            && JsonSerializer.Deserialize<BlockIpArgs>(action.ArgumentsJson, JsonOptions) is { } block
+            && await banGuard.GetRefusalAsync(block.Address, inventory, cancellationToken) is { } refusal)
+        {
+            throw new InvalidOperationException(refusal);
         }
 
         var plan = commandBuilder.Build(action);

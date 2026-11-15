@@ -28,6 +28,7 @@ public sealed class ApprovalService(
     ExecutionModeService executionModes,
     IServerRepository servers,
     IActionRecordRepository actions,
+    BanTargetGuard banGuard,
     TimeProvider timeProvider)
 {
     public async Task<ToolApprovalResult> EvaluateAsync(ToolApprovalRequest request, CancellationToken cancellationToken)
@@ -87,6 +88,12 @@ public sealed class ApprovalService(
         if (policies.Any(policy => policy.Mode == ExecutionMode.ReadOnly))
         {
             return new(ToolApprovalState.Denied, "A target server group is in read-only mode.");
+        }
+
+        if (arguments is BlockIpArgs block
+            && await banGuard.GetRefusalAsync(block.Address, allServers, cancellationToken) is { } refusal)
+        {
+            return new(ToolApprovalState.Denied, refusal);
         }
 
         var action = new ActionRecord(

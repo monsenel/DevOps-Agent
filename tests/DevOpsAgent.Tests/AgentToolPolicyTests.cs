@@ -223,7 +223,7 @@ public sealed class AgentToolPolicyTests
         var executionModes = new ExecutionModeService(settings, new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
         await executionModes.SaveAsync(new ExecutionModePolicy("prod", mode), CancellationToken.None);
         var service = new ApprovalService(registry, executionModes, new ServerRepository(database.Context),
-            new ActionRecordRepository(database.Context), TimeProvider.System);
+            new ActionRecordRepository(database.Context), TestBanGuard.Create(), TimeProvider.System);
         var toolName = access == ToolAccess.ReadOnly ? "service_status" : "restart_service";
         const string args = "{\"unit\":\"nginx\"}";
 
@@ -256,7 +256,7 @@ public sealed class AgentToolPolicyTests
             "{\"prod\":{\"group\":\"prod\",\"mode\":2,\"allowedTools\":[\"restart_service\"]}}", CancellationToken.None);
         var executionModes = new ExecutionModeService(settings, new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
         var service = new ApprovalService(new ToolRegistry(), executionModes, new ServerRepository(database.Context),
-            new ActionRecordRepository(database.Context), TimeProvider.System);
+            new ActionRecordRepository(database.Context), TestBanGuard.Create(), TimeProvider.System);
         var toolName = access == ToolAccess.ReadOnly ? "service_status" : "restart_service";
 
         var policy = await executionModes.GetForGroupAsync("prod", CancellationToken.None);
@@ -314,7 +314,7 @@ public sealed class AgentToolPolicyTests
         await new AppSettingRepository(database.Context).SetAsync("agent.execution-modes",
             $"{{\"prod\":{{\"group\":\"prod\",\"mode\":{storedMode},\"allowedTools\":[\"run_shell\"]}}}}", CancellationToken.None);
         var service = new ApprovalService(registry, executionModes, new ServerRepository(database.Context),
-            new ActionRecordRepository(database.Context), TimeProvider.System);
+            new ActionRecordRepository(database.Context), TestBanGuard.Create(), TimeProvider.System);
 
         var result = await service.EvaluateAsync(new ToolApprovalRequest("run_shell", Json("{\"command\":\"id\"}"), [server.Id]),
             CancellationToken.None);
@@ -333,7 +333,7 @@ public sealed class AgentToolPolicyTests
         await new AppSettingRepository(database.Context).SetAsync("agent.execution-modes",
             "{\"staging\":{\"group\":\"staging\",\"mode\":2,\"allowedTools\":[\"apply_updates\"]}}", CancellationToken.None);
         var service = new ApprovalService(registry, executionModes, new ServerRepository(database.Context),
-            new ActionRecordRepository(database.Context), TimeProvider.System);
+            new ActionRecordRepository(database.Context), TestBanGuard.Create(), TimeProvider.System);
 
         var result = await service.EvaluateAsync(new ToolApprovalRequest("apply_updates",
             Json($"{{\"packages\":[\"nginx\"],\"serverIds\":[\"{server.Id}\"]}}"), [server.Id]), CancellationToken.None);
@@ -350,7 +350,7 @@ public sealed class AgentToolPolicyTests
         var executionModes = new ExecutionModeService(new AppSettingRepository(database.Context), new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
         await executionModes.SaveAsync(new ExecutionModePolicy("prod", ExecutionMode.ReadOnly), CancellationToken.None);
         var service = new ApprovalService(new ToolRegistry(), executionModes, new ServerRepository(database.Context),
-            new ActionRecordRepository(database.Context), TimeProvider.System);
+            new ActionRecordRepository(database.Context), TestBanGuard.Create(), TimeProvider.System);
 
         var result = await service.EvaluateAsync(new ToolApprovalRequest("apply_updates",
             Json($"{{\"packages\":[\"nginx\"],\"serverIds\":[\"{server.Id}\"]}}"), [server.Id]), CancellationToken.None);
@@ -412,7 +412,7 @@ public sealed class AgentToolPolicyTests
         var settings = new AppSettingRepository(database.Context);
         var executionModes = new ExecutionModeService(settings, new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
         var service = new ApprovalService(registry, executionModes, new ServerRepository(database.Context),
-            new ActionRecordRepository(database.Context), TimeProvider.System);
+            new ActionRecordRepository(database.Context), TestBanGuard.Create(), TimeProvider.System);
 
         await executionModes.SaveAsync(new ExecutionModePolicy("prod", ExecutionMode.Confirm), CancellationToken.None);
         var needsApproval = await service.EvaluateAsync(new ToolApprovalRequest("restart_service", Json("{\"unit\":\"nginx\"}"), [server.Id]),
@@ -433,7 +433,7 @@ public sealed class AgentToolPolicyTests
         var executionModes = new ExecutionModeService(new AppSettingRepository(database.Context),
             new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
         var service = new ApprovalService(registry, executionModes, new ServerRepository(database.Context),
-            new ActionRecordRepository(database.Context), TimeProvider.System);
+            new ActionRecordRepository(database.Context), TestBanGuard.Create(), TimeProvider.System);
 
         var result = await service.EvaluateAsync(new ToolApprovalRequest("service_status", Json("{\"unit\":\"nginx\"}"), []),
             CancellationToken.None);
@@ -532,6 +532,29 @@ public sealed class AgentToolPolicyTests
     }
 
     private static JsonElement Json(string value) => JsonDocument.Parse(value).RootElement.Clone();
+
+    [Fact]
+    public async Task BlockIpOfAnInventoryHostIsDeniedWhenProposed()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var target = await AddServerAsync(database.Context, "staging");
+        var jump = new Server("jump", "198.51.100.10", 22, "deploy", "key", "staging");
+        database.Context.Servers.Add(jump);
+        await database.Context.SaveChangesAsync();
+        var executionModes = new ExecutionModeService(new AppSettingRepository(database.Context), new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
+        await executionModes.SaveAsync(new ExecutionModePolicy("staging", ExecutionMode.Confirm), CancellationToken.None);
+        var service = new ApprovalService(new ToolRegistry(), executionModes, new ServerRepository(database.Context),
+            new ActionRecordRepository(database.Context), TestBanGuard.Create(), TimeProvider.System);
+
+        var refused = await service.EvaluateAsync(new ToolApprovalRequest("block_ip",
+            Json($"{{\"address\":\"198.51.100.10\",\"serverIds\":[\"{target.Id}\"]}}"), [target.Id]), CancellationToken.None);
+        var allowed = await service.EvaluateAsync(new ToolApprovalRequest("block_ip",
+            Json($"{{\"address\":\"203.0.113.9\",\"serverIds\":[\"{target.Id}\"]}}"), [target.Id]), CancellationToken.None);
+
+        Assert.Equal(ToolApprovalState.Denied, refused.State);
+        Assert.Contains("inventory", refused.Message, StringComparison.Ordinal);
+        Assert.Equal(ToolApprovalState.PendingApproval, allowed.State);
+    }
 
     private static async Task<Server> AddServerAsync(AppDbContext context, string group)
     {

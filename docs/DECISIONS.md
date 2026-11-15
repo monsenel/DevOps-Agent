@@ -133,3 +133,8 @@ Format: `D-<number> · <date> · <title>` then Decision / Why / Consequences.
 - **Decision:** A server group without a stored execution mode, and every group while the stored setting is unreadable, is `ReadOnly`. Saving one group writes only that group's entry, so it can never change another group's mode. Supersedes the "confirm each change (default)" part of AGT-3.
 - **Why:** Owner decision 2026-11-15. A newly added group, including `prod`, must not allow mutating actions until the owner opts in.
 - **Consequences:** After upgrading, groups that never had a mode saved (previously Confirm) become read-only; switch a group to "Confirm each change" in Settings › Execution modes to allow approved actions there. Read-only groups also get cache-only update scans (D-027).
+
+### D-030 · 2026-11-15 · block_ip refuses addresses that would lock out the app or the operator
+- **Decision:** `block_ip` is denied when the address is loopback, unspecified, broadcast or multicast; one of the app host's own interface addresses; any inventory host (so every jump host), by literal IP or by name resolved from the app host; or a client address the signed-in operator has used to reach the app (recorded per authenticated request, last 32, in memory). The check runs when the action is proposed and again when it is approved.
+- **Why:** Review finding (T7.R4): one mistaken or prompt-injected ban could cut the app off from a jump host and every server behind it, or lock the operator out.
+- **Consequences:** Inventory names that only a jump host can resolve are not compared by name; their literal addresses still are. Operator addresses are forgotten on restart until the next request.
