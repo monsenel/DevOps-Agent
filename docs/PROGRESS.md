@@ -12,8 +12,8 @@
 
 ## Current
 
-- **Task:** T7.R1–T7.R3 done (v0.1.2); next T7.R4
-- **Status:** —
+- **Task:** T7.R15 SSH client leases
+- **Status:** in-progress
 - **Last updated:** 2026-11-15 by ZCode
 
 ## WIP notes
@@ -136,7 +136,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T7.R12 | Test gaps | todo | |
 | T7.R13 | Owner decisions | done | D-026–D-031 |
 | T7.R14 | Sudoers-pinnable privileged commands | todo | |
-| T7.R15 | SSH client leases | todo | |
+| T7.R15 | SSH client leases | in-progress | |
 | T7.R16 | Stale carry-forward correctness | todo | |
 | T7.R17 | Cycle deadlines and alert stalls | todo | |
 | T7.R18 | Restart-loop rule follow-ups | todo | |
@@ -149,6 +149,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 ## Session log
 
 One line per session: date · tool/model · tasks touched · result.
+
+- 2026-11-15 · ZCode / Claude · started T7.R15 · lease/drain design for pooled SSH clients and jump tunnels; baseline build 0 warnings, 367/367 tests
 
 - 2026-11-15 · ZCode / Claude · lab script moved to tools/dva-testlab.sh · no task touched; single lab script kept in the repo (behaviour unchanged, LAB_DIR default kept), .gitignore and README updated; lab not run, no containers touched
 
