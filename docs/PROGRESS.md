@@ -36,6 +36,10 @@ The 2026-11-15 review fixed small issues in `fix(review): …` commits (build 0 
 | T7.R11 | medium | Manual real-browser recheck of forms, 390 px and contrast |
 | T7.R14 | medium | Privileged commands as direct argv so sudoers can pin them |
 | T7.R16 | medium | Stale carry-forward: fresh→stale edges, stale hosts' other addresses, last-seen time, new-listener guard |
+| T7.R20 | medium | Alerts resolve from stale data (exited/dead, thresholds, unit-failed, history prune/corrupt, auth-scan failure path); owner decision on which rules hold |
+| T7.R21 | medium | Deadline/timeout semantics: budget-cut commands count as hung, short deadlines back hosts off, long commands vs short timeouts, wording, notification phase unbounded |
+| T7.R22 | low | Shutdown/lease hardening: shutdown during an action or update scan, serial client disposal, reuse re-check, grace and docs |
+| T7.R23 | low | Auth-failed follow-ups: topology badge cause, jump hint, decrypt-error wording, flap policy, generation re-checks |
 | T7.R12 | low | Test gaps (chat send loop, discovery parallelism, unix sockets, dnf, no-sudo path) |
 
 ### Live acceptance run (2026-11-15, single agent; replaces earlier overlapping results)
@@ -137,6 +141,10 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T7.R17 | Cycle deadlines and alert stalls | done | `feat(T7.R17): hung commands back a host off, one deadline per call, shutdown abandons SSH work` |
 | T7.R18 | Restart-loop rule follow-ups | done | `feat(T7.R18): container states, stale-data hold, partial inspect, docker permission failures, history pruning` |
 | T7.R19 | SSH failure classification and reachability UI | done | `feat(T7.R19): login and key failures are auth failed, not unreachable; single-flight connects; safe shutdown` |
+| T7.R20 | Alerts must not resolve from stale data | todo | |
+| T7.R21 | Deadline and timeout semantics | todo | |
+| T7.R22 | Shutdown and lease hardening | todo | |
+| T7.R23 | Auth-failed follow-ups | todo | |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
 
@@ -145,6 +153,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 ## Session log
 
 One line per session: date · tool/model · tasks touched · result.
+
+- 2026-11-15 · ZCode / Claude · independent review of T7.R15/R17/R18/R19 and the auth-retry cap (v0.1.2..HEAD) · four read-only reviewers plus a live run on the lab (isolated `/tmp` DB, Release build, private sshd on 127.0.0.1:2222-2224, no new containers; srv-edge's fail2ban untouched): SIGTERM exit 0.12 s with a tab open and a blackhole connect in flight, 0.12 s during discovery, 2.14 s with the jump host frozen; hung leaf host (`docker pause dva-srv-app`) cycles max 15.2 s; hung jump host: alert cycles 30.0 s and 31.0 s and metric 45 s before the fix, 15-21 s / 31 s after; hung-command host backed off after four timeouts (~80 s); auth cap: 3 attempts 60.0 s apart then none for 5+ minutes, Test connection and a dependent's Retry now one login each; 6 `fix(review-r2)` commits + tests (build 0 warnings, 555 tests); T7.R20–R23 filed
 
 - 2026-11-15 · ZCode / Claude · owner fix (no task) · `docs(plan)`: the three T7.R19 items not done (claim-token fix, target's own backoff before its jump host, Servers "Not tested" label) moved to the v2 backlog on the owner's order; T7.R19 section notes the retry cap and the `ssh-auth-failed` rule (D-039); docs only
 - 2026-11-15 · ZCode / Claude · owner fix (no task) · `fix(alerts)`: auth-failed alerts use their own rule `ssh-auth-failed` (own key per server, High, title "<server>: SSH authentication failed"; dependents behind an auth-failed jump host too; unreachable <-> auth failed resolves one and opens the other; notification text names the rule, D-028 unchanged); D-039 amendment 2; two existing consumer tests that asserted `server-unreachable` for a login failure updated; build 0 warnings, 549/549 tests (6 new); live (private sshd, isolated DB, ntfy pointed at a local 127.0.0.1 listener): alert row rule `ssh-auth-failed` High, outgoing text `[High] live-rule · ssh-auth-failed · opened` 18:53:21.886 and `... · resolved` 18:54:51.464 after the key edit

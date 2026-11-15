@@ -9,6 +9,14 @@ Independent review of 0.1.2 (T7.R1–T7.R3):
 - A connect that fails after the server was edited no longer puts the new settings into backoff; editing a jump server resets the backoff of the servers behind it.
 - Drift no longer throws when two Docker DNS listeners share one identity.
 
+Independent review of the SSH lifecycle work (T7.R15, T7.R17–T7.R19) and the auth-retry cap:
+
+- A command's start no longer blocks the cycle's thread: with a frozen jump host the alert cycle took 31 s (deadline 25 s, interval 30 s); it now ends within its deadline.
+- Security alerts of a host whose status probe fails stay open instead of ageing out after 5 minutes.
+- A server that closes the connection during login (sshd MaxAuthTries, login penalties) counts as a failed login, so the three-attempt cap applies to it too.
+- Health checks of a host whose login failed keep running (they use no SSH).
+- A container query that fails half-way is a failed sample; a stored container history with a missing field is reported as corrupt instead of stopping every alert evaluation.
+
 ## 0.1.2 — 2026-11-15
 
 - T7.R1: per-host SSH backoff (1 min doubling to 15 min, reset on success); servers behind an unreachable jump host are reported unreachable without a connection attempt; alerts, metrics and health checks run 8 servers in parallel; "Retry now" on Servers bypasses the backoff. With a blackholed host, discovery takes ~15 s and metric cycles stay well under 60 s.
