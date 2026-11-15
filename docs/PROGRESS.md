@@ -6,14 +6,14 @@
 
 - Push: `v0.1.0` on `origin` points at `6b4d044` (before the review fixes). The release is tagged `v0.1.1` locally and has not been pushed.
 - The local dev database `src/DevOpsAgent.Web/data/devops-agent.db` holds a `prod` server whose group has no stored execution mode; since D-029 that group is read-only. Nothing in that database was changed.
-- Lab script (outside this repo): `dva-testlab.sh` bakes srv-db's address into the workers with `--add-host` at start-up, so after the lab containers restart with new IPs `worker-pg`/`worker-redis` restart-loop against srv-search's address; and its `attack` profile prints `ssh` usage errors without making any login attempt.
+- Lab: `~/Downloads/dva-testlab-fixed.sh` (a copy of the lab script with fixed private IPs 10.88.10/20/30.0/24, used for T7.R1–R3) replaces the original for testing; its lab data is in `~/Downloads/dva-testlab-fixed-data`. The original `dva-testlab.sh` bakes srv-db's address into the workers with `--add-host` at start-up, so after the lab containers restart with new IPs `worker-pg`/`worker-redis` restart-loop against srv-search's address; and its `attack` profile prints `ssh` usage errors without making any login attempt.
 
 ---
 
 ## Current
 
-- **Task:** T7.R3 Container restart-loop alert rule
-- **Status:** in-progress
+- **Task:** T7.R1–T7.R3 done (v0.1.2); next T7.R4
+- **Status:** —
 - **Last updated:** 2026-11-15 by ZCode
 
 ## WIP notes
@@ -26,7 +26,6 @@ The 2026-11-15 review fixed small issues in `fix(review): …` commits (build 0 
 
 | Task | Severity | Summary |
 |---|---|---|
-| T7.R3 | high | Container restart-loop alert rule (restart counts) |
 | T7.R4 | medium | `restart_service` guard for sshd/docker; decide on `restart_container` |
 | T7.R5 | medium | HTTPS for token-bearing endpoints; redact raw Docker `Cmd`/labels and `nginx -T` before storage |
 | T7.R6 | medium | nginx relative `include` paths |
@@ -120,7 +119,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T6.6 | MVP hardening pass | done | `feat(T6.6): MVP hardening and release closeout` |
 | T7.R1 | SSH connection lifecycle | done | `feat(T7.R1): dead hosts never slow discovery, metrics or alerts` |
 | T7.R2 | Stale nodes for unreachable servers | done | `feat(T7.R2): stale carry-forward for unreachable servers without false drift` |
-| T7.R3 | Container restart-loop alert rule | in-progress | |
+| T7.R3 | Container restart-loop alert rule | done | `feat(T7.R3): container restart-loop alert` |
 | T7.R4 | Agent action guardrails | todo | |
 | T7.R5 | Secret handling gaps | todo | |
 | T7.R6 | nginx relative includes | todo | |
@@ -140,6 +139,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 ## Session log
 
 One line per session: date · tool/model · tasks touched · result.
+
+- 2026-11-15 · ZCode / Claude · T7.R3 done · live: `crashloop` (`--restart always`, `exit 1`) inside srv-app opened a medium restart-loop alert 24 s after start; `docker rm -f` resolved it 35 s later; lab workers raised none; 360/360 tests; tagged v0.1.2 locally
 
 - 2026-11-15 · ZCode / Claude · T7.R2 done · live: `docker stop dva-srv-db` → discovery 2/2 with srv-db, redis-server, sshd and its server block shown "stale · last seen 07:13 UTC" and Postgres/Redis listeners carried; drift 0 removals and 0 new listeners, no new-listener alert; after `docker start` + Retry now, discovery cleared stale and drift reported nothing added for srv-db (Docker DNS random ports fixed as one identity); 351/351 tests
 

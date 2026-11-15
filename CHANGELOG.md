@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2 — 2026-11-15
+
+- T7.R1: per-host SSH backoff (1 min doubling to 15 min, reset on success); servers behind an unreachable jump host are reported unreachable without a connection attempt; alerts, metrics and health checks run 8 servers in parallel; "Retry now" on Servers bypasses the backoff. With a blackholed host, discovery takes ~15 s and metric cycles stay well under 60 s.
+- T7.R2: an unreachable server's nodes, listeners and edges are carried forward from the last snapshot, dimmed and labelled "stale · last seen <time>"; outages and recoveries no longer produce drift or new-listener alerts.
+- T7.R3: medium alert for containers that are restarting or restarted 3+ times in 10 minutes, from a read-only container query in the metric cycle; resolves after 10 quiet minutes or when the container is removed.
+
 ## 0.1.1 — 2026-11-15
 
 Review and close-out of the 0.1.0 MVP. Journeys J1–J7 re-verified on the disposable lab in one clean run.
