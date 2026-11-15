@@ -998,7 +998,10 @@ public sealed class SshConnectionPool(
             // abandoned when the deadline passes, the caller cancels or the host stops; a late result is discarded.
             using var deadline = new CancellationTokenSource(timeout);
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, pool.StoppingSignal, deadline.Token);
-            var running = transport.ExecuteAsync(command, timeout, linked.Token);
+            // SSH.NET opens the command's channel synchronously, so on a session whose peer is frozen the "async" call blocks
+            // its caller for up to the connect timeout. The cycles start all their hosts from one thread: started here, one
+            // frozen host would hold back every host after it and a cycle would run past its deadline.
+            var running = Task.Run(() => transport.ExecuteAsync(command, timeout, linked.Token), CancellationToken.None);
             try
             {
                 var result = await running.WaitAsync(linked.Token).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);

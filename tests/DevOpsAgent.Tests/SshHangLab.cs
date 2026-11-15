@@ -114,7 +114,12 @@ internal enum CommandMode
     /// <summary>Never finishes, but ends when its token is cancelled (a well-behaved transport).</summary>
     HangHonouringToken,
     /// <summary>Never finishes and never looks at its token (SSH.NET on a dead peer).</summary>
-    HangIgnoringToken
+    HangIgnoringToken,
+    /// <summary>
+    /// Blocks the calling thread for <see cref="HostScript.BlockFor"/> before it returns a task, like SSH.NET opening the
+    /// channel of a command on a session whose peer is frozen: the "async" call is synchronous for that long.
+    /// </summary>
+    BlockSynchronously
 }
 
 internal sealed class HostScript
@@ -133,6 +138,7 @@ internal sealed class HostScript
     /// <summary>Closing the client throws (a socket that is already gone): shutdown must still go on and not throw.</summary>
     public bool DisposeThrows { get; set; }
     public CommandMode Commands { get; set; } = CommandMode.Ok;
+    public TimeSpan BlockFor { get; set; }
 }
 
 internal sealed class ScriptedTransports : ISshTransportFactory
@@ -181,6 +187,7 @@ internal sealed class ScriptedTransport(ScriptedTransports owner, string host, H
     public async Task<RemoteCommandResult> ExecuteAsync(string command, TimeSpan timeout, CancellationToken cancellationToken)
     {
         owner.CountCommand(Host);
+        if (script.Commands == CommandMode.BlockSynchronously) Thread.Sleep(script.BlockFor);
         switch (script.Commands)
         {
             case CommandMode.HangHonouringToken:
