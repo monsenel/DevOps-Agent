@@ -13,7 +13,7 @@
 ## Current
 
 - **Task:** T7.R24 Optional sudo password per server done (owner order; filed as "T7.R20", renumbered because T7.R20 exists). T7.R1–T7.R3, T7.R15, T7.R17–T7.R19 done; T7.R4 and T7.R16 held by the owner. Review-r3 of v0.1.3..HEAD done (2 fixes, T7.R25/T7.R26 filed; T7.R25 is high and needs an owner decision)
-- **Status:** T7.R25 in progress (owner decision 2026-11-16: positive confirmation by a per-call marker, unknown outcome pauses until Retry now / edit / removal, no password sudo with < 20 s left)
+- **Status:** T7.R25 done; next T7.R26, then T8.1–T8.9 (owner order 2026-11-16)
 - **Last updated:** 2026-11-16 by ZCode
 
 ## WIP notes
@@ -40,7 +40,6 @@ The 2026-11-15 review fixed small issues in `fix(review): …` commits (build 0 
 | T7.R21 | medium | Deadline/timeout semantics: budget-cut commands count as hung, short deadlines back hosts off, long commands vs short timeouts, wording, notification phase unbounded |
 | T7.R22 | low | Shutdown/lease hardening: shutdown during an action or update scan, serial client disposal, reuse re-check, grace and docs |
 | T7.R23 | low | Auth-failed follow-ups: topology badge cause, jump hint, decrypt-error wording, flap policy, generation re-checks |
-| T7.R25 | high | A password sudo whose outcome is unknown (timeout, cancel, drop after the write) is tried again; owner decision on pausing unknown outcomes; fail-open rejection lines; password left on stdin |
 | T7.R26 | medium | Sudo password redaction is per server (plain text in another entry's auth-scan state); short passwords; stale sudo column |
 | T7.R12 | low | Test gaps (chat send loop, discovery parallelism, unix sockets, dnf, no-sudo path) |
 
@@ -148,7 +147,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T7.R22 | Shutdown and lease hardening | todo | |
 | T7.R23 | Auth-failed follow-ups | todo | |
 | T7.R24 | Optional sudo password per server | done | `feat(T7.R24): optional per-server sudo password over stdin; one rejected attempt pauses sudo` |
-| T7.R25 | Unknown-outcome sudo password attempts | in-progress | |
+| T7.R25 | Unknown-outcome sudo password attempts | done | `feat(T7.R25): a password sudo is confirmed only by its marker; an unknown outcome pauses until Retry now` |
 | T7.R26 | Sudo password redaction across servers | todo | |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
@@ -159,6 +158,7 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 
 One line per session: date · tool/model · tasks touched · result.
 
+- 2026-11-16 · ZCode / Claude · T7.R25 done · D-040 amendment 4 (owner decision): password sudo `LC_ALL=C sudo -S -p '' -- sh -c 'exec </dev/null; printf "%s\n" "<marker>"; <cmd>'` with a per-call random marker read from stdout as it arrives (SSH.NET OutputStream checked live), accepted only when the marker comes back; no marker and no rejection lines = outcome unknown (persisted, paused, same Medium sudo-auth-failed alert, Servers "sudo: password — outcome unknown, paused" + Retry now); attempt written down before the password is sent (crash = unknown); turn held until confirmed or stored (15 s window removed); no password sudo with < 20 s left of call or cycle deadline (auth scan 24 s, sudo probe 30 s); AppSudoCommands strips the marker preamble (sudo's logged format verified on srv-db); build 0 warnings, 614 tests (20 new); live (isolated /tmp DB, Release on 127.0.0.1:5199, srv-db as dvapw via srv-edge): correct password → Test connection "Available (password)", no ssh-unusual-sudo alert for the marker commands; run 1 (watcher crashed on tail.kill, srv-db frozen 83 s instead of 35 s, unpaused by hand) and run 2 (frozen 0.58 s after `pam_unix … authentication failure`, unpaused after 35.3 s): each exactly 1 PAM failure, outcome unknown recorded at the 25 s cycle deadline, sudo-auth-failed Medium opened, 0 further attempts over 4 min 46 s; Retry now = exactly 1 attempt → rejected → Retry now disabled; correct password → confirmed, alert resolved 22:04:46; passwords found 0 times in app log and DB files
 - 2026-11-16 · ZCode / Claude · started T7.R25 (owner decision: marker confirmation, unknown outcome pauses, 20 s minimum), then T7.R26 and T8.1–T8.9 · baseline build 0 warnings, 594/594 tests
 - 2026-11-16 · ZCode / Claude · independent review of v0.1.3..HEAD (auth-retry cap, `ssh-auth-failed`, T7.R24 sudo password, lockout safety, `sudo-auth-failed`) · one read-only reviewer plus a live run (isolated `/tmp` DB, published Release on 127.0.0.1:5199, srv-db as `dvapw` (password sudo) and `dva` (NOPASSWD), private sshd on 127.0.0.1:2222 rejecting the key, TEST-NET 192.0.2.1, ntfy pointed at a local listener, no container created): password never in srv-db process args (90 s `ps` sampling, `sudo -S -p  -- sh -c …` only), app log, DB files (only `CfDJ8…`), alerts, notifications, server→browser SignalR frames (42 frames) or prerendered pages; wrong password = 1 `pam_unix` failure, rejection recorded 21:05:01, Test connection twice "Not tried", Retry now disabled, 0 further attempts over 3 min and an app restart; `sudo-auth-failed` Medium opened/resolved with notifications `[Medium] db-pw · sudo-auth-failed · opened|resolved`; removing the password -> `sudo -n true` ("a password is required", no auth attempt), text byte-identical to v0.1.3; auth cap: 3 logins 60 s apart then paused, Retry now and Test connection 1 login each, restart allows 3 more (documented), alert/notification `ssh-auth-failed` vs `server-unreachable` for the blackhole; found: an unknown sudo outcome is retried (srv-db frozen inside PAM's delay -> 2 failures for one wrong password, T7.R25), redaction is per server (T7.R26); 2 `fix(review-r3)` commits (authentication window starts at the send; a rejection that cannot be stored still pauses sudo in memory), re-verified live on the fixed build (1 failure, Test connection "Not tried", correct password "Available (password)"); build 0 warnings, 594 tests
 
