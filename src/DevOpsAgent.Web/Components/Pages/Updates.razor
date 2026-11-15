@@ -167,21 +167,12 @@
             var result = await Approvals.EvaluateAsync(new ToolApprovalRequest("apply_updates", args, [server.ServerId]), CancellationToken.None);
             if (result.State == ToolApprovalState.Denied) throw new InvalidOperationException(result.Message);
             if (result.ActionId is not Guid actionId) throw new InvalidOperationException("The update action was not recorded.");
-            if (result.State == ToolApprovalState.ExecuteAutomatically)
-            {
-                var completed = await ActionExecution.ApproveAndRunAsync(actionId, "execution policy", CancellationToken.None);
-                _message = $"Update action {completed.Status}.\n{completed.ResultsJson}";
-                _pendingId = null;
-            }
-            else
-            {
-                _pendingId = actionId;
-                var entry = (await ActionExecution.ListAsync(CancellationToken.None)).Single(item => item.Action.Id == actionId);
-                _pendingCommands.Clear(); _pendingServers.Clear();
-                _pendingCommands.AddRange(entry.PendingCommandPreviews.Select(item => item.DisplayCommand));
-                _pendingServers.AddRange(entry.PendingCommandPreviews.Select(item => $"{item.ServerName} ({item.Endpoint})"));
-                _message = $"Proposed {names.Length} package update(s) on {server.ServerName}.";
-            }
+            _pendingId = actionId;
+            var entry = (await ActionExecution.ListAsync(CancellationToken.None)).Single(item => item.Action.Id == actionId);
+            _pendingCommands.Clear(); _pendingServers.Clear();
+            _pendingCommands.AddRange(entry.PendingCommandPreviews.Select(item => item.DisplayCommand));
+            _pendingServers.AddRange(entry.PendingCommandPreviews.Select(item => $"{item.ServerName} ({item.Endpoint})"));
+            _message = $"Proposed {names.Length} package update(s) on {server.ServerName}.";
         }
         catch (Exception exception) { _message = exception.Message; _isError = true; }
         finally { _busy = false; }

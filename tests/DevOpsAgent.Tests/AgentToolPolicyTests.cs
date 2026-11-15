@@ -211,8 +211,6 @@ public sealed class AgentToolPolicyTests
     [InlineData(ExecutionMode.ReadOnly, ToolAccess.Mutating, ToolApprovalState.Denied)]
     [InlineData(ExecutionMode.Confirm, ToolAccess.ReadOnly, ToolApprovalState.ExecuteReadOnly)]
     [InlineData(ExecutionMode.Confirm, ToolAccess.Mutating, ToolApprovalState.PendingApproval)]
-    [InlineData(ExecutionMode.Auto, ToolAccess.ReadOnly, ToolApprovalState.ExecuteReadOnly)]
-    [InlineData(ExecutionMode.Auto, ToolAccess.Mutating, ToolApprovalState.ExecuteAutomatically)]
     public async Task ApprovalPolicyEnforcesModeAndToolType(
         ExecutionMode mode,
         ToolAccess access,
@@ -222,9 +220,8 @@ public sealed class AgentToolPolicyTests
         var server = await AddServerAsync(database.Context, "prod");
         var registry = new ToolRegistry();
         var settings = new AppSettingRepository(database.Context);
-        var executionModes = new ExecutionModeService(settings, new ServerRepository(database.Context), registry, NullLogger<ExecutionModeService>.Instance);
-        string[] allowlist = mode == ExecutionMode.Auto && access == ToolAccess.Mutating ? ["restart_service"] : [];
-        await executionModes.SaveAsync(new ExecutionModePolicy("prod", mode, allowlist), CancellationToken.None);
+        var executionModes = new ExecutionModeService(settings, new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
+        await executionModes.SaveAsync(new ExecutionModePolicy("prod", mode), CancellationToken.None);
         var service = new ApprovalService(registry, executionModes, new ServerRepository(database.Context),
             new ActionRecordRepository(database.Context), TimeProvider.System);
         var toolName = access == ToolAccess.ReadOnly ? "service_status" : "restart_service";
@@ -242,31 +239,80 @@ public sealed class AgentToolPolicyTests
         }
         else
         {
-            var records = await database.Context.ActionRecords.ToListAsync();
-            if (expected == ToolApprovalState.ExecuteAutomatically)
-            {
-                Assert.Single(records);
-                Assert.Equal(ActionRecordStatus.Proposed, records[0].Status);
-            }
-            else
-            {
-                Assert.Empty(records);
-            }
+            Assert.Empty(await database.Context.ActionRecords.ToListAsync());
         }
     }
 
     [Theory]
-    [InlineData(ExecutionMode.Confirm)]
-    [InlineData(ExecutionMode.Auto)]
-    public async Task RunShellAlwaysCreatesPendingApprovalEvenInAutomaticMode(ExecutionMode mode)
+    [InlineData(ToolAccess.ReadOnly, ToolApprovalState.ExecuteReadOnly)]
+    [InlineData(ToolAccess.Mutating, ToolApprovalState.PendingApproval)]
+    public async Task StoredAutoModeBehavesAsConfirmAndStoredAllowlistsAreIgnored(ToolAccess access, ToolApprovalState expected)
+    {
+        await using var database = await CreateDatabaseAsync();
+        var server = await AddServerAsync(database.Context, "prod");
+        var settings = new AppSettingRepository(database.Context);
+        // Data written while "Auto within allowlist" existed (mode 2, with an allowlist naming the very tool being called).
+        await settings.SetAsync("agent.execution-modes",
+            "{\"prod\":{\"group\":\"prod\",\"mode\":2,\"allowedTools\":[\"restart_service\"]}}", CancellationToken.None);
+        var executionModes = new ExecutionModeService(settings, new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
+        var service = new ApprovalService(new ToolRegistry(), executionModes, new ServerRepository(database.Context),
+            new ActionRecordRepository(database.Context), TimeProvider.System);
+        var toolName = access == ToolAccess.ReadOnly ? "service_status" : "restart_service";
+
+        var policy = await executionModes.GetForGroupAsync("prod", CancellationToken.None);
+        var result = await service.EvaluateAsync(new ToolApprovalRequest(toolName, Json("{\"unit\":\"nginx\"}"), [server.Id]), CancellationToken.None);
+
+        Assert.Equal(ExecutionMode.Confirm, policy.Mode);
+        Assert.False(await executionModes.IsStoredSettingUnreadableAsync(CancellationToken.None));
+        Assert.Equal(expected, result.State);
+        Assert.Equal(expected == ToolApprovalState.PendingApproval ? ActionRecordStatus.Proposed : (ActionRecordStatus?)null,
+            (await database.Context.ActionRecords.SingleOrDefaultAsync())?.Status);
+    }
+
+    [Fact]
+    public async Task OnlyReadOnlyAndConfirmCanBeSavedAndNothingProducesAuto()
+    {
+        await using var database = await CreateDatabaseAsync();
+        await AddServerAsync(database.Context, "prod");
+        var settings = new AppSettingRepository(database.Context);
+        var service = new ExecutionModeService(settings, new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
+
+        // A cast value 2 (the retired Auto) must be rejected by save validation.
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            service.SaveAsync(new ExecutionModePolicy("prod", (ExecutionMode)2), CancellationToken.None));
+        Assert.Equal(new[] { ExecutionMode.ReadOnly, ExecutionMode.Confirm }, Enum.GetValues<ExecutionMode>());
+        await service.SaveAsync(new ExecutionModePolicy("prod", ExecutionMode.Confirm), CancellationToken.None);
+        Assert.DoesNotContain("allowedTools", (await settings.GetAsync("agent.execution-modes", CancellationToken.None))!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("{\"prod\":{\"group\":\"prod\",\"mode\":3}}")]
+    [InlineData("{\"prod\":{\"group\":\"prod\",\"mode\":-1}}")]
+    [InlineData("{\"prod\":null}")]
+    public async Task UnknownStoredModesAreStillCorruptAndFailClosed(string stored)
+    {
+        await using var database = await CreateDatabaseAsync();
+        await AddServerAsync(database.Context, "prod");
+        var settings = new AppSettingRepository(database.Context);
+        await settings.SetAsync("agent.execution-modes", stored, CancellationToken.None);
+        var service = new ExecutionModeService(settings, new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
+
+        Assert.True(await service.IsStoredSettingUnreadableAsync(CancellationToken.None));
+        Assert.Equal(ExecutionMode.ReadOnly, (await service.GetForGroupAsync("prod", CancellationToken.None)).Mode);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task RunShellAlwaysCreatesPendingApprovalEvenForStoredAutoMode(int storedMode)
     {
         await using var database = await CreateDatabaseAsync();
         var server = await AddServerAsync(database.Context, "prod");
         var registry = new ToolRegistry();
         var executionModes = new ExecutionModeService(new AppSettingRepository(database.Context),
-            new ServerRepository(database.Context), registry, NullLogger<ExecutionModeService>.Instance);
-        string[] allowlist = mode == ExecutionMode.Auto ? ["restart_service"] : [];
-        await executionModes.SaveAsync(new ExecutionModePolicy("prod", mode, allowlist), CancellationToken.None);
+            new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
+        await new AppSettingRepository(database.Context).SetAsync("agent.execution-modes",
+            $"{{\"prod\":{{\"group\":\"prod\",\"mode\":{storedMode},\"allowedTools\":[\"run_shell\"]}}}}", CancellationToken.None);
         var service = new ApprovalService(registry, executionModes, new ServerRepository(database.Context),
             new ActionRecordRepository(database.Context), TimeProvider.System);
 
@@ -283,8 +329,9 @@ public sealed class AgentToolPolicyTests
         await using var database = await CreateDatabaseAsync();
         var server = await AddServerAsync(database.Context, "staging");
         var registry = new ToolRegistry();
-        var executionModes = new ExecutionModeService(new AppSettingRepository(database.Context), new ServerRepository(database.Context), registry, NullLogger<ExecutionModeService>.Instance);
-        await executionModes.SaveAsync(new ExecutionModePolicy("staging", ExecutionMode.Auto, ["restart_service"]), CancellationToken.None);
+        var executionModes = new ExecutionModeService(new AppSettingRepository(database.Context), new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
+        await new AppSettingRepository(database.Context).SetAsync("agent.execution-modes",
+            "{\"staging\":{\"group\":\"staging\",\"mode\":2,\"allowedTools\":[\"apply_updates\"]}}", CancellationToken.None);
         var service = new ApprovalService(registry, executionModes, new ServerRepository(database.Context),
             new ActionRecordRepository(database.Context), TimeProvider.System);
 
@@ -303,7 +350,7 @@ public sealed class AgentToolPolicyTests
         var settings = new AppSettingRepository(database.Context);
         await settings.SetAsync("agent.execution-modes",
             "{\" Prod \":{\"group\":\" Prod \",\"mode\":0,\"allowedTools\":[]}}", CancellationToken.None);
-        var service = new ExecutionModeService(settings, new ServerRepository(database.Context), new ToolRegistry(), NullLogger<ExecutionModeService>.Instance);
+        var service = new ExecutionModeService(settings, new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
 
         Assert.False(await service.IsStoredSettingUnreadableAsync(CancellationToken.None));
         Assert.Equal(ExecutionMode.ReadOnly, (await service.GetForGroupAsync("prod", CancellationToken.None)).Mode);
@@ -321,7 +368,7 @@ public sealed class AgentToolPolicyTests
         await AddServerAsync(database.Context, "prod");
         var settings = new AppSettingRepository(database.Context);
         await settings.SetAsync("agent.execution-modes", stored, CancellationToken.None);
-        var service = new ExecutionModeService(settings, new ServerRepository(database.Context), new ToolRegistry(), NullLogger<ExecutionModeService>.Instance);
+        var service = new ExecutionModeService(settings, new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
 
         Assert.True(await service.IsStoredSettingUnreadableAsync(CancellationToken.None));
         // Fail closed: the weaker colliding entry must not win.
@@ -329,22 +376,22 @@ public sealed class AgentToolPolicyTests
     }
 
     [Fact]
-    public async Task AutomaticModeRequiresToolAllowlistAndReadOnlyGroupBlocksChanges()
+    public async Task ConfirmModeRequiresApprovalAndReadOnlyGroupBlocksChanges()
     {
         await using var database = await CreateDatabaseAsync();
         var server = await AddServerAsync(database.Context, "prod");
         var registry = new ToolRegistry();
         var settings = new AppSettingRepository(database.Context);
-        var executionModes = new ExecutionModeService(settings, new ServerRepository(database.Context), registry, NullLogger<ExecutionModeService>.Instance);
+        var executionModes = new ExecutionModeService(settings, new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
         var service = new ApprovalService(registry, executionModes, new ServerRepository(database.Context),
             new ActionRecordRepository(database.Context), TimeProvider.System);
 
-        await executionModes.SaveAsync(new ExecutionModePolicy("prod", ExecutionMode.Auto, []), CancellationToken.None);
-        var outsideAllowlist = await service.EvaluateAsync(new ToolApprovalRequest("restart_service", Json("{\"unit\":\"nginx\"}"), [server.Id]),
+        await executionModes.SaveAsync(new ExecutionModePolicy("prod", ExecutionMode.Confirm), CancellationToken.None);
+        var needsApproval = await service.EvaluateAsync(new ToolApprovalRequest("restart_service", Json("{\"unit\":\"nginx\"}"), [server.Id]),
             CancellationToken.None);
-        Assert.Equal(ToolApprovalState.PendingApproval, outsideAllowlist.State);
+        Assert.Equal(ToolApprovalState.PendingApproval, needsApproval.State);
 
-        await executionModes.SaveAsync(new ExecutionModePolicy("prod", ExecutionMode.ReadOnly, []), CancellationToken.None);
+        await executionModes.SaveAsync(new ExecutionModePolicy("prod", ExecutionMode.ReadOnly), CancellationToken.None);
         var readOnlyResult = await service.EvaluateAsync(new ToolApprovalRequest("restart_service", Json("{\"unit\":\"nginx\"}"), [server.Id]),
             CancellationToken.None);
         Assert.Equal(ToolApprovalState.Denied, readOnlyResult.State);
@@ -356,7 +403,7 @@ public sealed class AgentToolPolicyTests
         await using var database = await CreateDatabaseAsync();
         var registry = new ToolRegistry();
         var executionModes = new ExecutionModeService(new AppSettingRepository(database.Context),
-            new ServerRepository(database.Context), registry, NullLogger<ExecutionModeService>.Instance);
+            new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
         var service = new ApprovalService(registry, executionModes, new ServerRepository(database.Context),
             new ActionRecordRepository(database.Context), TimeProvider.System);
 
@@ -372,22 +419,16 @@ public sealed class AgentToolPolicyTests
     {
         await using var database = await CreateDatabaseAsync();
         var server = await AddServerAsync(database.Context, "staging");
-        var registry = new ToolRegistry();
         var service = new ExecutionModeService(new AppSettingRepository(database.Context),
-            new ServerRepository(database.Context), registry, NullLogger<ExecutionModeService>.Instance);
+            new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
 
         var defaultPolicy = Assert.Single(await service.ListAsync(CancellationToken.None));
         Assert.Equal("staging", defaultPolicy.Group);
         Assert.Equal(ExecutionMode.Confirm, defaultPolicy.Mode);
-        Assert.Empty(defaultPolicy.AllowedTools);
-        await service.SaveAsync(new ExecutionModePolicy("staging", ExecutionMode.Auto, ["block_ip"]), CancellationToken.None);
-        var loaded = await service.GetForGroupAsync(server.Group, CancellationToken.None);
-        Assert.Equal(ExecutionMode.Auto, loaded.Mode);
-        Assert.Equal(new[] { "block_ip" }, loaded.AllowedTools);
-        await Assert.ThrowsAsync<ArgumentException>(() => service.SaveAsync(
-            new ExecutionModePolicy("staging", ExecutionMode.Auto, ["run_shell"]), CancellationToken.None));
-        await Assert.ThrowsAsync<ArgumentException>(() => service.SaveAsync(
-            new ExecutionModePolicy("staging", ExecutionMode.Auto, ["apply_updates"]), CancellationToken.None));
+        await service.SaveAsync(new ExecutionModePolicy("staging", ExecutionMode.ReadOnly), CancellationToken.None);
+        Assert.Equal(ExecutionMode.ReadOnly, (await service.GetForGroupAsync(server.Group, CancellationToken.None)).Mode);
+        await service.SaveAsync(new ExecutionModePolicy("staging", ExecutionMode.Confirm), CancellationToken.None);
+        Assert.Equal(ExecutionMode.Confirm, (await service.GetForGroupAsync(server.Group, CancellationToken.None)).Mode);
     }
 
     [Fact]
@@ -397,13 +438,13 @@ public sealed class AgentToolPolicyTests
         await AddServerAsync(database.Context, "prod");
         var settings = new AppSettingRepository(database.Context);
         await settings.SetAsync("agent.execution-modes", "{ not valid json", CancellationToken.None);
-        var service = new ExecutionModeService(settings, new ServerRepository(database.Context), new ToolRegistry(), NullLogger<ExecutionModeService>.Instance);
+        var service = new ExecutionModeService(settings, new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
 
         Assert.Equal(ExecutionMode.ReadOnly, (await service.GetForGroupAsync("prod", CancellationToken.None)).Mode);
         Assert.Equal(ExecutionMode.ReadOnly, (await service.GetAsync("never-seen", CancellationToken.None)).Mode);
         Assert.All(await service.ListAsync(CancellationToken.None), policy => Assert.Equal(ExecutionMode.ReadOnly, policy.Mode));
 
-        await service.SaveAsync(new ExecutionModePolicy("prod", ExecutionMode.Confirm, []), CancellationToken.None);
+        await service.SaveAsync(new ExecutionModePolicy("prod", ExecutionMode.Confirm), CancellationToken.None);
         Assert.Equal(ExecutionMode.Confirm, (await service.GetForGroupAsync("prod", CancellationToken.None)).Mode);
         Assert.Equal(ExecutionMode.Confirm, (await service.GetForGroupAsync("unknown-group", CancellationToken.None)).Mode);
     }
@@ -416,16 +457,16 @@ public sealed class AgentToolPolicyTests
         await AddServerAsync(database.Context, "staging");
         var settings = new AppSettingRepository(database.Context);
         await settings.SetAsync("agent.execution-modes", "{ not valid json", CancellationToken.None);
-        var service = new ExecutionModeService(settings, new ServerRepository(database.Context), new ToolRegistry(), NullLogger<ExecutionModeService>.Instance);
+        var service = new ExecutionModeService(settings, new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
         Assert.True(await service.IsStoredSettingUnreadableAsync(CancellationToken.None));
 
-        await service.SaveAsync(new ExecutionModePolicy("staging", ExecutionMode.Auto, ["restart_service"]), CancellationToken.None);
+        await service.SaveAsync(new ExecutionModePolicy("staging", ExecutionMode.Confirm), CancellationToken.None);
 
         Assert.False(await service.IsStoredSettingUnreadableAsync(CancellationToken.None));
-        Assert.Equal(ExecutionMode.Auto, (await service.GetForGroupAsync("staging", CancellationToken.None)).Mode);
+        Assert.Equal(ExecutionMode.Confirm, (await service.GetForGroupAsync("staging", CancellationToken.None)).Mode);
         // prod was read-only while the setting was unreadable and must not fall back to Confirm.
         Assert.Equal(ExecutionMode.ReadOnly, (await service.GetForGroupAsync("prod", CancellationToken.None)).Mode);
-        Assert.Equal(new[] { ExecutionMode.ReadOnly, ExecutionMode.Auto },
+        Assert.Equal(new[] { ExecutionMode.ReadOnly, ExecutionMode.Confirm },
             (await service.ListAsync(CancellationToken.None)).OrderBy(item => item.Group).Select(item => item.Mode));
     }
 
@@ -439,7 +480,7 @@ public sealed class AgentToolPolicyTests
         await AddServerAsync(database.Context, "prod");
         var settings = new AppSettingRepository(database.Context);
         await settings.SetAsync("agent.execution-modes", stored, CancellationToken.None);
-        var service = new ExecutionModeService(settings, new ServerRepository(database.Context), new ToolRegistry(), NullLogger<ExecutionModeService>.Instance);
+        var service = new ExecutionModeService(settings, new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
 
         Assert.True(await service.IsStoredSettingUnreadableAsync(CancellationToken.None));
         Assert.Equal(ExecutionMode.ReadOnly, (await service.GetForGroupAsync("prod", CancellationToken.None)).Mode);

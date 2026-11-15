@@ -5,12 +5,11 @@ using Microsoft.Extensions.Logging;
 
 namespace DevOpsAgent.Application.Agent;
 
-public sealed record ExecutionModePolicy(string Group, ExecutionMode Mode, IReadOnlyList<string> AllowedTools);
+public sealed record ExecutionModePolicy(string Group, ExecutionMode Mode);
 
 public sealed class ExecutionModeService(
     IAppSettingRepository settings,
     IServerRepository servers,
-    ToolRegistry tools,
     ILogger<ExecutionModeService> logger)
 {
     private const string SettingKey = "agent.execution-modes";
@@ -44,16 +43,7 @@ public sealed class ExecutionModeService(
             throw new ArgumentOutOfRangeException(nameof(policy), "Choose a supported execution mode.");
         }
 
-        var allowedTools = policy.AllowedTools.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
-        foreach (var name in allowedTools)
-        {
-            if (!tools.TryGet(name, out var descriptor) || descriptor.Access != ToolAccess.Mutating || name is "run_shell" or "apply_updates")
-            {
-                throw new ArgumentException($"'{name}' cannot be included in the automatic execution allowlist.", nameof(policy));
-            }
-        }
-
-        var normalized = policy with { Group = policy.Group.Trim().ToLowerInvariant(), AllowedTools = allowedTools };
+        var normalized = policy with { Group = policy.Group.Trim().ToLowerInvariant() };
         var (configured, corrupt) = await ReadAsync(cancellationToken);
         if (corrupt)
         {
@@ -63,7 +53,7 @@ public sealed class ExecutionModeService(
             {
                 if (!string.Equals(group, normalized.Group, StringComparison.OrdinalIgnoreCase))
                 {
-                    configured[group] = new ExecutionModePolicy(group, ExecutionMode.ReadOnly, []);
+                    configured[group] = new ExecutionModePolicy(group, ExecutionMode.ReadOnly);
                 }
             }
         }
@@ -90,9 +80,9 @@ public sealed class ExecutionModeService(
         if (string.IsNullOrWhiteSpace(json)) return (new(StringComparer.OrdinalIgnoreCase), false);
         try
         {
-            var values = JsonSerializer.Deserialize<Dictionary<string, ExecutionModePolicy>>(json, JsonOptions);
-            // A null document, a null entry or an undefined mode is as untrustworthy as invalid JSON.
-            if (values is null || values.Values.Any(policy => policy is null || !Enum.IsDefined(policy.Mode)))
+            var values = JsonSerializer.Deserialize<Dictionary<string, StoredPolicy?>>(json, JsonOptions);
+            // A null document, a null entry or an unknown mode is as untrustworthy as invalid JSON.
+            if (values is null || values.Values.Any(policy => policy is null || !TryMapMode(policy.Mode, out _)))
                 return Unreadable();
             var policies = new Dictionary<string, ExecutionModePolicy>(StringComparer.OrdinalIgnoreCase);
             foreach (var (group, policy) in values)
@@ -100,7 +90,8 @@ public sealed class ExecutionModeService(
                 // Keys are normalised like lookups are (trim + lower). Two keys that collapse to one group would make the
                 // winner arbitrary (possibly the weaker mode), so a collision, like a blank key, is treated as corrupt.
                 var normalized = group.Trim().ToLowerInvariant();
-                if (normalized.Length == 0 || !policies.TryAdd(normalized, policy with { Group = normalized, AllowedTools = policy.AllowedTools ?? [] }))
+                TryMapMode(policy!.Mode, out var mode);
+                if (normalized.Length == 0 || !policies.TryAdd(normalized, new ExecutionModePolicy(normalized, mode)))
                     return Unreadable();
             }
 
@@ -119,8 +110,25 @@ public sealed class ExecutionModeService(
         }
     }
 
+    // Stored shape: only the numeric mode matters. 2 was the retired "Auto within allowlist" mode (D-026); it reads as Confirm,
+    // and any stored allowlist is ignored.
+    private sealed record StoredPolicy(int Mode);
+
+    private const int LegacyAutoMode = 2;
+
+    private static bool TryMapMode(int stored, out ExecutionMode mode)
+    {
+        switch (stored)
+        {
+            case (int)ExecutionMode.ReadOnly: mode = ExecutionMode.ReadOnly; return true;
+            case (int)ExecutionMode.Confirm:
+            case LegacyAutoMode: mode = ExecutionMode.Confirm; return true;
+            default: mode = ExecutionMode.ReadOnly; return false;
+        }
+    }
+
     private static ExecutionModePolicy Default(string group, bool failClosed = false) =>
-        new(group, failClosed ? ExecutionMode.ReadOnly : ExecutionMode.Confirm, []);
+        new(group, failClosed ? ExecutionMode.ReadOnly : ExecutionMode.Confirm);
 
     private static void ValidateGroup(string group)
     {

@@ -40,7 +40,7 @@ public sealed class AgentToolDispatcherTests
         var registry = new ToolRegistry();
         var serverRepository = new ServerRepository(context);
         var actionRepository = new ActionRecordRepository(context);
-        var executionModes = new ExecutionModeService(new AppSettingRepository(context), serverRepository, registry, NullLogger<ExecutionModeService>.Instance);
+        var executionModes = new ExecutionModeService(new AppSettingRepository(context), serverRepository, NullLogger<ExecutionModeService>.Instance);
         var commandBuilder = new ToolCommandBuilder(registry);
         var approvals = new ApprovalService(registry, executionModes, serverRepository, actionRepository, TimeProvider.System);
         var execution = new ActionExecutionService(actionRepository, serverRepository, registry, executionModes, commandBuilder,

@@ -2,9 +2,9 @@ namespace DevOpsAgent.Domain.Agent;
 
 public enum ExecutionMode
 {
-    ReadOnly,
-    Confirm,
-    Auto
+    ReadOnly = 0,
+    Confirm = 1
+    // Value 2 was "Auto within allowlist"; it is disabled for the MVP (D-026) and never produced or acted on.
 }
 
 public enum ActionRecordStatus

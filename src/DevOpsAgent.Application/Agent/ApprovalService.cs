@@ -7,7 +7,6 @@ namespace DevOpsAgent.Application.Agent;
 public enum ToolApprovalState
 {
     ExecuteReadOnly,
-    ExecuteAutomatically,
     PendingApproval,
     Denied
 }
@@ -90,8 +89,6 @@ public sealed class ApprovalService(
             return new(ToolApprovalState.Denied, "A target server group is in read-only mode.");
         }
 
-        var forceApproval = request.ToolName is "run_shell" or "apply_updates" || policies.Any(policy =>
-            policy.Mode != ExecutionMode.Auto || !policy.AllowedTools.Contains(request.ToolName, StringComparer.Ordinal));
         var action = new ActionRecord(
             request.ToolName,
             string.Join(",", policies.Select(policy => policy.Group).Order(StringComparer.Ordinal)),
@@ -100,11 +97,7 @@ public sealed class ApprovalService(
             request.ConversationId,
             timeProvider.GetUtcNow());
         await actions.AddAsync(action, cancellationToken);
-        if (!forceApproval)
-        {
-            return new(ToolApprovalState.ExecuteAutomatically, "Tool is allowed by every target group.", action.Id, arguments);
-        }
-
+        // Every mutating call needs explicit approval unless a read-only group blocked it above (no auto-execute path exists).
         return new(ToolApprovalState.PendingApproval, "This action needs explicit approval.", action.Id, arguments);
     }
 }

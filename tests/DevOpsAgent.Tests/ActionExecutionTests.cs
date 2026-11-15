@@ -104,8 +104,8 @@ public sealed class ActionExecutionTests
         var action = AddProposedAction(database.Context, "restart_service", servers, "{\"unit\":\"nginx\"}");
         var runner = new TestSshRunner();
         var executionModes = new ExecutionModeService(new AppSettingRepository(database.Context),
-            new ServerRepository(database.Context), new ToolRegistry(), NullLogger<ExecutionModeService>.Instance);
-        await executionModes.SaveAsync(new ExecutionModePolicy("prod", ExecutionMode.ReadOnly, []), CancellationToken.None);
+            new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
+        await executionModes.SaveAsync(new ExecutionModePolicy("prod", ExecutionMode.ReadOnly), CancellationToken.None);
         var execution = CreateService(database.Context, runner, executionModes);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -223,7 +223,7 @@ public sealed class ActionExecutionTests
     {
         var serverRepository = new ServerRepository(context);
         var registry = new ToolRegistry();
-        executionModes ??= new ExecutionModeService(new AppSettingRepository(context), serverRepository, registry, NullLogger<ExecutionModeService>.Instance);
+        executionModes ??= new ExecutionModeService(new AppSettingRepository(context), serverRepository, NullLogger<ExecutionModeService>.Instance);
         return new ActionExecutionService(new ActionRecordRepository(context), serverRepository, registry, executionModes,
             new ToolCommandBuilder(registry), runner, TimeProvider.System);
     }

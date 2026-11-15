@@ -70,8 +70,8 @@ public sealed class AgentToolDispatcher(
         }
         if (descriptor.Access == ToolAccess.Mutating)
         {
-            var completed = await execution.ApproveAndRunAsync(approval.ActionId!.Value, "execution policy", cancellationToken);
-            return new(name, $"Action {completed.Status}.\n{completed.ResultsJson}", approval.ActionId);
+            // There is no auto-execute path (D-026): a mutating tool that was not routed to approval is never run here.
+            return new(name, "Mutating tools always require explicit approval; the action was not run.");
         }
 
         var targetServers = await servers.ListAsync(cancellationToken);

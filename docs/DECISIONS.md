@@ -112,3 +112,9 @@ Format: `D-<number> · <date> · <title>` then Decision / Why / Consequences.
 - **Decision:** Reference `Microsoft.Extensions.Logging.Abstractions` (10.0.14, same train as EF Core) from `DevOpsAgent.Application`.
 - **Why:** Application services must log failures (corrupt settings, duplicate alert keys, partial tool failures) through `ILogger<T>` per the code conventions without depending on ASP.NET Core. The package is already part of the transitive graph of Infrastructure/Web, so nothing new ships.
 - **Consequences:** Application services that log take `ILogger<T>` as a required constructor parameter (never optional, so logging cannot silently disappear); tests pass `NullLogger<T>.Instance`. Never log secrets or setting contents.
+
+### D-026 · 2026-11-15 · Auto execution mode disabled for MVP
+- **Decision:** Execution modes are `ReadOnly` and `Confirm` only. "Auto within allowlist" is removed from the Settings UI, from save/validation, and from every execution path (approval, agent dispatcher, Updates page); every mutating call needs explicit approval unless a read-only group blocks it. A stored Auto value (mode `2` in the `agent.execution-modes` setting) reads as `Confirm`, not as corrupt; stored allowlists are ignored. Genuinely unreadable, null or unknown values still fail closed to `ReadOnly`. Supersedes the auto-within-allowlist part of AGT-3 and T6.1.
+- **Why:** Owner decision 2026-11-15. Server output is untrusted text and can carry prompt injection; letting a model-chosen tool call run without a human approving the exact command is an unacceptable risk for the MVP.
+- **Consequences:** `ExecutionMode` has no Auto member and `ExecutionModePolicy` has no allowlist. Data written earlier keeps working (Auto becomes Confirm). "Auto within allowlist" moves to the v2 backlog and needs its own design (command pinning, per-tool scopes) before returning.
+

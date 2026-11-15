@@ -5,7 +5,6 @@
 @inject DiscoveryScheduleService DiscoverySchedule
 @inject ExecutionModeService ExecutionModes
 @inject NotificationService Notifications
-@inject ToolRegistry Tools
 @inject IJSRuntime JavaScript
 
 <PageTitle>Settings · DevOps Agent</PageTitle>
@@ -53,24 +52,9 @@
                                     @onchange="args => UpdateExecutionModeForGroup(policy, args)">
                                 <option value="ReadOnly">Read-only</option>
                                 <option value="Confirm">Confirm each change</option>
-                                <option value="Auto">Auto within allowlist</option>
                             </select>
                         </div>
                     </div>
-                    @if (policy.Mode == ExecutionMode.Auto)
-                    {
-                        <fieldset class="execution-allowlist">
-                            <legend>Automatic tools</legend>
-                            @foreach (var tool in AutomaticTools)
-                            {
-                                <label class="execution-tool-option">
-                                    <input type="checkbox" checked="@policy.AllowedTools.Contains(tool.Name)"
-                                           @onchange="args => ToggleExecutionTool(policy, tool.Name, args)" />
-                                    <span><strong>@tool.Name</strong><small>@tool.Description</small></span>
-                                </label>
-                            }
-                        </fieldset>
-                    }
                     <button class="ui-button primary" type="button" disabled="@_savingExecutionGroup"
                             @onclick="() => SaveExecutionPolicyAsync(policy)">
                         @(_savingExecutionGroup ? "Saving…" : "Save group policy")
@@ -334,8 +318,6 @@
     private string? _discoveryMessage;
     private string? _discoveryError;
     private readonly List<ExecutionModePolicy> _executionPolicies = [];
-    private IReadOnlyList<ToolDescriptor> AutomaticTools => Tools.Tools
-        .Where(tool => tool.Access == ToolAccess.Mutating && tool.Name != "run_shell").ToArray();
     private bool _executionLoaded;
     private bool _executionUnreadable;
     private bool _savingExecutionGroup;
@@ -508,18 +490,10 @@
 
     private void UpdateExecutionModeForGroup(ExecutionModePolicy policy, ChangeEventArgs args)
     {
-        if (Enum.TryParse<ExecutionMode>(args.Value?.ToString(), out var mode))
+        if (Enum.TryParse<ExecutionMode>(args.Value?.ToString(), out var mode) && Enum.IsDefined(mode))
         {
             ReplaceExecutionPolicy(policy with { Mode = mode });
         }
-    }
-
-    private void ToggleExecutionTool(ExecutionModePolicy policy, string toolName, ChangeEventArgs args)
-    {
-        var allowed = policy.AllowedTools.ToHashSet(StringComparer.Ordinal);
-        if (args.Value is bool isChecked && isChecked) allowed.Add(toolName);
-        else allowed.Remove(toolName);
-        ReplaceExecutionPolicy(policy with { AllowedTools = allowed.Order(StringComparer.Ordinal).ToArray() });
     }
 
     private void ReplaceExecutionPolicy(ExecutionModePolicy updated)
