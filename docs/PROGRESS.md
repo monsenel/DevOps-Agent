@@ -13,7 +13,7 @@
 ## Current
 
 - **Task:** T7.R1–T7.R3, T7.R15, T7.R17 and T7.R18 done (R17 and R18 were done ahead of T7.R7 on the owner's order); next T7.R4
-- **Status:** —
+- **Status:** T7.R19 in progress (owner's scope: auth/key failures as their own state, real cause in Test connection, single-flight first failure, pool shutdown races)
 - **Last updated:** 2026-11-15 by ZCode
 
 ## WIP notes
@@ -137,7 +137,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T7.R16 | Stale carry-forward correctness | todo | |
 | T7.R17 | Cycle deadlines and alert stalls | done | `feat(T7.R17): hung commands back a host off, one deadline per call, shutdown abandons SSH work` |
 | T7.R18 | Restart-loop rule follow-ups | done | `feat(T7.R18): container states, stale-data hold, partial inspect, docker permission failures, history pruning` |
-| T7.R19 | SSH failure classification and reachability UI | todo | |
+| T7.R19 | SSH failure classification and reachability UI | in-progress | |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
 
@@ -146,6 +146,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 ## Session log
 
 One line per session: date · tool/model · tasks touched · result.
+
+- 2026-11-15 · ZCode / Claude · started T7.R19 · owner scope: (1) authentication and key errors are an `AuthFailed` state of their own (constant 1 min retry, never "unreachable"), (2) Test connection shows the real safe cause, (3) first failure of a host is single-flight, (4) pool shutdown never throws; not in scope: claim token for a cancelled caller, checking the target's own backoff before its jump host, the Servers "Not tested" label; baseline build 0 warnings, 441/441 tests (HEAD 131e5a0)
 
 - 2026-11-15 · ZCode / Claude · T7.R18 done · D-038: `paused` Low, `created`/`removing` Medium only after more than 10 minutes in the state (first-seen from the stored container history), `exited`/`dead` unchanged High (pinned by a test), restart-loop and state alerts held as of the last sample while a server has no fresh sample (unreachable/backoff) and a loop open before an outage stays open until 10 quiet minutes of fresh samples, partial `docker inspect` keeps the other containers and skips the sudo retry, the alert status probe reports Docker permission failures (`docker-status-unavailable`, Medium) with the same non-interactive sudo fallback and an `AppSudoCommands` entry (stopped daemon or no Docker stay silent; the `|| true` stays on `systemctl` so non-systemd hosts still probe), history older than 24 h pruned and corrupt history logged without contents; live on the lab (isolated DB, published Release, :5199, srv-app unpaused, no r18-* container left): 1) `docker pause web` 10:25:42.3 -> Low alert 10:25:51.6 (9.3 s; worst case about 90 s: metric cycle plus evaluation), unpause 10:27:29.3 -> resolved 10:27:51.6 (22.3 s); 2) `docker create` 10:25:36.8 (first stored sample 10:25:51.7): no alert at 6 min (checked in the DB at 10:31:42) and none in any evaluation before it (watcher, 3 s polling), Medium 10:36:51.6 (11 min 14.8 s after create), `docker rm` 10:37:00.3 -> resolved 10:37:51.6 (51.3 s); `removing` could not be reproduced live (unit tests only); 3) `alert-down` 10:29:14.9 -> High `container-state` "Container web is exited" 10:29:21.6 (6.7 s, same rule, severity, key and text as before), `alert-up` 10:30:43.0 -> resolved 10:30:51.6 (8.6 s); 4) crashloop (`--restart always`, `exit 1`) started 10:38:26.1 -> Medium restart-loop alert 10:39:51.6 (85.5 s); `docker pause dva-srv-app` 10:40:03.0 (server-unreachable High 10:40:21.6, last stored sample 10:39:51): loop alert still Open at 10:46:39 and 10:53:00 (12 min 57 s into the outage, 13 min after the last sample; the old rule resolves it after 10), unpaused 10:53:11.7 (verified paused=false), container removed 10:53:15.0, SSH backoff retry 10:58:06 -> unreachable resolved 10:58:21.6 and loop resolved 10:58:51.6 from fresh data; the quiet-10-minutes part after recovery is covered by a unit test only; 5) no registered lab user lacks Docker access (all three are in the docker group with NOPASSWD sudo), so the in-app report is unit-tested; live evidence: the exact status command run in the lab as `nobody` (no docker group, no sudo) printed the permission marker with the lab's real Docker 20.10.24 error, as `dva` listed the containers, on srv-edge (Docker CLI, no daemon) printed the stopped-daemon marker, and the running app raised no docker alert for srv-edge or srv-db; 6) seeded srv-db history at -30 h, -25.5 h, -24.1 h and -23 h was pruned to the -23 h entry within 40 s; a corrupt value was logged once ("cannot be parsed (JsonException, 30 characters)", the secret canary string in it never logged) and replaced by an empty history; build 0 warnings, 441/441 tests (32 new in `RestartLoopFollowUpTests`)
 
