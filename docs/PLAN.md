@@ -224,11 +224,13 @@ Raised by the 2026-11-15 MVP review. Small issues were fixed directly (`fix(revi
 
 ### T7.R1 SSH connection lifecycle (INV-5, NFR-2) — high
 - **Do:** Per-host backoff: single-flight connect per server plus a short negative cache (30–60 s) for unreachable hosts, and a dead jump host short-circuits every server behind it instead of each timing out. Skip a server's remaining collectors after a connection-level failure; per-call deadline that includes connect time, so the metric (60 s) and alert (30 s) cycles finish within their interval. Lease/ref-count pooled clients so a client (or a jump tunnel) is never disposed while another caller is mid-command. Already done in review: keepalive 30 s, recycle after 3 consecutive command timeouts (`SshTimeoutTracker`), eviction only when connection fields change; cover that pool wiring with fake-transport tests.
+- **Evidence (2026-11-15 live run):** with one TEST-NET entry, discovery took 3 min 33 s (Partial 3/1) and the 60 s metric cycle overran once (105 s).
 - **Done when:** Unit tests with a fake transport for leases, single-flight and negative cache. On the disposable lab with one TEST-NET (192.0.2.1) inventory entry behind `srv-edge`: discovery of the other servers is not delayed by more than one connect timeout, and the 60 s metric cycle does not overrun.
 - **Depends on:** —
 
 ### T7.R2 Stale nodes for unreachable servers (NFR-3) — high
 - **Do:** When a server's core collectors fail, carry its nodes/edges/listeners forward from the last usable snapshot, marked `stale` with last-seen time. Topology renders them dimmed with a text badge (not colour-only). Drift ignores stale carry-overs. Until then, Partial snapshots still feed drift/alerts and can raise false new-listener alerts for servers that failed in the earlier run — compare only servers that succeeded in both snapshots.
+- **Evidence (2026-11-15 live run):** the unreachable TEST-NET host appears as an ordinary Host node with no stale marker.
 - **Done when:** Tests on fixture snapshots; on the lab, a server made unreachable keeps its last-known nodes visibly stale and no spurious drift/new-listener alerts.
 - **Depends on:** —
 
@@ -268,13 +270,18 @@ Raised by the 2026-11-15 MVP review. Small issues were fixed directly (`fix(revi
 - **Depends on:** —
 
 ### T7.R10 Remaining MVP gaps — medium
-- **Do:** Loading skeletons (T6.6). J6 step 3: re-run the server's health checks after `apply_updates`. dnf scans with sudo, verified on a dnf host. Subnet filter on Topology (GRF-10). SSH-config import group select offers groups in use (like the edit form).
+- **Do:** Loading skeletons (T6.6). J6 step 3: re-run the server's health checks after `apply_updates`. Sidebar "Groups" card always says "No groups yet" (stub). Agent chat shows Markdown replies as raw text. dnf scans with sudo, verified on a dnf host. Subnet filter on Topology (GRF-10). SSH-config import group select offers groups in use (like the edit form).
 - **Done when:** Each item verified in both themes / on a test server as applicable.
 - **Depends on:** —
 
 ### T7.R11 Manual UI re-verification — medium
 - **Do:** In a real browser (keyboard input), verify flows that the review's browser automation could not drive: T1.1 add/edit + validation (duplicate name, port 70000, missing key), T5.2 add a health check, T3.3 trace `api.test.local` with evidence. Check the review-changed UI: required server group, Settings corrupt-execution-modes notice, provider "re-enter API key" message, approver name, graph alert text marker, Unknown node labels. 390 px and both themes, contrast (NFR-10).
 - **Done when:** Each flow passes or has a bug filed as a new T7.R task.
+- **Depends on:** —
+
+### T7.R14 Sudoers-pinnable privileged commands — medium
+- **Do:** Run the app's privileged commands as direct argv (for example `sudo -n /usr/bin/ss -tulpnH`) instead of `sudo -n -- sh -c '<script>'`, splitting multi-step scripts into separate fixed commands or a root-owned helper script with typed arguments, so a sudoers entry can allow exactly those commands. Keep `AppSudoCommands` (D-031) in sync and update README › Sudo on managed servers with a ready-to-use sudoers file.
+- **Done when:** A sudoers file listing only the app's commands works on the lab for discovery, scans and approved tools; the app still alerts on any other sudo.
 - **Depends on:** —
 
 ### T7.R12 Test gaps — low

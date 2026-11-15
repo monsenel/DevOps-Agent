@@ -4,28 +4,64 @@
 
 ## Waiting on owner
 
-- T7.R13 decisions (prod execution-mode default, update scans on prod, `/dev/components` outside Development, login throttling).
-- The local dev database `src/DevOpsAgent.Web/data/devops-agent.db` contains a `prod` server whose group has no stored execution mode, so it is in **Confirm** mode, not read-only. Set it in Settings › Execution modes if read-only is intended.
+- Push: `v0.1.0` on `origin` points at `6b4d044` (before the review fixes). The release is tagged `v0.1.1` locally and has not been pushed.
+- The local dev database `src/DevOpsAgent.Web/data/devops-agent.db` holds a `prod` server whose group has no stored execution mode; since D-029 that group is read-only. Nothing in that database was changed.
+- Lab script (outside this repo): `dva-testlab.sh` bakes srv-db's address into the workers with `--add-host` at start-up, so after the lab containers restart with new IPs `worker-pg`/`worker-redis` restart-loop against srv-search's address; and its `attack` profile prints `ssh` usage errors without making any login attempt.
 
 ---
 
 ## Current
 
-- **Task:** none — MVP review complete; next is T7.R1
+- **Task:** none — MVP closed out as v0.1.1; next is T7.R1
 - **Status:** —
-- **Last updated:** 2026-11-15 by ZCode (MVP review)
+- **Last updated:** 2026-11-15 by ZCode (MVP review and close-out)
 
 ## WIP notes
 
-None. The 2026-11-15 review fixed small issues in 50 `fix(review): …` commits (build 0 warnings, 290/290 tests) and filed T7.R1–T7.R13 in PLAN.md › M7.
+None. The 2026-11-15 review fixed small issues in `fix(review): …` commits (build 0 warnings, 342/342 tests), applied the owner's decisions (D-026–D-031) and filed the larger findings as T7.R tasks in PLAN.md › M7.
 
-### MVP review (2026-11-15)
+### Open review tasks (PLAN.md › M7)
+
+| Task | Severity | Summary |
+|---|---|---|
+| T7.R1 | high | SSH connection lifecycle: per-host backoff, dead jump short-circuit, cycles within interval, leases |
+| T7.R2 | high | Stale marking (text badge + last seen) for unreachable servers' nodes |
+| T7.R3 | high | Container restart-loop alert rule (restart counts) |
+| T7.R4 | medium | `restart_service` guard for sshd/docker; decide on `restart_container` |
+| T7.R5 | medium | HTTPS for token-bearing endpoints; redact raw Docker `Cmd`/labels and `nginx -T` before storage |
+| T7.R6 | medium | nginx relative `include` paths |
+| T7.R7 | medium | Alert engine parallelism, notifications via background queue, metric SQL predicates, auth-log cursor |
+| T7.R8 | medium | One app-wide discovery gate; host-owned UI discovery runs |
+| T7.R9 | medium | systemd collector only for listener-owning units; verify on a real LXC/VM |
+| T7.R10 | medium | Loading skeletons, J6 health re-run, dnf with sudo, subnet filter, import group options, sidebar groups, chat Markdown |
+| T7.R11 | medium | Manual real-browser recheck of forms, 390 px and contrast |
+| T7.R14 | medium | Privileged commands as direct argv so sudoers can pin them |
+| T7.R12 | low | Test gaps (chat send loop, discovery parallelism, unix sockets, dnf, no-sudo path) |
+
+### Live acceptance run (2026-11-15, single agent; replaces earlier overlapping results)
+
+Isolated database under `/tmp`, published Release build in Production mode on `127.0.0.1:5199`, configured OpenRouter provider copied from the lab-only J4 database. Inventory: srv-edge (direct), srv-app and srv-db (jump via srv-edge), all `staging`; srv-search never registered; no prod server, `./data` or `src/DevOpsAgent.Web/data` touched; no containers created except the lab's own `attack` profile (which did nothing, see Waiting on owner). Earlier results from the overlapping Codex session do not count.
+
+| Journey | Result | Evidence |
+|---|---|---|
+| J1 First run | pass | Login (wrong password rejected); provider test reachable/435 models/tools/streaming; SSH-config import with explicit Staging group, wildcard skipped, jump mapped; capability probe OK on all three; group defaulted to Read-only; first discovery 3/3 in ~6 s, 26 nodes / 11 connections. |
+| J2 Discover and expand | pass (step 5 skipped by constraint) | Service view domain → nginx → upstream → container; Unknown 172.26.0.2:9200 "connected from srv-app"; "Add this server" prefilled host and srv-app as jump (cancelled, srv-search stays unregistered); Network view shows subnets. |
+| J3 Trace | pass | `api.test.local` → 4 nodes / 3 connections; edge evidence `/etc/nginx/conf.d/demo.conf:10 proxy_pass` + `:2 server srv-app:5000` + resolution path; observed edge shows socket pairs. |
+| J4 Daily check | pass | Ranked review from alerts, metrics, graph, drift; disk question ran only `docker_disk_usage` + `disk_usage` on srv-app and said the gap is unexplained; "restart web" proposed exact `docker restart -- 'web'`, approved, exit 0, recorded in Action log with approver `owner`. |
+| J5 Attack | pass | 56 failed logins from the existing srv-search container (lab `attack` broken; fail2ban maxretry temporarily 55, restored to 5) → "SSH login attack detected" with IP, usernames, success no, fail2ban state; agent proposed `block_ip` 172.26.0.2 on srv-edge, approved, ban confirmed; bans cleared. |
+| J6 Patch | pass | Security update `libexpat1` (lab downgrade) listed security-first, approved on staging in Confirm mode, exit 0, report: no restarted services, reboot not required; with staging set to Read-only the scan ran cached lists only (no sudo, apt lists unchanged) and showed "last refreshed". Health-check re-run (step 3) missing → T7.R10. |
+| J7 Drift | pass | Temporary :9000 listener, extra nginx upstream server and stopped `web` → 22 changes, 1 new listener, new-listener alert, Overview drift card, agent summary; all restored. |
+| Blackhole 192.0.2.1 | pass with T7.R1/T7.R2 gaps | App stayed responsive (`/healthz` 13–31 ms), threads 59–62, fds 411→417, TCP 10→7; unreachable alert within a minute; discovery Partial 3/1 in 3 min 33 s; metric cycle overran once (105 s); no stale marking; test server removed. |
+
+Post-run fixes verified live: sudo alerts for the app user resolved once only its own commands were seen and reopened for `sudo id`; trace submits on Enter and with the button; capability probe lists iptables and nginx; Updates shows a parsed apply report. Logs contained no admin password, private key or API key and no `fail`/`crit` entries.
+
+### MVP review (2026-11-15, superseded by the live run above)
 
 - Static: M0, M1 and M4 pass; M2 (T2.5 scope), M3 (T3.1 relative includes), M5 (T5.3 restart-loop rule), M6 (T6.6 loading skeletons, J6 step 3) partial → T7.R tasks.
 - Live, isolated `/tmp` DB, lab servers only (srv-edge direct, srv-app/srv-db via jump; srv-search unregistered; no new containers): T0.3, T0.4, T1.2, T1.3 preview, T2.7/J2, T4.1–T4.3, T5.1, T5.3 (alert-down/up), T5.5 passed. T1.1, T3.3 and T5.2 not verified (automation could not drive Blazor inputs) → T7.R11. J4 blocked in the review run (no provider in the isolated DB); a concurrent Codex session recorded J4 separately (above). J5/J6 not re-run (no attacker container; no lab mutation).
 - Resilience: TEST-NET 192.0.2.1 entry → discovery 3 ok/1 failed, unreachable alert opened, app stayed healthy (threads 58–60, sockets fell 14 → 7); its six collectors took ~4 min serially → T7.R1.
 
-### T6.3 acceptance result (2026-11-15)
+### T6.3 acceptance result (2026-11-15, Codex session — overlapped the review; does not count)
 
 - Used a scrubbed temporary database and the confirmed default OpenRouter provider on the local app at `127.0.0.1:5155`; inventory contained only `srv-edge`, `srv-app`, and `srv-db`, all in `staging`. `srv-search` remained unregistered/Unknown. No `prod` inventory or server was contacted. No local Ollama endpoint was available, so the live J4 run exercised the configured OpenRouter provider.
 - J4a “anything I should look at?” returned the real open `container-state` alerts for `worker-redis` and `worker-pg` on `srv-app`, plus current metrics/graph context. The staging `dva` user was allowlisted only in the temporary review-app process to exclude test SSH probes from the security findings; no repo or server configuration changed.
@@ -94,7 +130,8 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T7.R10 | Remaining MVP gaps | todo | |
 | T7.R11 | Manual UI re-verification | todo | |
 | T7.R12 | Test gaps | todo | |
-| T7.R13 | Owner decisions | blocked | waiting on owner |
+| T7.R13 | Owner decisions | done | D-026–D-031 |
+| T7.R14 | Sudoers-pinnable privileged commands | todo | |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
 
@@ -103,6 +140,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 ## Session log
 
 One line per session: date · tool/model · tasks touched · result.
+
+- 2026-11-15 · ZCode / Claude · MVP close-out · owner decisions D-026–D-031 applied; small coverage gaps fixed; single-agent live run J1–J7 + blackhole passed on the lab (see table); post-run fixes for sudo noise, probe PATH, trace Enter and update report; build 0 warnings, 342/342 tests; tagged v0.1.1 locally (v0.1.0 was already pushed)
 
 - 2026-11-15 · ZCode / Claude · MVP review M0–M6 · static + live lab review; 50 `fix(review)` commits (three fix/re-review rounds) (atomic approvals, fail-closed execution modes, sudo alert de-dup, SSH pool hygiene, redaction, sensitive paths, snapshot status, secrets in logs/URLs); build 0 warnings, 290/290 tests; larger findings filed as T7.R1–T7.R13
 
