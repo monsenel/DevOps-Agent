@@ -79,6 +79,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<IChatClientFactory>(serviceProvider =>
             serviceProvider.GetRequiredService<OpenAiCompatibleChatClientFactory>());
         services.AddSingleton<IModelLister, OpenAiModelLister>();
+        services.AddSingleton<IModelCapabilities, DevOpsAgent.Infrastructure.Llm.ModelCapabilityProbe>();
 
         var persistence = configuration.GetSection(PersistenceOptions.SectionName).Get<PersistenceOptions>() ?? new PersistenceOptions();
         var keysDirectory = Path.GetFullPath(persistence.DataProtectionKeysDirectory);

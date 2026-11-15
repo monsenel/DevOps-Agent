@@ -39,7 +39,8 @@ internal sealed class ChatServiceHarness : IAsyncDisposable
 
     /// <param name="baseUrl">A cloud URL by default; use a loopback one for a local provider.</param>
     public static async Task<ChatServiceHarness> CreateAsync(IKnownSecrets? secrets = null, string baseUrl = "https://openrouter.ai/api/v1",
-        ProviderType type = ProviderType.OpenRouter, string model = "test/model", IEnumerable<Server>? servers = null, string reply = "done")
+        ProviderType type = ProviderType.OpenRouter, string model = "test/model", IEnumerable<Server>? servers = null, string reply = "done",
+        IModelCapabilities? capabilities = null)
     {
         var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -70,14 +71,14 @@ internal sealed class ChatServiceHarness : IAsyncDisposable
             new MetricRepository(context), new DriftService(snapshots, graphs));
         var client = new RecordingChatClient(reply);
         var service = new ChatService(new ChatConversationRepository(context), new LlmProviderRepository(context), new Factory(client),
-            registry, contextBuilder, dispatcher, TimeProvider.System, secrets);
+            registry, contextBuilder, dispatcher, TimeProvider.System, secrets, capabilities);
         return new ChatServiceHarness(connection, context, client, service, provider);
     }
 
-    public async Task<IReadOnlyList<ChatStreamEvent>> SendAsync(Guid conversationId, string text)
+    public async Task<IReadOnlyList<ChatStreamEvent>> SendAsync(Guid conversationId, string text, IReadOnlyList<ChatAttachmentInput>? attachments = null)
     {
         var events = new List<ChatStreamEvent>();
-        await foreach (var item in Service.SendAsync(conversationId, text)) events.Add(item);
+        await foreach (var item in Service.SendAsync(conversationId, text, attachments)) events.Add(item);
         return events;
     }
 
@@ -132,4 +133,11 @@ internal sealed class FixedSecrets(params string[] secrets) : IKnownSecrets
         Task.FromResult<IReadOnlyList<string>>(secrets.OrderByDescending(secret => secret.Length).ToArray());
 
     public void Invalidate() { }
+}
+
+/// <summary>Fixed model capabilities for tests.</summary>
+internal sealed class FixedCapabilities(bool reasoningEffort, bool images) : IModelCapabilities
+{
+    public Task<ModelCapabilities> GetAsync(LlmProvider provider, CancellationToken cancellationToken) =>
+        Task.FromResult(new ModelCapabilities(reasoningEffort, images));
 }

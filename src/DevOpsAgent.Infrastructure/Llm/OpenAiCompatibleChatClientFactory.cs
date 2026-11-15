@@ -25,6 +25,6 @@ public sealed class OpenAiCompatibleChatClientFactory(
             NetworkTimeout = TimeSpan.FromSeconds(provider.TimeoutSeconds)
         };
 
-        return new ChatClient(provider.Model, new ApiKeyCredential(apiKey), options).AsIChatClient();
+        return new ReasoningEffortChatClient(new ChatClient(provider.Model, new ApiKeyCredential(apiKey), options).AsIChatClient());
     }
 }

@@ -17,6 +17,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<LlmProvider> LlmProviders => Set<LlmProvider>();
     public DbSet<ChatConversation> ChatConversations => Set<ChatConversation>();
     public DbSet<ChatMessageRecord> ChatMessages => Set<ChatMessageRecord>();
+    public DbSet<ChatAttachment> ChatAttachments => Set<ChatAttachment>();
     public DbSet<Server> Servers => Set<Server>();
     public DbSet<Snapshot> Snapshots => Set<Snapshot>();
     public DbSet<CollectorRun> CollectorRuns => Set<CollectorRun>();
@@ -57,6 +58,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             entity.HasKey(conversation => conversation.Id);
             entity.Property(conversation => conversation.Title).HasMaxLength(120).IsRequired();
+            // No database default: Low is the enum's CLR default and would be taken for "not set" on insert.
+            entity.Property(conversation => conversation.Effort).HasConversion<string>().HasMaxLength(16);
             entity.HasMany(conversation => conversation.Messages)
                 .WithOne(message => message.Conversation)
                 .HasForeignKey(message => message.ConversationId)
@@ -69,6 +72,19 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(message => message.Role).HasMaxLength(20).IsRequired();
             entity.Property(message => message.Content).IsRequired();
             entity.HasIndex(message => new { message.ConversationId, message.CreatedAtUtc });
+            entity.HasMany(message => message.Attachments)
+                .WithOne()
+                .HasForeignKey(attachment => attachment.MessageId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ChatAttachment>(entity =>
+        {
+            entity.HasKey(attachment => attachment.Id);
+            entity.Property(attachment => attachment.FileName).HasMaxLength(255).IsRequired();
+            entity.Property(attachment => attachment.ContentType).HasMaxLength(100).IsRequired();
+            entity.Property(attachment => attachment.Kind).HasConversion<string>().HasMaxLength(16);
+            entity.Property(attachment => attachment.Content).IsRequired();
         });
 
         modelBuilder.Entity<Server>(entity =>

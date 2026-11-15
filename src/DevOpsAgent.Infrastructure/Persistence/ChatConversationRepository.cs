@@ -14,6 +14,7 @@ public sealed class ChatConversationRepository(AppDbContext dbContext) : IChatCo
     public Task<ChatConversation?> GetAsync(Guid id, CancellationToken cancellationToken) =>
         dbContext.ChatConversations
             .Include(conversation => conversation.Messages)
+            .ThenInclude(message => message.Attachments)
             .SingleOrDefaultAsync(conversation => conversation.Id == id, cancellationToken);
 
     public async Task AddAsync(ChatConversation conversation, CancellationToken cancellationToken)
@@ -21,6 +22,8 @@ public sealed class ChatConversationRepository(AppDbContext dbContext) : IChatCo
         dbContext.ChatConversations.Add(conversation);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
+
+    public Task SaveAsync(CancellationToken cancellationToken) => dbContext.SaveChangesAsync(cancellationToken);
 
     public async Task SaveMessageAsync(ChatMessageRecord newMessage, CancellationToken cancellationToken)
     {

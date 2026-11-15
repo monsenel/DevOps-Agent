@@ -83,6 +83,44 @@ namespace DevOpsAgent.Infrastructure.Migrations
                     b.ToTable("ActionRecords");
                 });
 
+            modelBuilder.Entity("DevOpsAgent.Domain.Chat.ChatAttachment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MessageId");
+
+                    b.ToTable("ChatAttachments");
+                });
+
             modelBuilder.Entity("DevOpsAgent.Domain.Chat.ChatConversation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -90,6 +128,11 @@ namespace DevOpsAgent.Infrastructure.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Effort")
+                        .IsRequired()
+                        .HasMaxLength(16)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Title")
@@ -821,6 +864,15 @@ namespace DevOpsAgent.Infrastructure.Migrations
                     b.ToTable("UpdateScans");
                 });
 
+            modelBuilder.Entity("DevOpsAgent.Domain.Chat.ChatAttachment", b =>
+                {
+                    b.HasOne("DevOpsAgent.Domain.Chat.ChatMessageRecord", null)
+                        .WithMany("Attachments")
+                        .HasForeignKey("MessageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("DevOpsAgent.Domain.Chat.ChatMessageRecord", b =>
                 {
                     b.HasOne("DevOpsAgent.Domain.Chat.ChatConversation", "Conversation")
@@ -969,6 +1021,11 @@ namespace DevOpsAgent.Infrastructure.Migrations
             modelBuilder.Entity("DevOpsAgent.Domain.Chat.ChatConversation", b =>
                 {
                     b.Navigation("Messages");
+                });
+
+            modelBuilder.Entity("DevOpsAgent.Domain.Chat.ChatMessageRecord", b =>
+                {
+                    b.Navigation("Attachments");
                 });
 #pragma warning restore 612, 618
         }

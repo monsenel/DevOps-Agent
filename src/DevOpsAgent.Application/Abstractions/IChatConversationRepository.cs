@@ -8,4 +8,7 @@ public interface IChatConversationRepository
     Task<ChatConversation?> GetAsync(Guid id, CancellationToken cancellationToken);
     Task AddAsync(ChatConversation conversation, CancellationToken cancellationToken);
     Task SaveMessageAsync(ChatMessageRecord newMessage, CancellationToken cancellationToken);
+
+    /// <summary>Saves changes to a conversation loaded with <see cref="GetAsync"/> (its effort).</summary>
+    Task SaveAsync(CancellationToken cancellationToken);
 }

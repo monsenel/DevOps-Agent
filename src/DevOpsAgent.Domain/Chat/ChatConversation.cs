@@ -18,7 +18,13 @@ public sealed class ChatConversation
     public string Title { get; private set; } = string.Empty;
     public DateTimeOffset CreatedAtUtc { get; private set; }
     public DateTimeOffset UpdatedAtUtc { get; private set; }
+
+    /// <summary>Reasoning effort for models that support it (T8.5); Medium unless the owner chose otherwise.</summary>
+    public ChatEffort Effort { get; private set; } = ChatEffort.Medium;
+
     public List<ChatMessageRecord> Messages { get; private set; } = [];
+
+    public void SetEffort(ChatEffort effort) => Effort = effort;
 
     public ChatMessageRecord AddMessage(string role, string content, DateTimeOffset createdAtUtc)
     {

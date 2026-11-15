@@ -3204,3 +3204,110 @@ p {
     color: var(--dva-muted);
     font-weight: 600;
 }
+
+/* Agent chat: effort, attachments, Markdown (T8.5). */
+.chat-header-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.chat-attach {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.chat-attachment-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.chat-attachment-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px 4px 12px;
+    border-radius: var(--dva-radius-pill);
+    background: var(--dva-inset);
+    color: var(--dva-ink);
+    font-size: 12px;
+}
+
+.chat-chip-remove {
+    min-width: 32px;
+    min-height: 32px;
+    border: 0;
+    border-radius: var(--dva-radius-pill);
+    background: transparent;
+    color: var(--dva-muted);
+    font-size: 16px;
+}
+
+.chat-attach-error {
+    color: var(--dva-danger);
+    font-size: 12px;
+}
+
+/* Rendered HTML: the line breaks between tags are not text (the plain message style keeps pre-wrap). */
+.chat-message-content.chat-markdown {
+    white-space: normal;
+}
+
+.chat-markdown > :first-child { margin-top: 0; }
+.chat-markdown > :last-child { margin-bottom: 0; }
+.chat-markdown p,
+.chat-markdown ul,
+.chat-markdown ol,
+.chat-markdown pre,
+.chat-markdown table { margin: 0 0 10px; }
+.chat-markdown ul,
+.chat-markdown ol { padding-left: 22px; }
+
+.chat-markdown code {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+}
+
+.chat-markdown :not(pre) > code {
+    padding: 1px 5px;
+    border-radius: 6px;
+    background: var(--dva-inset);
+}
+
+.chat-markdown pre {
+    overflow-x: auto;
+    padding: 12px 14px;
+    border-radius: var(--dva-radius-control);
+    background: var(--dva-inset);
+}
+
+.chat-markdown table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+}
+
+.chat-markdown th,
+.chat-markdown td {
+    padding: 6px 10px;
+    border: 1px solid var(--dva-line);
+    text-align: left;
+}
+
+.chat-markdown a {
+    color: var(--dva-accent);
+}
+
+/* Code blocks stand out from the assistant bubble, which is itself inset. */
+.assistant-message .chat-markdown pre,
+.assistant-message .chat-markdown :not(pre) > code {
+    background: var(--dva-card);
+}
