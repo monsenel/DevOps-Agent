@@ -21,13 +21,13 @@ public sealed class ServerCapabilityService(
         try
         {
             var osRelease = await sshRunner.RunAsync(serverId, OsReleaseCommand,
-                new SshRunOptions(ProbeTimeout), cancellationToken);
+                new SshRunOptions(ProbeTimeout, BypassBackoff: true), cancellationToken);
             var uptime = await sshRunner.RunAsync(serverId, UptimeCommand,
-                new SshRunOptions(ProbeTimeout), cancellationToken);
+                new SshRunOptions(ProbeTimeout, BypassBackoff: true), cancellationToken);
             var sudo = await sshRunner.RunAsync(serverId, SudoProbeCommand,
-                new SshRunOptions(ProbeTimeout), cancellationToken);
+                new SshRunOptions(ProbeTimeout, BypassBackoff: true), cancellationToken);
             var availableCommands = await sshRunner.RunAsync(serverId, AvailableCommandsCommand,
-                new SshRunOptions(ProbeTimeout), cancellationToken);
+                new SshRunOptions(ProbeTimeout, BypassBackoff: true), cancellationToken);
 
             var osInfo = ParseOsInfo(osRelease.StandardOutput);
             var sudoCapable = sudo.ExitCode == 0;
@@ -45,6 +45,18 @@ public sealed class ServerCapabilityService(
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
+        }
+        catch (Exception exception) when (SshFailures.HostKeyMismatch(exception) is { } mismatch)
+        {
+            var fingerprint = mismatch.Fingerprint is null ? "Fingerprint unavailable" : $"SHA256:{mismatch.Fingerprint}";
+            return new ServerCapabilityResult(serverId, false, null, null, null, [],
+                $"SSH host key for {mismatch.Host}:{mismatch.Port} is not pinned ({fingerprint}). Verify it independently, then add its entry to /keys/known_hosts.", testedAt);
+        }
+        catch (HostUnreachableException exception)
+        {
+            // "Test connection" always attempts the route; this is the failure it just recorded, with the new backoff.
+            return new ServerCapabilityResult(serverId, false, null, null, null, [],
+                $"{exception.Message} Check the host, identity key, jump server, and pinned host key.", testedAt);
         }
         catch (SshHostKeyMismatchException exception)
         {

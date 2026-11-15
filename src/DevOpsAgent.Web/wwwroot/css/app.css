@@ -2766,6 +2766,15 @@ p {
     font-weight: 700;
 }
 
+.server-reachability {
+    display: block;
+    max-width: 280px;
+    margin-top: 4px;
+    color: var(--dva-muted);
+    font-size: 12px;
+    white-space: normal;
+}
+
 .table-actions,
 .tag-list {
     display: flex;

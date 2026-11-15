@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Domain.Servers;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Renci.SshNet.Common;
 
 namespace DevOpsAgent.Infrastructure.Ssh;
@@ -15,7 +16,8 @@ namespace DevOpsAgent.Infrastructure.Ssh;
 public sealed class SshConnectionPool(
     IServiceScopeFactory scopeFactory,
     ISshTransportFactory transportFactory,
-    IHostReachability reachability) : ISshConnectionPool
+    IHostReachability reachability,
+    ILogger<SshConnectionPool> logger) : ISshConnectionPool
 {
     private readonly ConcurrentDictionary<Guid, ConnectionEntry> _connections = new();
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _connectionLocks = new();
@@ -146,6 +148,7 @@ public sealed class SshConnectionPool(
                 }
 
                 RemoveConnection(server.Id);
+                logger.LogDebug("SSH connect attempt to {ServerName}", server.Name);
                 ISshTransport transport;
                 try
                 {
@@ -155,6 +158,8 @@ public sealed class SshConnectionPool(
                 {
                     reachability.RecordFailure(server.Id, exception);
                     outcomeRecorded = true;
+                    logger.LogInformation("{ServerName} is unreachable; next retry at {NextRetryUtc:u}", server.Name,
+                        reachability.Get(server.Id)!.NextRetryUtc);
                     throw new HostUnreachableException(server.Id, server.Name, reachability.Get(server.Id)!);
                 }
 

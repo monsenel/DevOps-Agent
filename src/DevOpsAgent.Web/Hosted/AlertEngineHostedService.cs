@@ -11,6 +11,7 @@ public sealed class AlertEngineHostedService(IServiceScopeFactory scopes, AlertS
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
         do
         {
+            var started = System.Diagnostics.Stopwatch.StartNew();
             try
             {
                 using var scope = scopes.CreateScope();
@@ -20,6 +21,7 @@ public sealed class AlertEngineHostedService(IServiceScopeFactory scopes, AlertS
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
             catch (Exception exception) { logger.LogError(exception, "Alert evaluation failed."); }
+            logger.LogInformation("Alert evaluation finished in {ElapsedMs} ms", started.ElapsedMilliseconds);
         } while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 }
