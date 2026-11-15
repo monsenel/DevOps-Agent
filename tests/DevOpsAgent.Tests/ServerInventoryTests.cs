@@ -72,6 +72,30 @@ public sealed class ServerInventoryTests
     }
 
     [Fact]
+    public async Task EditingAJumpServerAlsoEvictsEveryServerBehindIt()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var pool = new RecordingSshConnectionPool();
+        var service = new ServerService(new ServerRepository(database.Context), new TestSecretProtector(),
+            new TestKeyStore("id_ed25519"), pool);
+        var gateway = await service.CreateAsync(Input("gateway", null), CancellationToken.None);
+        var middle = await service.CreateAsync(Input("middle", null) with { JumpServerId = gateway.Id }, CancellationToken.None);
+        var leaf = await service.CreateAsync(Input("leaf", null) with { JumpServerId = middle.Id }, CancellationToken.None);
+        var unrelated = await service.CreateAsync(Input("unrelated", null), CancellationToken.None);
+
+        await service.UpdateAsync(gateway.Id, Input("gateway", null) with { Host = "moved.example.internal" }, CancellationToken.None);
+
+        Assert.Equal(gateway.Id, pool.Evicted[0]);
+        Assert.Equal(new[] { gateway.Id, middle.Id, leaf.Id }.Order(), pool.Evicted.Order());
+        Assert.DoesNotContain(unrelated.Id, pool.Evicted);
+
+        // A cosmetic edit of the jump server evicts nobody.
+        pool.Evicted.Clear();
+        await service.UpdateAsync(gateway.Id, Input("gateway-renamed", null) with { Host = "moved.example.internal" }, CancellationToken.None);
+        Assert.Empty(pool.Evicted);
+    }
+
+    [Fact]
     public async Task UpdateAndDeleteEvictThePooledSshConnection()
     {
         await using var database = await CreateDatabaseAsync();

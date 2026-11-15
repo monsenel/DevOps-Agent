@@ -53,9 +53,30 @@ public sealed class ServerService(
         if (connectionBefore != connectionAfter)
         {
             connectionPool.Evict(id);
+            // Servers reached through this one tunnel through the old connection and may carry a backoff earned on the old route.
+            foreach (var dependentId in DependentsOf(id, servers)) connectionPool.Evict(dependentId);
         }
 
         return ToSummary(server, servers);
+    }
+
+    /// <summary>Every server whose jump-server route passes through <paramref name="jumpId"/> (directly or through further jumps).</summary>
+    private static IReadOnlyList<Guid> DependentsOf(Guid jumpId, IReadOnlyCollection<Server> servers)
+    {
+        var dependents = new List<Guid>();
+        var seen = new HashSet<Guid> { jumpId };
+        for (var added = true; added;)
+        {
+            added = false;
+            foreach (var candidate in servers.Where(candidate => candidate.JumpServerId is Guid via && seen.Contains(via) && !seen.Contains(candidate.Id)))
+            {
+                seen.Add(candidate.Id);
+                dependents.Add(candidate.Id);
+                added = true;
+            }
+        }
+
+        return dependents;
     }
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)
