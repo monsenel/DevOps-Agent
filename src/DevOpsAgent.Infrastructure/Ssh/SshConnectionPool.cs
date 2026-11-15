@@ -12,6 +12,12 @@ namespace DevOpsAgent.Infrastructure.Ssh;
 /// Pooled SSH connections, one per server, routed through jump hosts. A connection-level failure puts the host in backoff
 /// (<see cref="IHostReachability"/>): until its next retry every request for it, and for every server behind it, fails
 /// immediately with <see cref="HostUnreachableException"/> instead of waiting on a connect timeout (T7.R1).
+/// <para>
+/// Every command runs on a leased client (T7.R15, D-036). Eviction, host edits, connection failures and repeated timeouts
+/// only retire an entry: it takes no new leases and is disposed when its last lease ends. A dependent entry holds a lease on
+/// its jump entry, so a jump tunnel outlives the commands running through it. Only <see cref="Dispose"/> (shutdown) closes
+/// clients regardless of leases.
+/// </para>
 /// </summary>
 public sealed class SshConnectionPool(
     IServiceScopeFactory scopeFactory,
@@ -23,16 +29,20 @@ public sealed class SshConnectionPool(
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _connectionLocks = new();
     // Bumped by Evict so a connect that started with old server settings never caches its result.
     private readonly ConcurrentDictionary<Guid, int> _generations = new();
+    // Every client that has not been disposed yet: the pooled ones plus retired ones still draining their last leases.
+    private readonly ConcurrentDictionary<ConnectionEntry, byte> _live = new();
     private bool _disposed;
+
+    /// <summary>Commands currently running on pooled clients (diagnostics and tests).</summary>
+    public int ActiveLeases => _live.Keys.Sum(entry => entry.Leases);
+
+    /// <summary>Clients that are open: pooled ones and retired ones still finishing a command (diagnostics and tests).</summary>
+    public int LiveClients => _live.Count;
 
     public async Task<ISshCommandSession> GetSessionAsync(Guid serverId, bool bypassBackoff, CancellationToken cancellationToken)
     {
-        var connection = await GetOrConnectAsync(serverId, [], bypassBackoff, cancellationToken);
-        return new SshCommandSession(connection.Transport, connection.Timeouts, () =>
-        {
-            Invalidate(serverId, connection);
-            return Task.CompletedTask;
-        });
+        var lease = await GetOrConnectAsync(serverId, [], bypassBackoff, cancellationToken);
+        return new SshCommandSession(lease, reason => Invalidate(serverId, lease.Entry, reason));
     }
 
     public void Evict(Guid serverId)
@@ -42,7 +52,7 @@ public sealed class SshConnectionPool(
         _generations.AddOrUpdate(serverId, 1, static (_, current) => current + 1);
         // New settings deserve an immediate attempt rather than the old settings' backoff.
         reachability.Reset(serverId);
-        RemoveConnection(serverId);
+        RemoveConnection(serverId, "server settings changed");
     }
 
     private int Generation(Guid serverId) => _generations.GetValueOrDefault(serverId);
@@ -54,12 +64,15 @@ public sealed class SshConnectionPool(
             return;
         }
 
+        // Shutdown closes every client at once, leased or not; commands still running fail with the closed connection.
+        // Dependents first, so a tunnel is released while its jump client is still open.
         _disposed = true;
-        foreach (var connection in _connections.Values)
+        foreach (var connection in _live.Keys.OrderByDescending(entry => entry.Depth))
         {
-            connection.Dispose();
+            connection.Shutdown();
         }
 
+        _live.Clear();
         _connections.Clear();
         foreach (var gate in _connectionLocks.Values)
         {
@@ -69,7 +82,9 @@ public sealed class SshConnectionPool(
         _connectionLocks.Clear();
     }
 
-    private async Task<ConnectionEntry> GetOrConnectAsync(
+    // The returned lease belongs to the caller, who must dispose it (the session does; a jump lease is released once the
+    // dependent entry has taken its own).
+    private async Task<EntryLease> GetOrConnectAsync(
         Guid serverId,
         HashSet<Guid> visited,
         bool bypassBackoff,
@@ -88,24 +103,32 @@ public sealed class SshConnectionPool(
             {
                 var generation = Generation(serverId);
                 var server = await LoadServerAsync(serverId, cancellationToken);
-                ConnectionEntry? jumpConnection = null;
-                if (server.JumpServerId is Guid jumpId)
+                EntryLease? jumpLease = null;
+                try
                 {
-                    try
+                    if (server.JumpServerId is Guid jumpId)
                     {
-                        jumpConnection = await GetOrConnectAsync(jumpId, visited, bypassBackoff, cancellationToken);
+                        try
+                        {
+                            jumpLease = await GetOrConnectAsync(jumpId, visited, bypassBackoff, cancellationToken);
+                        }
+                        catch (HostUnreachableException jumpUnreachable)
+                        {
+                            // No connection is attempted to a server whose jump host is unreachable.
+                            var state = reachability.Get(jumpUnreachable.ServerId) ?? StateFrom(jumpUnreachable);
+                            throw new HostUnreachableException(server.Id, server.Name, state,
+                                jumpUnreachable.ViaJumpServerName ?? jumpUnreachable.ServerName);
+                        }
                     }
-                    catch (HostUnreachableException jumpUnreachable)
-                    {
-                        // No connection is attempted to a server whose jump host is unreachable.
-                        var state = reachability.Get(jumpUnreachable.ServerId) ?? StateFrom(jumpUnreachable);
-                        throw new HostUnreachableException(server.Id, server.Name, state,
-                            jumpUnreachable.ViaJumpServerName ?? jumpUnreachable.ServerName);
-                    }
-                }
 
-                var connection = await ConnectHopAsync(server, jumpConnection, generation, bypassBackoff, cancellationToken);
-                if (connection is not null) return connection;
+                    // The jump lease keeps the tunnel's client open while this hop connects through it.
+                    var connection = await ConnectHopAsync(server, jumpLease, generation, bypassBackoff, cancellationToken);
+                    if (connection is not null) return connection;
+                }
+                finally
+                {
+                    jumpLease?.Dispose();
+                }
             }
 
             throw new InvalidOperationException("The server settings changed while connecting. Try again.");
@@ -116,13 +139,14 @@ public sealed class SshConnectionPool(
         }
     }
 
-    private async Task<ConnectionEntry?> ConnectHopAsync(
+    private async Task<EntryLease?> ConnectHopAsync(
         Server server,
-        ConnectionEntry? jumpConnection,
+        EntryLease? jumpLease,
         int generation,
         bool bypassBackoff,
         CancellationToken cancellationToken)
     {
+        var jumpConnection = jumpLease?.Entry;
         if (TryReuse(server.Id, jumpConnection) is { } pooled) return pooled;
 
         // A host in backoff, or one another caller is already retrying, fails immediately.
@@ -147,7 +171,7 @@ public sealed class SshConnectionPool(
                     throw new HostUnreachableException(server.Id, server.Name, failedMeanwhile!);
                 }
 
-                RemoveConnection(server.Id);
+                RemoveConnection(server.Id, "replaced by a new connection");
                 logger.LogDebug("SSH connect attempt to {ServerName}", server.Name);
                 ISshTransport transport;
                 try
@@ -167,12 +191,27 @@ public sealed class SshConnectionPool(
 
                 reachability.RecordSuccess(server.Id);
                 outcomeRecorded = true;
-                var created = new ConnectionEntry(transport, jumpConnection);
+                // The new entry holds its own lease on the jump entry until it is disposed, so the tunnel it runs through
+                // outlives every command on it.
+                var created = new ConnectionEntry(server.Id, server.Name, transport, jumpConnection, jumpLease?.Entry.Retain(), logger, Forget);
+                _live[created] = 0;
+                var lease = created.Retain();
+                if (_disposed)
+                {
+                    // Shut down while connecting: nothing may outlive the pool.
+                    created.Shutdown();
+                    lease.Dispose();
+                    throw new ObjectDisposedException(nameof(SshConnectionPool));
+                }
+
                 _connections[server.Id] = created;
-                if (Generation(server.Id) == generation) return created;
+                logger.LogDebug("SSH client for {ServerName} connected{ViaJump}", server.Name,
+                    jumpConnection is null ? string.Empty : $" through {jumpConnection.ServerName}");
+                if (Generation(server.Id) == generation) return lease;
 
                 // Evicted while connecting: do not keep a connection built from stale settings.
-                Invalidate(server.Id, created);
+                lease.Dispose();
+                Invalidate(server.Id, created, "server settings changed while connecting");
                 return null;
             }
             finally
@@ -186,12 +225,14 @@ public sealed class SshConnectionPool(
         }
     }
 
-    private ConnectionEntry? TryReuse(Guid serverId, ConnectionEntry? jumpConnection) =>
+    // A retired entry is never leased again (TryLease refuses it), so a reuse can race with Evict but never revives a client
+    // that is about to be, or already was, disposed.
+    private EntryLease? TryReuse(Guid serverId, ConnectionEntry? jumpConnection) =>
         _connections.TryGetValue(serverId, out var current)
         && current.Transport.IsConnected
         && (jumpConnection is null || jumpConnection.Transport.IsConnected)
         && ReferenceEquals(current.JumpConnection, jumpConnection)
-            ? current
+            ? current.TryLease()
             : null;
 
     private static HostReachabilityState StateFrom(HostUnreachableException exception) =>
@@ -206,37 +247,196 @@ public sealed class SshConnectionPool(
             ?? throw new KeyNotFoundException("Server was not found in inventory.");
     }
 
-    // A connection-level failure leaves a poisoned client in the pool; drop exactly that entry (not a newer replacement)
-    // so the next request reconnects.
-    private void Invalidate(Guid serverId, ConnectionEntry entry)
+    private void Forget(ConnectionEntry entry) => _live.TryRemove(entry, out _);
+
+    // A connection-level failure leaves a poisoned client in the pool; retire exactly that entry (not a newer replacement)
+    // so the next request reconnects. Commands still running on it finish first; the last lease to end disposes it.
+    private void Invalidate(Guid serverId, ConnectionEntry entry, string reason)
     {
+        if (_disposed) return;
         // TryRemove(KeyValuePair) is identity-checked, so a newer replacement entry is never removed.
-        if (!_disposed && _connections.TryRemove(new KeyValuePair<Guid, ConnectionEntry>(serverId, entry)))
-        {
-            entry.Dispose();
-        }
+        _connections.TryRemove(new KeyValuePair<Guid, ConnectionEntry>(serverId, entry));
+        // Idempotent: the entry may already be draining (evicted earlier, or retired by another timed-out command).
+        entry.Retire(reason);
     }
 
-    private void RemoveConnection(Guid serverId)
+    private void RemoveConnection(Guid serverId, string reason)
     {
         if (_connections.TryRemove(serverId, out var previous))
         {
-            previous.Dispose();
+            previous.Retire(reason);
         }
     }
 
-    private sealed class ConnectionEntry(ISshTransport transport, ConnectionEntry? jumpConnection) : IDisposable
+    /// <summary>
+    /// One leased claim on a pooled client. Disposing it is idempotent, so a lease can never be released twice.
+    /// </summary>
+    private sealed class EntryLease : IDisposable
     {
-        public ISshTransport Transport { get; } = transport;
-        public ConnectionEntry? JumpConnection { get; } = jumpConnection;
-        public SshTimeoutTracker Timeouts { get; } = new();
+        private readonly ConnectionEntry _entry;
+        private int _released;
 
-        public void Dispose() => Transport.Dispose();
+        public EntryLease(ConnectionEntry entry) => _entry = entry;
+
+        public ConnectionEntry Entry => _entry;
+        public bool IsReleased => Volatile.Read(ref _released) != 0;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _released, 1) == 0) _entry.Release();
+        }
     }
 
-    private sealed class SshCommandSession(ISshTransport transport, SshTimeoutTracker timeouts, Func<Task> onConnectionFailure) : ISshCommandSession
+    /// <summary>
+    /// A pooled client with a lease count. Retiring it (eviction, host edit, failure, repeated timeouts) stops new leases;
+    /// it is disposed when the last lease ends, immediately when none is held. It holds a lease on its jump entry for its
+    /// whole life, released after its own client is closed.
+    /// </summary>
+    private sealed class ConnectionEntry
     {
-        public bool IsConnected => transport.IsConnected;
+        private readonly object _sync = new();
+        private readonly ILogger _logger;
+        private readonly Action<ConnectionEntry> _onDisposed;
+        private readonly EntryLease? _jumpLease;
+        private int _leases;
+        private bool _retired;
+        private bool _disposed;
+
+        public ConnectionEntry(
+            Guid serverId,
+            string serverName,
+            ISshTransport transport,
+            ConnectionEntry? jumpConnection,
+            EntryLease? jumpLease,
+            ILogger logger,
+            Action<ConnectionEntry> onDisposed)
+        {
+            ServerId = serverId;
+            ServerName = serverName;
+            Transport = transport;
+            JumpConnection = jumpConnection;
+            _jumpLease = jumpLease;
+            _logger = logger;
+            _onDisposed = onDisposed;
+        }
+
+        public Guid ServerId { get; }
+        public string ServerName { get; }
+        public ISshTransport Transport { get; }
+        public ConnectionEntry? JumpConnection { get; }
+        public SshTimeoutTracker Timeouts { get; } = new();
+
+        public int Leases
+        {
+            get { lock (_sync) return _leases; }
+        }
+
+        /// <summary>Length of the jump chain behind this entry (0 for a direct connection).</summary>
+        public int Depth => JumpConnection is null ? 0 : JumpConnection.Depth + 1;
+
+        /// <summary>A new lease, or null when the entry is retired (callers then use a fresh entry).</summary>
+        public EntryLease? TryLease()
+        {
+            lock (_sync)
+            {
+                if (_retired) return null;
+                _leases++;
+                return new EntryLease(this);
+            }
+        }
+
+        /// <summary>A new lease for a caller that already holds one (or that created the entry), even if the entry is retired.</summary>
+        public EntryLease Retain()
+        {
+            lock (_sync)
+            {
+                _leases++;
+                return new EntryLease(this);
+            }
+        }
+
+        public void Retire(string reason)
+        {
+            bool disposeNow;
+            int leases;
+            lock (_sync)
+            {
+                if (_retired) return;
+                _retired = true;
+                leases = _leases;
+                disposeNow = leases == 0 && !_disposed;
+                if (disposeNow) _disposed = true;
+            }
+
+            if (disposeNow)
+            {
+                _logger.LogDebug("SSH client for {ServerName} retired ({Reason}); no command is running, disposing it now", ServerName, reason);
+                DisposeClient();
+            }
+            else
+            {
+                _logger.LogDebug("SSH client for {ServerName} retired ({Reason}); {Leases} command(s) still running, it is disposed when the last one ends",
+                    ServerName, reason, leases);
+            }
+        }
+
+        // Called only by EntryLease.Dispose, exactly once per lease.
+        public void Release()
+        {
+            bool disposeNow;
+            lock (_sync)
+            {
+                _leases--;
+                disposeNow = _retired && _leases == 0 && !_disposed;
+                if (disposeNow) _disposed = true;
+            }
+
+            if (disposeNow)
+            {
+                _logger.LogDebug("SSH client for {ServerName}: last command ended, disposing the retired client", ServerName);
+                DisposeClient();
+            }
+        }
+
+        /// <summary>Shutdown: closes the client now, whatever leases are held.</summary>
+        public void Shutdown()
+        {
+            lock (_sync)
+            {
+                _retired = true;
+                if (_disposed) return;
+                _disposed = true;
+            }
+
+            DisposeClient();
+        }
+
+        private void DisposeClient()
+        {
+            try
+            {
+                Transport.Dispose();
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(exception, "Disposing the SSH client for {ServerName} failed", ServerName);
+            }
+
+            _logger.LogDebug("SSH client for {ServerName} disposed", ServerName);
+            _onDisposed(this);
+            // The tunnel is gone; the jump client may now close once its other commands and dependents are done.
+            _jumpLease?.Dispose();
+        }
+    }
+
+    private sealed class SshCommandSession(EntryLease lease, Action<string> retire) : ISshCommandSession
+    {
+        private ConnectionEntry Entry => lease.Entry;
+        private SshTimeoutTracker Timeouts => Entry.Timeouts;
+
+        public bool IsConnected => !lease.IsReleased && Entry.Transport.IsConnected;
+
+        public void Dispose() => lease.Dispose();
 
         public async Task<RemoteCommandResult> ExecuteAsync(
             string command,
@@ -253,24 +453,28 @@ public sealed class SshConnectionPool(
                 throw new ArgumentOutOfRangeException(nameof(timeout), "Command timeout must be positive.");
             }
 
+            ObjectDisposedException.ThrowIf(lease.IsReleased, this);
+            var transport = Entry.Transport;
             try
             {
                 var result = await transport.ExecuteAsync(command, timeout, cancellationToken);
-                timeouts.RecordSuccess();
+                Timeouts.RecordSuccess();
                 return result;
             }
-            catch (SshOperationTimeoutException) when (timeouts.RecordTimeout())
+            catch (SshOperationTimeoutException) when (Timeouts.RecordTimeout())
             {
                 // A silently dead peer (blackholed route) keeps IsConnected true and every command waits its full timeout.
-                // One slow command is tolerated; repeated consecutive timeouts mean the session is dead, so recycle it.
-                await onConnectionFailure();
+                // One slow command is tolerated; repeated consecutive timeouts mean the session is dead, so retire it.
+                // Retiring never closes the client under other commands (for example a running package update): they
+                // finish, and the last lease to end disposes it.
+                retire("repeated command timeouts");
                 throw;
             }
             catch (Exception exception) when (SshTransportFailure.IsTransportFailure(exception) && !transport.IsConnected)
             {
                 // INV-5: reconnect on failure. Only a dead transport poisons the shared client; a command timeout merely
                 // ends this command's channel and must not tear down other commands or jump tunnels sharing the client.
-                await onConnectionFailure();
+                retire("connection lost");
                 throw;
             }
         }

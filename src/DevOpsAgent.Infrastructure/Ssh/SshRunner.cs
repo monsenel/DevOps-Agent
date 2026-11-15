@@ -22,7 +22,8 @@ public sealed class SshRunner(ISshConnectionPool connectionPool) : ISshRunner
         }
 
         var wrappedCommand = RemoteCommand.Wrap(command, options.UseSudo);
-        var session = await connectionPool.GetSessionAsync(serverId, options.BypassBackoff, cancellationToken);
+        // The lease is released in every outcome (result, failure, timeout, cancellation).
+        using var session = await connectionPool.GetSessionAsync(serverId, options.BypassBackoff, cancellationToken);
         return await session.ExecuteAsync(wrappedCommand, options.Timeout, cancellationToken);
     }
 }

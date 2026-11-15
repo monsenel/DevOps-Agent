@@ -19,14 +19,22 @@ public sealed class SshHostKeyMismatchException(string host, int port, string? f
 
 public interface ISshConnectionPool : IDisposable
 {
+    /// <summary>
+    /// Leases the server's pooled connection. The connection is not closed under the lease (eviction and recycling only
+    /// retire it for new callers); dispose the session when the commands are finished, also after cancellation or failure.
+    /// </summary>
     /// <param name="bypassBackoff">Attempt the connection even if the host (or a jump host) is in backoff ("Test connection", "Retry now").</param>
     Task<ISshCommandSession> GetSessionAsync(Guid serverId, bool bypassBackoff, CancellationToken cancellationToken);
 
-    /// <summary>Drops any pooled connection for the server, e.g. after its host, user or key changed or it was removed.</summary>
+    /// <summary>
+    /// Retires any pooled connection for the server, e.g. after its host, user or key changed or it was removed. Commands
+    /// already running on it finish; the connection is closed when the last of them ends and new callers connect afresh.
+    /// </summary>
     void Evict(Guid serverId);
 }
 
-public interface ISshCommandSession
+/// <summary>A lease on a pooled connection. Disposing it (idempotent) ends the lease.</summary>
+public interface ISshCommandSession : IDisposable
 {
     bool IsConnected { get; }
     Task<RemoteCommandResult> ExecuteAsync(string command, TimeSpan timeout, CancellationToken cancellationToken);

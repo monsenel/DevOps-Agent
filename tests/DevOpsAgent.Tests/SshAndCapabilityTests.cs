@@ -169,6 +169,10 @@ public sealed class SshAndCapabilityTests
         public TimeSpan Timeout { get; private set; }
         public bool IsConnected => true;
 
+        public void Dispose()
+        {
+        }
+
         public Task<RemoteCommandResult> ExecuteAsync(string command, TimeSpan timeout, CancellationToken cancellationToken)
         {
             Command = command;
