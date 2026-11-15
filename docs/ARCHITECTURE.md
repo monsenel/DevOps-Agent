@@ -81,7 +81,7 @@ Dependency rule: `Domain` ← `Application` ← `Infrastructure` ← `Web`. `Web
 ## 2. Key components
 
 ### SSH
-- `SshConnectionPool`: one `SshClient` per server, lazily connected, health-checked, recreated on failure.
+- `SshConnectionPool`: one `SshClient` per server, lazily connected, health-checked, recreated on failure. Commands lease the client; eviction, failure and repeated timeouts retire it and it is disposed when the last lease ends, jump tunnels outlive their dependents (D-036).
 - Jump host: connect to the jump server, open `ForwardedPortLocal` to target `host:port`, connect the target client through `127.0.0.1:<local port>`.
 - `ISshRunner.RunAsync(serverId, command, RunOptions { Sudo, Timeout }, ct)` → `CommandResult { ExitCode, StdOut, StdErr, Duration }`.
 - Sudo: `sudo -n <cmd>`; capability detected once with `sudo -n true`.
