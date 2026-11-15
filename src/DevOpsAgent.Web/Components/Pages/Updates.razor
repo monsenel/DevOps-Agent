@@ -191,7 +191,11 @@
         try
         {
             var action = await ActionExecution.ApproveAndRunAsync(id, await GetUserNameAsync(), CancellationToken.None);
-            _message = $"Action {action.Status}.\n{action.ResultsJson}";
+            var entry = (await ActionExecution.ListAsync(CancellationToken.None)).Single(item => item.Action.Id == action.Id);
+            var reports = entry.Results.Select(result =>
+                UpdateApplyReport.Parse(result.ServerName, result.ExitCode, result.StandardOutput, result.Error).Describe());
+            _message = $"Update {action.Status.ToString().ToLowerInvariant()}. {string.Join(" ", reports)} Full output is in the Action log.";
+            _isError = action.Status != ActionRecordStatus.Succeeded;
             _pendingId = null;
             await LoadAsync();
         }
