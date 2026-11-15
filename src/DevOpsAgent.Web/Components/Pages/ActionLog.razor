@@ -57,6 +57,13 @@
                                         {
                                             <div class="action-log-review">
                                                 <p>This action has not run. Review the exact command for every target before approving.</p>
+                                                @if (EditDiff(action) is { } diff)
+                                                {
+                                                    <section class="action-detail-section">
+                                                        <h3>Change to review</h3>
+                                                        <CodeBlock Content="@diff" />
+                                                    </section>
+                                                }
                                                 <ActionImpact ActionId="action.Id" />
                                                 @foreach (var preview in entry.PendingCommandPreviews)
                                                 {
@@ -105,6 +112,18 @@
 </section>
 
 @code {
+    // edit_config (T8.8): the diff the owner approves; the command below only shows the root step that applies it.
+    private static string? EditDiff(ActionRecord action)
+    {
+        if (action.ToolName != "edit_config") return null;
+        try
+        {
+            using var json = System.Text.Json.JsonDocument.Parse(action.ArgumentsJson);
+            return json.RootElement.TryGetProperty("diff", out var diff) ? diff.GetString() : null;
+        }
+        catch (System.Text.Json.JsonException) { return null; }
+    }
+
     private readonly List<ActionLogEntry> _entries = [];
     private Guid? _expandedId;
     private string? _error;

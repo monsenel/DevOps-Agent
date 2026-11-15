@@ -43,7 +43,8 @@ public sealed class ActionExecutionService(
     ToolCommandBuilder commandBuilder,
     ISshRunner sshRunner,
     BanTargetGuard banGuard,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    ConfigEditService? configEdits = null)
 {
     private const int MaxParallelServers = 4;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -133,7 +134,7 @@ public sealed class ActionExecutionService(
 
         using var throttle = new SemaphoreSlim(MaxParallelServers);
         var stopwatch = Stopwatch.StartNew();
-        var results = await Task.WhenAll(targets.Select(server => ExecuteServerAsync(plan, server, throttle, cancellationToken)));
+        var results = await Task.WhenAll(targets.Select(server => ExecuteServerAsync(action, plan, server, throttle, cancellationToken)));
         stopwatch.Stop();
         var commands = results.ToDictionary(result => result.ServerId, result => result.Command);
         var resultsJson = JsonSerializer.Serialize(results, JsonOptions);
@@ -190,6 +191,7 @@ public sealed class ActionExecutionService(
     private static string Endpoint(Server server) => $"{server.Host}:{server.Port}";
 
     private async Task<ActionServerResult> ExecuteServerAsync(
+        ActionRecord action,
         ToolCommand plan,
         Server server,
         SemaphoreSlim throttle,
@@ -200,6 +202,14 @@ public sealed class ActionExecutionService(
         {
             await throttle.WaitAsync(cancellationToken);
             acquired = true;
+            if (action.ToolName == "edit_config")
+            {
+                // Several steps with a health check and a rollback, not one command (T8.8).
+                return configEdits is null
+                    ? new(server.Id, server.Name, plan.Command, null, string.Empty, string.Empty, 0, "edit_config is not available.", Endpoint(server))
+                    : await configEdits.ExecuteAsync(action, plan, server, cancellationToken);
+            }
+
             var result = await sshRunner.RunAsync(server.Id, plan.Command,
                 new SshRunOptions(TimeSpan.FromMinutes(10), plan.UseSudo), cancellationToken);
             // Output is masked before it is stored, so the Action log, chat and model never see raw secrets.

@@ -47,7 +47,10 @@ public sealed class ToolRegistry
             Define<BlockIpArgs>("block_ip", "Block an IP address using the supported host firewall.", ToolAccess.Mutating),
             Define<UnblockIpArgs>("unblock_ip", "Remove an IP address firewall block.", ToolAccess.Mutating),
             Define<ListBansArgs>("list_bans", "List addresses currently blocked by host security tools.", ToolAccess.ReadOnly),
-            Define<RunShellArgs>("run_shell", "Run a shell command. Always requires explicit approval.", ToolAccess.Mutating)
+            Define<RunShellArgs>("run_shell", "Run a shell command. Always requires explicit approval.", ToolAccess.Mutating),
+            Define<EditConfigArgs>("edit_config", "Change a configuration file on one server (allowlisted paths such as /etc/nginx/**). "
+                + "Give the full new content or a unified diff against the current file. Always requires approval; the file is backed up, "
+                + "validated (nginx -t for nginx), the service reloaded and health-checked, and the backup restored on any failure.", ToolAccess.Mutating)
         ];
         _tools = tools.ToDictionary(tool => tool.Name, StringComparer.Ordinal);
     }
@@ -194,6 +197,31 @@ public sealed record UnblockIpArgs(
 }
 
 public sealed record ListBansArgs([property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
+
+/// <summary>
+/// edit_config (T8.8). Proposed with <see cref="Content"/> or <see cref="Diff"/>; before approval the app reads the file and
+/// stores the full new <see cref="Content"/>, the current file's <see cref="BaseSha256"/> and the <see cref="Diff"/> to review.
+/// </summary>
+public sealed record EditConfigArgs(
+    [property: Required, StringLength(1024, MinimumLength = 2)] string Path,
+    [property: StringLength(1_048_576)] string? Content = null,
+    [property: StringLength(1_048_576)] string? Diff = null,
+    [property: RegularExpression("\\A[0-9a-f]{64}\\z")] string? BaseSha256 = null,
+    [property: MinLength(1), MaxLength(1)] IReadOnlyList<Guid>? ServerIds = null) : IValidatableObject, IServerTargetArgs
+{
+    public bool IsPrepared => BaseSha256 is not null;
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        // The allowlist is checked with the configured patterns when the edit is prepared and again when it runs.
+        if (SensitivePathPolicy.Check(Path) is { } sensitive) yield return new ValidationResult(sensitive, [nameof(Path)]);
+        else if (ConfigEditPolicy.Check(Path, ["/**"]) is { } shape) yield return new ValidationResult(shape, [nameof(Path)]);
+        if (!IsPrepared && (Content is null) == (Diff is null))
+            yield return new ValidationResult("Give either the full new content or a unified diff, not both.", [nameof(Content), nameof(Diff)]);
+        if (IsPrepared && Content is null)
+            yield return new ValidationResult("A prepared edit carries the full new content.", [nameof(Content)]);
+    }
+}
 
 public sealed record RunShellArgs(
     [property: Required, StringLength(10000, MinimumLength = 1)] string Command,

@@ -16,12 +16,14 @@ public sealed class AgentToolPolicyTests
     {
         var registry = new ToolRegistry();
 
-        Assert.Equal(18, registry.Tools.Count);
+        Assert.Equal(19, registry.Tools.Count);
         Assert.Equal(
-            new[] { "apply_updates", "block_ip", "restart_container", "restart_service", "run_shell", "unblock_ip" },
+            new[] { "apply_updates", "block_ip", "edit_config", "restart_container", "restart_service", "run_shell", "unblock_ip" },
             registry.Tools.Where(tool => tool.Access == ToolAccess.Mutating).Select(tool => tool.Name).Order().ToArray());
         Assert.True(registry.TryGet("run_shell", out var shell));
         Assert.True(shell.RequiresApproval);
+        Assert.True(registry.TryGet("edit_config", out var edit));
+        Assert.True(edit.RequiresApproval); // T8.8: always approved, never on a read-only group (ApprovalService)
     }
 
     [Fact]

@@ -33,7 +33,7 @@
                             }
                         </p>
                     }
-                    @if (preview.Dependents.Count == 0)
+                    @if (preview.Dependents.Count == 0 && preview.Domains.Count == 0)
                     {
                         <p class="muted">Nothing in the graph connects to it.</p>
                     }

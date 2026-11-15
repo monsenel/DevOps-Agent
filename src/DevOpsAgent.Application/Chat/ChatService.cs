@@ -286,6 +286,9 @@ public sealed class ChatService(
         }
         if (normalized.Contains("update", StringComparison.Ordinal) || normalized.Contains("install", StringComparison.Ordinal))
             return [.. readOnly, tools.Tools.Single(tool => tool.Name == "apply_updates")];
+        if (normalized.Contains("config", StringComparison.Ordinal) && (normalized.Contains("edit", StringComparison.Ordinal)
+                || normalized.Contains("change", StringComparison.Ordinal) || normalized.Contains("set ", StringComparison.Ordinal)))
+            return [.. readOnly, tools.Tools.Single(tool => tool.Name == "edit_config")];
         if (normalized.Contains("run shell", StringComparison.Ordinal) || normalized.Contains("shell command", StringComparison.Ordinal))
             return [.. readOnly, tools.Tools.Single(tool => tool.Name == "run_shell")];
         return readOnly;

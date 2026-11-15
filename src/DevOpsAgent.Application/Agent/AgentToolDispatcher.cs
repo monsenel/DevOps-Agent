@@ -17,7 +17,8 @@ public sealed class AgentToolDispatcher(
     IGraphRepository graphs,
     ISnapshotRepository snapshots,
     DiscoveryService discovery,
-    ISshRunner sshRunner)
+    ISshRunner sshRunner,
+    ConfigEditService? configEdits = null)
 {
     public async Task<AgentToolResult> DispatchAsync(
         string name,
@@ -63,6 +64,18 @@ public sealed class AgentToolDispatcher(
         }
 
         var serverIds = (validated as IServerTargetArgs)?.ServerIds?.Distinct().ToArray() ?? [];
+        string? diff = null;
+        if (validated is EditConfigArgs edit)
+        {
+            // T8.8: the file is read now, and the proposal stores the full new content, the current hash and the diff.
+            if (configEdits is null) return new(name, "edit_config is not available.");
+            if (edit.IsPrepared) return new(name, "Give the new content or a unified diff; the app computes the rest.");
+            var (prepared, error) = await configEdits.PrepareAsync(edit, cancellationToken);
+            if (error is not null) return new(name, error);
+            arguments = prepared!.Value;
+            diff = arguments.GetProperty("diff").GetString();
+        }
+
         var approval = await approvals.EvaluateAsync(new ToolApprovalRequest(name, arguments, serverIds, conversationId), cancellationToken);
         if (approval.State == ToolApprovalState.Denied)
             return new(name, approval.Message);
@@ -70,6 +83,13 @@ public sealed class AgentToolDispatcher(
         {
             var previews = await execution.ListAsync(cancellationToken);
             var pending = previews.Single(entry => entry.Action.Id == approval.ActionId);
+            if (diff is not null)
+            {
+                var target = pending.PendingCommandPreviews.FirstOrDefault();
+                return new(name, $"Proposed change of {((EditConfigArgs)validated).Path} on {target?.ServerName} ({target?.Endpoint}); it is backed up, "
+                    + $"validated, reloaded and health-checked, and restored on any failure:\n{diff}", approval.ActionId, NeedsApproval: true);
+            }
+
             var plan = string.Join("\n", pending.PendingCommandPreviews.Select(item => $"{item.ServerName} ({item.Endpoint}): {item.DisplayCommand}"));
             return new(name, $"Proposed action awaits approval.\n{plan}", approval.ActionId, NeedsApproval: true);
         }

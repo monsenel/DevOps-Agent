@@ -6,8 +6,10 @@ namespace DevOpsAgent.Application.Agent;
 
 public sealed record ToolCommand(string Command, bool UseSudo);
 
-public sealed class ToolCommandBuilder(ToolRegistry tools)
+public sealed class ToolCommandBuilder(ToolRegistry tools, ConfigEditOptions? configEdits = null)
 {
+    private readonly ConfigEditOptions _configEdits = configEdits ?? new ConfigEditOptions();
+
     public ToolCommand Build(ActionRecord action)
     {
         ArgumentNullException.ThrowIfNull(action);
@@ -21,6 +23,10 @@ public sealed class ToolCommandBuilder(ToolRegistry tools)
             BlockIpArgs value => new(BuildBlockIp(value), true),
             UnblockIpArgs value => new(BuildUnblockIp(value), true),
             RunShellArgs value => new(value.Command, false),
+            // The root step of edit_config (T8.8); staging, the health check and a rollback run around it (ConfigEditService).
+            EditConfigArgs { IsPrepared: true } value => new(ConfigEditService.ApplyCommand(value.Path,
+                ConfigEditService.StagingDirectory(action.Id) + "/content", ConfigEditService.Timestamp(action), value.BaseSha256!,
+                _configEdits.RuleFor(value.Path)), true),
             _ => throw new InvalidOperationException($"Tool '{action.ToolName}' has no mutating command implementation.")
         };
     }
