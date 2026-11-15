@@ -291,6 +291,32 @@
         }
     }
 
+    /// <summary>A node to select and center, from the global search (T8.2).</summary>
+    [SupplyParameterFromQuery(Name = "node")]
+    public string? FocusNodeId { get; set; }
+
+    private string? _focusedNodeId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Search from this very page changes only the query: focus the new node without reloading.
+        if (_graphModule is not null) await FocusRequestedNodeAsync();
+    }
+
+    private async Task FocusRequestedNodeAsync()
+    {
+        if (string.IsNullOrWhiteSpace(FocusNodeId) || FocusNodeId == _focusedNodeId || _graphModule is null || _graph is null) return;
+        if (_visibleNodes.FirstOrDefault(node => string.Equals(ReadString(node, "id"), FocusNodeId, StringComparison.OrdinalIgnoreCase)) is not { ValueKind: JsonValueKind.Object } node)
+        {
+            _pageError = "That item is not in the latest discovery snapshot. Run discovery to refresh the map.";
+            return;
+        }
+
+        _focusedNodeId = FocusNodeId;
+        await SelectEntityAsync(node);
+        await _graphModule.InvokeVoidAsync("focus", FocusNodeId);
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
@@ -300,6 +326,7 @@
             _dotNetReference = DotNetObjectReference.Create(this);
             await _graphModule.InvokeVoidAsync("init", _graphHost, _dotNetReference);
             await PushGraphAsync();
+            await FocusRequestedNodeAsync();
             StateHasChanged();
         }
         catch (JSException exception)

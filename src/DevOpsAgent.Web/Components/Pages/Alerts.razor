@@ -58,7 +58,21 @@
     private IReadOnlyList<AlertDto> _alerts = [];
     private AlertDto? _selected;
 
-    protected override Task OnInitializedAsync() => LoadAsync();
+    /// <summary>An alert to open, from the global search (T8.2).</summary>
+    [SupplyParameterFromQuery(Name = "alert")]
+    public Guid? AlertId { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+        if (AlertId is not { } id) return;
+        _selected = _alerts.FirstOrDefault(item => item.Id == id);
+        if (_selected is not null) return;
+        // Not in the current filter (acknowledged or resolved meanwhile): show all states.
+        _filter = null;
+        await LoadAsync();
+        _selected = _alerts.FirstOrDefault(item => item.Id == id);
+    }
 
     private async Task SetFilter(AlertState? state)
     {

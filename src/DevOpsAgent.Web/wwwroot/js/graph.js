@@ -148,6 +148,16 @@ export function select(id) {
     graph.getElementById(id).select();
 }
 
+// Selects a node and brings it into view (global search, T8.2).
+export function focus(id) {
+    if (!graph) return;
+    const element = graph.getElementById(id);
+    if (element.empty()) return;
+    graph.elements().unselect();
+    element.select();
+    graph.animate({ center: { eles: element }, zoom: Math.max(graph.zoom(), 1.1) }, { duration: 250 });
+}
+
 export function highlightTrace(nodeIds, edgeIds) {
     if (!graph) return;
     clearTrace();

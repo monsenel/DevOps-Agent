@@ -1,0 +1,141 @@
+@using DevOpsAgent.Application.Search
+@using Microsoft.Extensions.DependencyInjection
+@inject IServiceScopeFactory Scopes
+@inject NavigationManager Navigation
+@implements IDisposable
+
+@* T8.2: a combobox over server-side results, grouped by type; Arrow keys move, Enter opens, Escape closes. *@
+<div class="search-field global-search" @onfocusout="OnFocusOut">
+    <Icon Name="search" Small="true" />
+    <label class="visually-hidden" for="global-search">Search servers, IPs, ports, containers, domains and alerts</label>
+    <input id="global-search" type="search" role="combobox" autocomplete="off" spellcheck="false"
+           placeholder="Search name, IP or port"
+           aria-autocomplete="list" aria-controls="global-search-results" aria-expanded="@(_open ? "true" : "false")"
+           aria-activedescendant="@(_open && _active >= 0 ? OptionId(_active) : null)"
+           value="@_query" @oninput="OnInputAsync" @onkeydown="OnKeyDownAsync" @onfocus="OnFocus" />
+    @if (_open)
+    {
+        @* mousedown keeps the focus in the input, so a click on a result is not lost to the blur. *@
+        <div id="global-search-results" class="global-search-results" role="listbox" aria-label="Search results" @onmousedown:preventDefault="true">
+            @if (_searching && _flat.Count == 0)
+            {
+                <p class="global-search-note" role="status">Searching…</p>
+            }
+            else if (_flat.Count == 0)
+            {
+                <p class="global-search-note" role="status">No matches for "@_query"</p>
+            }
+            @{ var index = 0; }
+            @foreach (var group in _groups)
+            {
+                var groupId = $"global-search-group-{group.Kind}";
+                <div class="global-search-group" role="group" aria-labelledby="@groupId">
+                    <p class="global-search-group-label" id="@groupId" role="presentation">@group.Label</p>
+                    @foreach (var item in group.Items)
+                    {
+                        var position = index++;
+                        <a id="@OptionId(position)" class="global-search-option @(position == _active ? "active" : null)" role="option"
+                           aria-selected="@(position == _active ? "true" : "false")" href="@item.Url" @onclick="Close" @onmouseenter="() => _active = position">
+                            <span class="global-search-title">@item.Title</span>
+                            <span class="global-search-detail">@item.Detail</span>
+                        </a>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private const int DebounceMilliseconds = 250;
+    private string _query = string.Empty;
+    private IReadOnlyList<SearchResultGroup> _groups = [];
+    private List<SearchResult> _flat = [];
+    private int _active = -1;
+    private bool _open;
+    private bool _searching;
+    private CancellationTokenSource? _pending;
+
+    protected override void OnInitialized() => Navigation.LocationChanged += OnLocationChanged;
+
+    private static string OptionId(int index) => $"global-search-option-{index}";
+
+    private async Task OnInputAsync(ChangeEventArgs args)
+    {
+        _query = args.Value?.ToString() ?? string.Empty;
+        _pending?.Cancel();
+        if (string.IsNullOrWhiteSpace(_query))
+        {
+            Close();
+            return;
+        }
+
+        var pending = _pending = new CancellationTokenSource();
+        _open = true;
+        _searching = true;
+        try
+        {
+            await Task.Delay(DebounceMilliseconds, pending.Token);
+            // A scope of its own: the search runs beside whatever the page is doing with its own DbContext.
+            await using var scope = Scopes.CreateAsyncScope();
+            var groups = await scope.ServiceProvider.GetRequiredService<GlobalSearchService>().SearchAsync(_query, pending.Token);
+            if (pending.IsCancellationRequested) return;
+            _groups = groups;
+            _flat = groups.SelectMany(group => group.Items).ToList();
+            _active = _flat.Count > 0 ? 0 : -1;
+            _searching = false;
+        }
+        catch (OperationCanceledException) when (pending.IsCancellationRequested) { }
+    }
+
+    private void OnKeyDownAsync(KeyboardEventArgs args)
+    {
+        switch (args.Key)
+        {
+            case "ArrowDown" when _flat.Count > 0:
+                _open = true;
+                _active = (_active + 1) % _flat.Count;
+                break;
+            case "ArrowUp" when _flat.Count > 0:
+                _open = true;
+                _active = _active <= 0 ? _flat.Count - 1 : _active - 1;
+                break;
+            case "Enter" when _open && _active >= 0 && _active < _flat.Count:
+                var target = _flat[_active].Url;
+                Close();
+                Navigation.NavigateTo(target);
+                break;
+            case "Escape":
+                Close();
+                break;
+        }
+    }
+
+    private void OnFocus()
+    {
+        if (!string.IsNullOrWhiteSpace(_query) && _groups.Count > 0) _open = true;
+    }
+
+    private void OnFocusOut() => _open = false;
+
+    private void Close()
+    {
+        _pending?.Cancel();
+        _open = false;
+        _searching = false;
+        _active = -1;
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs args) =>
+        _ = InvokeAsync(() =>
+        {
+            Close();
+            StateHasChanged();
+        });
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        _pending?.Cancel();
+    }
+}

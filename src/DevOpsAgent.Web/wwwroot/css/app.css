@@ -287,6 +287,83 @@ p {
     outline-offset: 0;
 }
 
+/* Global search (T8.2): the results drop down under the field, above the page. */
+.global-search {
+    position: relative;
+}
+
+.global-search-results {
+    position: absolute;
+    z-index: 30;
+    top: calc(100% + 6px);
+    right: 0;
+    left: 0;
+    display: flex;
+    min-width: 320px;
+    max-height: min(70vh, 520px);
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    overflow-y: auto;
+    border: 1px solid var(--dva-line);
+    border-radius: var(--dva-radius-tile);
+    background: var(--dva-card);
+}
+
+.global-search-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.global-search-group-label {
+    padding: 4px 8px;
+    color: var(--dva-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+.global-search-option {
+    display: flex;
+    min-height: var(--dva-control-h);
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 10px;
+    border-radius: var(--dva-radius-input);
+    color: var(--dva-ink);
+    text-decoration: none;
+}
+
+.global-search-option.active,
+.global-search-option:hover {
+    background: var(--dva-soft);
+    color: var(--dva-on-soft);
+}
+
+.global-search-title {
+    font-weight: 600;
+}
+
+.global-search-detail {
+    color: var(--dva-muted);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.global-search-option.active .global-search-detail,
+.global-search-option:hover .global-search-detail {
+    color: var(--dva-on-soft);
+}
+
+.global-search-note {
+    padding: 8px 10px;
+    color: var(--dva-muted);
+}
+
 .bento-row {
     display: flex;
     flex-wrap: wrap;

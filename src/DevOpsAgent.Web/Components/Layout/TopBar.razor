@@ -6,11 +6,7 @@
 <header class="top-bar">
     <h1>@PageTitle</h1>
     <div class="top-bar-spacer"></div>
-    <div class="search-field">
-        <Icon Name="search" Small="true" />
-        <label class="visually-hidden" for="global-search">Search</label>
-        <input id="global-search" type="search" placeholder="Search name, IP or port" />
-    </div>
+    <GlobalSearch />
     <button class="ui-button secondary" type="button" @onclick="ToggleTheme">Theme: @ThemeName</button>
     @if (IsOverview)
     {
@@ -29,7 +25,8 @@
         DiscoveryTrigger.Changed += OnDiscoveryChanged;
     }
 
-    private string PageTitle => Navigation.ToBaseRelativePath(Navigation.Uri).Trim('/') switch
+    // The path only: a query (search deep links such as /topology?node=…) does not change the title.
+    private string PageTitle => Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0].Trim('/') switch
     {
         "" => "Overview",
         "topology" => "Topology",
