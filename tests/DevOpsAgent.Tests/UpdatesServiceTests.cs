@@ -1,10 +1,12 @@
 using System.Text.Json;
 using DevOpsAgent.Application.Abstractions;
+using DevOpsAgent.Application.Agent;
 using DevOpsAgent.Application.Updates;
 using DevOpsAgent.Domain.Servers;
 using DevOpsAgent.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DevOpsAgent.Tests;
 
@@ -22,7 +24,9 @@ public sealed class UpdatesServiceTests
         var serverRepo = new ServerRepository(database.Context);
         var packageRepo = new UpdatePackageRepository(database.Context);
         var scanRepo = new UpdateScanRepository(database.Context);
-        var service = new UpdatesService(serverRepo, packageRepo, scanRepo, collector, TimeProvider.System);
+        var executionModes = new ExecutionModeService(new AppSettingRepository(database.Context), serverRepo,
+            NullLogger<ExecutionModeService>.Instance);
+        var service = new UpdatesService(serverRepo, packageRepo, scanRepo, collector, executionModes, TimeProvider.System);
 
         var scanned = await service.ScanAsync(CancellationToken.None);
         var loaded = await service.ListAsync(CancellationToken.None);
@@ -34,6 +38,8 @@ public sealed class UpdatesServiceTests
         Assert.Equal(PackageManagerKind.Apt, loadedServer.PackageManager);
         Assert.Equal("openssl", Assert.Single(loadedServer.Packages).Name);
         Assert.Equal("Apt", Assert.Single(await scanRepo.ListAsync(CancellationToken.None)).PackageManager);
+        // The group has no stored mode, so it is read-only (D-029) and the scan must be cache-only (D-027).
+        Assert.True(Assert.Single(collector.CacheOnlyRequests));
     }
 
     private static async Task<SqliteTestDatabase> CreateDatabaseAsync()
@@ -48,8 +54,13 @@ public sealed class UpdatesServiceTests
 
     private sealed class FakeUpdatesCollector(string json) : IUpdatesCollector
     {
-        public Task<CollectedUpdateResult> CollectAsync(Guid serverId, CancellationToken cancellationToken) =>
-            Task.FromResult(new CollectedUpdateResult(PackageManagerKind.Apt, json));
+        public System.Collections.Concurrent.ConcurrentBag<bool> CacheOnlyRequests { get; } = [];
+
+        public Task<CollectedUpdateResult> CollectAsync(Server server, bool cacheOnly, CancellationToken cancellationToken)
+        {
+            CacheOnlyRequests.Add(cacheOnly);
+            return Task.FromResult(new CollectedUpdateResult(PackageManagerKind.Apt, json));
+        }
     }
 
     private sealed class SqliteTestDatabase(SqliteConnection connection, AppDbContext context) : IAsyncDisposable
