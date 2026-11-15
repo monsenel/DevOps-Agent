@@ -57,14 +57,20 @@ public sealed class AppSudoCommandsTests
         var server = new Server("edge", "edge.example", 22, "dva", "id_ed25519", "staging");
         string Log(string user, string command)
         {
-            // sudo writes about 1,000 characters per line and continues the command on "(command continued)" lines.
-            var logged = SudoLogged(command);
+            // Like sudo: about 1,000 characters per line, broken at the last space (which is dropped), continued on
+            // "(command continued)" lines.
+            var rest = SudoLogged(command);
             var lines = new List<string>();
-            var first = $"{timestamp} host sudo:      {user} : PWD=/home/{user} ; USER=root ; COMMAND=";
-            var take = Math.Min(logged.Length, 1000 - first.Length);
-            lines.Add(first + logged[..take]);
-            for (var index = take; index < logged.Length; index += 900)
-                lines.Add($"{timestamp} host sudo:      {user} : (command continued) {logged[index..Math.Min(logged.Length, index + 900)]}");
+            var prefix = $"{timestamp} host sudo:      {user} : PWD=/home/{user} ; USER=root ; COMMAND=";
+            while (true)
+            {
+                var room = 1000 - prefix.Length;
+                if (rest.Length <= room) { lines.Add(prefix + rest); break; }
+                var cut = rest.LastIndexOf(' ', room);
+                lines.Add(prefix + rest[..cut]);
+                rest = rest[(cut + 1)..];
+                prefix = $"{timestamp} host sudo:      {user} : (command continued) ";
+            }
             return string.Join('\n', lines);
         }
 

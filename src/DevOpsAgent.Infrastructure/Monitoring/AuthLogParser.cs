@@ -29,6 +29,8 @@ public static partial class AuthLogParser
     private static partial Regex SudoCommandRegex();
 
     // sudo splits a long command over several log lines; the later ones read "<user> : (command continued) <rest>".
+    // It breaks at a space and drops it, so the parts are joined with one space (a word longer than a line would be
+    // split mid-word; such a command then does not match AppSudoCommands and still alerts, which is the safe side).
     [GeneratedRegex(@"sudo(?:\[\d+\])?:\s+(?<user>[a-zA-Z0-9_.-]+)\s*:\s\(command continued\)\s(?<rest>.*)$", RegexOptions.IgnoreCase)]
     private static partial Regex SudoContinuationRegex();
 
@@ -45,7 +47,7 @@ public static partial class AuthLogParser
             {
                 if (openSudo is not null && string.Equals(openSudo.Username, continuation.Groups["user"].Value, StringComparison.Ordinal))
                 {
-                    openSudo = openSudo with { Command = openSudo.Command + continuation.Groups["rest"].Value };
+                    openSudo = openSudo with { Command = openSudo.Command + " " + continuation.Groups["rest"].Value };
                     events[^1] = openSudo;
                 }
                 continue;
