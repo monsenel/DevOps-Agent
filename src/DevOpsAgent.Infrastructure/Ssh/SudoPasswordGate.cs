@@ -40,6 +40,12 @@ public sealed partial class SudoPasswordGate(
 
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _turns = new();
 
+    /// <summary>
+    /// Rejected passwords (their protected value) as seen by this process, kept besides the stored rejection: if storing it
+    /// fails, the password is still never sent again until it is edited (a new protected value) or removed.
+    /// </summary>
+    private readonly ConcurrentDictionary<Guid, string> _rejected = new();
+
     /// <summary>The server's sudo password state, read fresh from the database for every call.</summary>
     internal async Task<SudoCredential> ReadAsync(Guid serverId, CancellationToken cancellationToken)
     {
@@ -50,7 +56,8 @@ public sealed partial class SudoPasswordGate(
         {
             // A paused password is decrypted too: it is never sent, but it stays on the server's redaction list.
             var password = secretProtector.Unprotect(protectedValue);
-            return server.SudoPasswordRejectedAtUtc is null
+            var rejectedHere = _rejected.TryGetValue(serverId, out var rejected) && rejected == protectedValue;
+            return server.SudoPasswordRejectedAtUtc is null && !rejectedHere
                 ? SudoCredential.WithPassword(server.Name, protectedValue, password, server.SudoAuthFailedSinceUtc is not null)
                 : SudoCredential.Paused(server.Name, protectedValue, password);
         }
@@ -85,15 +92,26 @@ public sealed partial class SudoPasswordGate(
     /// </summary>
     internal async Task RecordRejectedAsync(Guid serverId, string protectedValue)
     {
+        // Remembered in memory first: a failing database write must not leave the password armed for the next command.
+        _rejected[serverId] = protectedValue;
         // Not cancellable: the attempt has been made, and forgetting it would allow a second wrong attempt.
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var repository = scope.ServiceProvider.GetRequiredService<IServerRepository>();
-        var server = await repository.GetAsync(serverId, CancellationToken.None);
-        if (server is null || server.ProtectedSudoPassword != protectedValue) return;
-        server.RecordSudoPasswordRejected(timeProvider.GetUtcNow());
-        await repository.SaveAsync(server, CancellationToken.None);
-        logger.LogWarning("{ServerName}: the sudo password was rejected; no sudo is used on this server until its sudo password is edited or removed",
-            server.Name);
+        try
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var repository = scope.ServiceProvider.GetRequiredService<IServerRepository>();
+            var server = await repository.GetAsync(serverId, CancellationToken.None);
+            if (server is null || server.ProtectedSudoPassword != protectedValue) return;
+            server.RecordSudoPasswordRejected(timeProvider.GetUtcNow());
+            await repository.SaveAsync(server, CancellationToken.None);
+            logger.LogWarning("{ServerName}: the sudo password was rejected; no sudo is used on this server until its sudo password is edited or removed",
+                server.Name);
+        }
+        catch (Exception exception)
+        {
+            // Only the type: sudo stays paused in this process, but a restart would allow one more attempt.
+            logger.LogError("The rejection of a sudo password could not be stored ({ErrorType}); sudo stays paused on this server until the app restarts or the password is edited or removed",
+                exception.GetType().Name);
+        }
     }
 
     /// <summary>

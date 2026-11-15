@@ -182,6 +182,33 @@ public sealed class SudoPasswordTests
     }
 
     [Fact]
+    public async Task WrongPassword_WhoseRejectionCannotBeStored_IsStillNotSentAgain()
+    {
+        await using var lab = await SudoLab.CreateAsync(WrongPassword);
+        await lab.ExecuteSqlAsync("""
+            CREATE TRIGGER fail_rejection BEFORE UPDATE OF SudoPasswordRejectedAtUtc ON Servers
+            BEGIN SELECT RAISE(ABORT, 'database is locked'); END;
+            """);
+
+        var first = await lab.Runner.RunAsync(lab.ServerId, "ss -tulpnH", Sudo, CancellationToken.None);
+        var later = await lab.Runner.RunAsync(lab.ServerId, "docker ps -q", Sudo, CancellationToken.None);
+        var probe = await lab.Runner.ProbeSudoAsync(lab.ServerId, Plain, CancellationToken.None);
+
+        Assert.True(SudoPasswordGate.IsPasswordRejected(first));
+        Assert.Equal(SudoPasswordGate.PausedMessage, later.StandardError);
+        Assert.Equal(SudoPasswordGate.PausedMessage, probe.StandardError);
+        Assert.Equal(1, lab.Session.SudoAttempts);
+        Assert.Null((await lab.GetServerAsync()).SudoPasswordRejectedAtUtc);
+        Assert.Contains(lab.Logs.Messages, message => message.StartsWith("Error", StringComparison.Ordinal)
+            && message.Contains("could not be stored", StringComparison.Ordinal));
+        lab.AssertPasswordNowhere(WrongPassword);
+
+        await lab.EditAsync(lab.Input("db") with { SudoPassword = Password });
+        Assert.Equal(0, (await lab.Runner.RunAsync(lab.ServerId, "ss -tulpnH", Sudo, CancellationToken.None)).ExitCode);
+        Assert.Equal(2, lab.Session.SudoAttempts);
+    }
+
+    [Fact]
     public async Task EditingThePassword_LiftsThePause_RenameDoesNot()
     {
         await using var lab = await SudoLab.CreateAsync(WrongPassword);
@@ -479,6 +506,12 @@ public sealed class SudoPasswordTests
         {
             await using var scope = _services.CreateAsyncScope();
             return (await scope.ServiceProvider.GetRequiredService<IServerRepository>().GetAsync(ServerId, CancellationToken.None))!;
+        }
+
+        public async Task ExecuteSqlAsync(string sql)
+        {
+            await using var scope = _services.CreateAsyncScope();
+            await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.ExecuteSqlRawAsync(sql);
         }
 
         public async Task SetRejectedAsync()
