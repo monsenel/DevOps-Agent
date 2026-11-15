@@ -96,9 +96,11 @@ public sealed class SshRunner(
             throw new TimeoutException("Waiting for this server's sudo turn used up the command's deadline; the command was not started.");
         }
 
+        // The window starts once connected, when the password is sent: a slow connect must not use it up and let the next
+        // password sudo start while this one is still inside PAM.
+        using var session = await connectionPool.GetSessionAsync(serverId, options.BypassBackoff, remaining, cancellationToken);
         turn.ReleaseAfter(SudoPasswordGate.AuthenticationWindow, _time);
-        var result = await ExecuteAsync(serverId, passwordCommand, credential.Password + "\n",
-            options with { Timeout = remaining }, cancellationToken);
+        var result = await session.ExecuteAsync(passwordCommand, credential.Password + "\n", remaining, cancellationToken);
         if (SudoPasswordGate.IsPasswordRejected(result))
         {
             // Recorded before the turn is released, so a command waiting for it reads the rejection and never tries.

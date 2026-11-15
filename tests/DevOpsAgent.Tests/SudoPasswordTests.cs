@@ -161,6 +161,27 @@ public sealed class SudoPasswordTests
     }
 
     [Fact]
+    public async Task AuthenticationWindow_StartsWhenThePasswordIsSent_NotBeforeASlowConnect()
+    {
+        var clock = new TimerClock();
+        await using var lab = await SudoLab.CreateAsync(WrongPassword, clock);
+        var connected = new TaskCompletionSource();
+        lab.Pool.Connect = connected.Task;
+
+        var first = lab.Runner.RunAsync(lab.ServerId, "ss -tulpnH", Sudo, CancellationToken.None);
+        for (var index = 0; index < 200 && lab.Pool.Connects < 1; index++) await Task.Delay(10);
+        var second = lab.Runner.RunAsync(lab.ServerId, "docker ps -q", Sudo, CancellationToken.None);
+        clock.FireAll(); // the connect took longer than the window: the turn must still be held
+        await Task.Delay(100);
+        Assert.Equal(1, lab.Pool.Connects);
+
+        connected.SetResult();
+        Assert.True(SudoPasswordGate.IsPasswordRejected(await first));
+        Assert.Equal(SudoPasswordGate.PausedMessage, (await second).StandardError);
+        Assert.Equal(1, lab.Session.SudoAttempts);
+    }
+
+    [Fact]
     public async Task EditingThePassword_LiftsThePause_RenameDoesNot()
     {
         await using var lab = await SudoLab.CreateAsync(WrongPassword);
@@ -417,10 +438,12 @@ public sealed class SudoPasswordTests
             Repository = _scope.ServiceProvider.GetRequiredService<IServerRepository>();
             Inventory = new ServerService(Repository, Protector, new KeyStore(), new NoPool());
             var gate = new SudoPasswordGate(services.GetRequiredService<IServiceScopeFactory>(), Protector, clock, Logs);
-            Runner = new SshRunner(new SessionPool(Session), gate, clock);
+            Pool = new SessionPool(Session);
+            Runner = new SshRunner(Pool, gate, clock);
         }
 
         public RecordingSession Session { get; } = new();
+        public SessionPool Pool { get; }
         public MappingProtector Protector { get; } = new();
         public ListLogger<SudoPasswordGate> Logs { get; } = new();
         public IServerRepository Repository { get; }
@@ -557,8 +580,18 @@ public sealed class SudoPasswordTests
 
     private sealed class SessionPool(ISshCommandSession session) : ISshConnectionPool
     {
-        public Task<ISshCommandSession> GetSessionAsync(Guid serverId, bool bypassBackoff, CancellationToken cancellationToken) =>
-            Task.FromResult(session);
+        private int _connects;
+
+        /// <summary>When set, connecting waits for it (a slow connect).</summary>
+        public Task? Connect { get; set; }
+        public int Connects => Volatile.Read(ref _connects);
+
+        public async Task<ISshCommandSession> GetSessionAsync(Guid serverId, bool bypassBackoff, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _connects);
+            if (Connect is { } connect) await connect.WaitAsync(cancellationToken);
+            return session;
+        }
         public void Evict(Guid serverId) { }
         public void Dispose() { }
     }
