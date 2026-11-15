@@ -25,7 +25,7 @@ public sealed class CommandTimeoutBackoffTests
     [Fact]
     public async Task FourConsecutiveCommandTimeoutsBackTheHostOffAndLaterCallersAreSkippedAtOnce()
     {
-        using var lab = new HangLab();
+        using var lab = new HangLab(connectHeadroom: HangLab.ConnectHeadroom);
         var hung = lab.Add("hung", "10.0.0.9", script => script.Commands = CommandMode.HangHonouringToken);
 
         // 1-3: three timeouts in a row recycle the client (R15) but do not yet back the host off, so the command that follows
@@ -67,7 +67,7 @@ public sealed class CommandTimeoutBackoffTests
     [Fact]
     public async Task ASuccessfulCommandResetsTheCount()
     {
-        using var lab = new HangLab();
+        using var lab = new HangLab(connectHeadroom: HangLab.ConnectHeadroom);
         var host = lab.Add("flaky", "10.0.0.8", script => script.Commands = CommandMode.HangHonouringToken);
         var script = lab.Transports.Script(host.Host);
 
@@ -89,7 +89,7 @@ public sealed class CommandTimeoutBackoffTests
     public async Task TheBackoffDoublesLikeAConnectFailureAndTheFirstAnsweredCommandEndsIt()
     {
         var clock = new ManualClock();
-        using var lab = new HangLab(clock);
+        using var lab = new HangLab(clock, HangLab.ConnectHeadroom);
         var host = lab.Add("slow", "10.0.0.7", script => script.Commands = CommandMode.HangHonouringToken);
         for (var timeout = 1; timeout <= IHostReachability.CommandTimeoutThreshold; timeout++)
             await Assert.ThrowsAsync<SshOperationTimeoutException>(() => lab.Run(host, Probe));
@@ -117,7 +117,7 @@ public sealed class CommandTimeoutBackoffTests
     [Fact]
     public async Task RetryNowAttemptsDuringTheBackoffAndClearsItOnceTheHostAnswers()
     {
-        using var lab = new HangLab();
+        using var lab = new HangLab(connectHeadroom: HangLab.ConnectHeadroom);
         var host = lab.Add("web", "10.0.0.6", script => script.Commands = CommandMode.HangHonouringToken);
         for (var timeout = 1; timeout <= IHostReachability.CommandTimeoutThreshold; timeout++)
             await Assert.ThrowsAsync<SshOperationTimeoutException>(() => lab.Run(host, Probe));
@@ -135,7 +135,7 @@ public sealed class CommandTimeoutBackoffTests
     [Fact]
     public async Task ARetryNowThatStillTimesOutExtendsTheBackoff()
     {
-        using var lab = new HangLab();
+        using var lab = new HangLab(connectHeadroom: HangLab.ConnectHeadroom);
         var host = lab.Add("web", "10.0.0.6", script => script.Commands = CommandMode.HangHonouringToken);
         for (var timeout = 1; timeout <= IHostReachability.CommandTimeoutThreshold; timeout++)
             await Assert.ThrowsAsync<SshOperationTimeoutException>(() => lab.Run(host, Probe));
@@ -148,7 +148,7 @@ public sealed class CommandTimeoutBackoffTests
     [Fact]
     public async Task EditingTheServerResetsTheBackoffAndTheCount()
     {
-        using var lab = new HangLab();
+        using var lab = new HangLab(connectHeadroom: HangLab.ConnectHeadroom);
         var host = lab.Add("web", "10.0.0.6", script => script.Commands = CommandMode.HangHonouringToken);
         for (var timeout = 1; timeout <= IHostReachability.CommandTimeoutThreshold; timeout++)
             await Assert.ThrowsAsync<SshOperationTimeoutException>(() => lab.Run(host, Probe));
@@ -224,7 +224,7 @@ public sealed class CommandTimeoutBackoffTests
     [Fact]
     public async Task AServerBehindAJumpHostWhoseCommandsTimeOutIsSkippedAndTheMessageNamesTheJumpHost()
     {
-        using var lab = new HangLab();
+        using var lab = new HangLab(connectHeadroom: HangLab.ConnectHeadroom);
         var edge = lab.Add("edge", "10.0.0.1", script => script.Commands = CommandMode.HangHonouringToken);
         var app = lab.Add("app", "10.0.0.2", jump: edge);
         for (var timeout = 1; timeout <= IHostReachability.CommandTimeoutThreshold; timeout++)

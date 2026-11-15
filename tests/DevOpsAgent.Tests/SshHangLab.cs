@@ -17,9 +17,21 @@ namespace DevOpsAgent.Tests;
 /// </summary>
 internal sealed class HangLab : IDisposable
 {
+    /// <summary>
+    /// Connect headroom for tests about what a hanging COMMAND does. A call's deadline includes connect time (T7.R17), and
+    /// the fake connect is instantaneous, but on a loaded machine (the whole suite runs in parallel) the thread-pool hops
+    /// around it can take longer than a command timeout of a few hundred ms. Without headroom such a call ends with "Connecting
+    /// used up the deadline", which is deliberately not a command timeout, and the test becomes a race.
+    /// </summary>
+    public static readonly TimeSpan ConnectHeadroom = TimeSpan.FromSeconds(10);
+
     private readonly List<Server> _servers = [];
 
-    public HangLab(TimeProvider? time = null)
+    /// <param name="connectHeadroom">
+    /// Added to every call's deadline, so the command still gets its full timeout however long connecting took (up to the
+    /// headroom). Leave it null in tests about the deadline itself, which need connect time to count against it.
+    /// </param>
+    public HangLab(TimeProvider? time = null, TimeSpan? connectHeadroom = null)
     {
         Time = time ?? new ManualClock();
         Servers = new HangServers(_servers);
@@ -27,7 +39,7 @@ internal sealed class HangLab : IDisposable
         var services = new ServiceCollection().AddSingleton<IServerRepository>(Servers).BuildServiceProvider();
         Pool = new SshConnectionPool(services.GetRequiredService<IServiceScopeFactory>(), Transports, Reachability,
             NullLogger<SshConnectionPool>.Instance, Lifetime);
-        Runner = new SshRunner(Pool);
+        Runner = new SshRunner(connectHeadroom is { } headroom ? new HeadroomPool(Pool, headroom) : Pool);
     }
 
     public TimeProvider Time { get; }
@@ -52,6 +64,27 @@ internal sealed class HangLab : IDisposable
         Runner.RunAsync(server.Id, "true", new SshRunOptions(timeout, BypassBackoff: bypass), cancellationToken);
 
     public void Dispose() => Pool.Dispose();
+}
+
+/// <summary>
+/// The real pool with more time for connecting: the deadline it is given is the caller's command timeout plus the headroom,
+/// so the pool's own bookkeeping (a first command gets what is left of the deadline) still applies, and a connect that
+/// really hangs is still cut off, only later.
+/// </summary>
+internal sealed class HeadroomPool(ISshConnectionPool inner, TimeSpan headroom) : ISshConnectionPool
+{
+    public Task<ISshCommandSession> GetSessionAsync(Guid serverId, bool bypassBackoff, CancellationToken cancellationToken) =>
+        inner.GetSessionAsync(serverId, bypassBackoff, cancellationToken);
+
+    public Task<ISshCommandSession> GetSessionAsync(Guid serverId, bool bypassBackoff, TimeSpan deadline, CancellationToken cancellationToken) =>
+        inner.GetSessionAsync(serverId, bypassBackoff, deadline == Timeout.InfiniteTimeSpan ? deadline : deadline + headroom, cancellationToken);
+
+    public void Evict(Guid serverId) => inner.Evict(serverId);
+
+    // The lab owns the real pool.
+    public void Dispose()
+    {
+    }
 }
 
 internal sealed class ManualClock : TimeProvider

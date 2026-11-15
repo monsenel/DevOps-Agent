@@ -44,7 +44,8 @@ public sealed class MonitoringCycleDeadlineTests
     [Fact]
     public async Task AHostWhoseCommandsTimeOutIsSkippedByTheMetricCycleAfterFourTimeouts()
     {
-        using var lab = new HangLab();
+        // The commands' timeout is what is being counted here, so connecting gets headroom beyond it (see HangLab.ConnectHeadroom).
+        using var lab = new HangLab(connectHeadroom: HangLab.ConnectHeadroom);
         var hung = lab.Add("hung", "10.0.0.9", script => script.Commands = CommandMode.HangHonouringToken);
         var healthy = lab.Add("srv", "10.0.1.1");
         var metrics = new HangMetrics();
