@@ -756,7 +756,10 @@
         }
         catch (ArgumentException exception)
         {
-            _formError = exception.Message;
+            // The validation sentence only, without .NET's " (Parameter 'input')" suffix.
+            _formError = exception.ParamName is { } name
+                ? exception.Message.Replace($" (Parameter '{name}')", string.Empty, StringComparison.Ordinal)
+                : exception.Message;
         }
         finally
         {

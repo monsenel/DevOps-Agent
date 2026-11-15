@@ -349,7 +349,7 @@ Raised by the 2026-11-15 MVP review. Small issues were fixed directly (`fix(revi
 - **Done when:** Tests for a timeout, a cancellation and a dropped connection after the password was written (one attempt, then paused or held per the decision); decision recorded in D-040; the live repro above shows one `authentication failure`.
 - **Depends on:** —
 
-### T7.R26 Sudo password redaction is per server (T7.R24 gap, D-040) — medium
+### T7.R26 Sudo password redaction is per server (T7.R24 gap, D-040) — medium — done (D-040 amendment 5)
 - **Do:** A server's output is redacted only with that server's own password. Measured 2026-11-16: srv-db registered twice (`dvapw` with the password, `dva` without), one failed SSH login with the password typed as the user name: the `dvapw` entry's auth-scan state holds `[REDACTED]`, the `dva` entry's (`AppSettings` `security.auth-log.<id>`) holds it in plain text (SQLite WAL); an agent tool such as `tail_log /var/log/auth.log` on any other server would send it to the model. Redact every stored sudo password (cached by protected value) from every server's results. Also: a one-character password replaces that character in all output (refuse very short passwords or skip redaction below a length, owner decision); the Servers page does not refresh the sudo column when a rejection happens in the background (it reads "sudo: password" until the next reload; its buttons stay safe); `ServerRepository.GetAsync` reloads a tracked entity and would drop unsaved edits of a caller (no caller does that today).
 - **Done when:** Tests: the password of server A is redacted in results and stored scan state of server B; the live measurement repeated shows no plain text in the database.
 - **Depends on:** —
