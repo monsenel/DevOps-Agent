@@ -168,7 +168,7 @@ Requirement IDs (LLM-1, DSC-2 …) refer to `docs/PRD.md`.
 - **Depends on:** T5.1
 
 ### T5.3 Alert engine and Alerts page
-- **Do:** Rules: disk ≥ 90%, memory ≥ 90% for 5 min, load > cores×2 for 5 min, server unreachable, container restart loop, unit failed, health check failing, TLS < 14 days, new listener (from drift). De-dup by rule + target; states open/acknowledged/resolved; auto-resolve. Alerts page; sidebar badge; graph status overlay.
+- **Do:** Rules: disk ≥ 90%, memory ≥ 90% for 5 min, load > cores×2 for 5 min, server unreachable (`server-unreachable`), SSH authentication failed (`ssh-auth-failed`, D-039), container restart loop, unit failed, health check failing, TLS < 14 days, new listener (from drift). De-dup by rule + target; states open/acknowledged/resolved; auto-resolve. Alerts page; sidebar badge; graph status overlay.
 - **Done when:** Stopping a container on a test server opens an alert within 2 minutes and it resolves after restart.
 - **Depends on:** T5.2, T4.3
 

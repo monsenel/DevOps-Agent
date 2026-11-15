@@ -128,8 +128,11 @@ public sealed class SshAuthFailureConsumerTests
 
     // ---- Monitoring alert ----
 
+    // D-039 amendment (commit "auth-failed alerts use their own rule"): this test used to assert that a failed login reuses the
+    // "server-unreachable" rule and key. It now asserts the separate "ssh-auth-failed" rule; only the host that is really down
+    // keeps "server-unreachable".
     [Fact]
-    public async Task TheMonitoringAlertSaysAuthenticationFailedAndReusesTheConnectivityRule()
+    public async Task TheMonitoringAlertSaysAuthenticationFailedWithItsOwnSshAuthFailedRule()
     {
         using var lab = new HangLab();
         var edge = lab.Add("edge", "10.0.0.1", script => script.ConnectFails = () => new FileNotFoundException(Canary));
@@ -139,17 +142,21 @@ public sealed class SshAuthFailureConsumerTests
 
         var conditions = await source.GetActiveConditionsAsync(CancellationToken.None);
 
+        var authFailed = conditions.Where(condition => condition.Rule == "ssh-auth-failed").ToDictionary(condition => condition.ServerId!.Value);
         var unreachable = conditions.Where(condition => condition.Rule == "server-unreachable").ToDictionary(condition => condition.ServerId!.Value);
-        Assert.Equal(3, unreachable.Count);
+        Assert.Equal(2, authFailed.Count);
+        Assert.Equal([down.Id], unreachable.Keys);
 
-        // The same rule, key and severity (so lifecycle, de-duplication and notifications are unchanged) ...
-        var edgeAlert = unreachable[edge.Id];
-        Assert.Equal($"server-unreachable:{edge.Id:N}", edgeAlert.Key);
+        // Its own rule and key per server, the same High severity (so de-duplication and the lifecycle are the same) ...
+        var edgeAlert = authFailed[edge.Id];
+        Assert.Equal($"ssh-auth-failed:{edge.Id:N}", edgeAlert.Key);
         Assert.Equal(AlertSeverity.High, edgeAlert.Severity);
         // ... with a title and details that say what happened.
         Assert.Equal("edge: SSH authentication failed", edgeAlert.Title);
         Assert.StartsWith("edge: authentication failed (key file not found).", edgeAlert.Details, StringComparison.Ordinal);
-        var appAlert = unreachable[app.Id];
+        // A dependent behind the auth-failed jump host follows the same rule, with its own key.
+        var appAlert = authFailed[app.Id];
+        Assert.Equal($"ssh-auth-failed:{app.Id:N}", appAlert.Key);
         Assert.Equal("app: SSH authentication failed on jump host edge", appAlert.Title);
         Assert.StartsWith("app via jump host edge: authentication failed (key file not found).", appAlert.Details, StringComparison.Ordinal);
         Assert.Equal(AlertSeverity.High, appAlert.Severity);
@@ -161,8 +168,9 @@ public sealed class SshAuthFailureConsumerTests
             Assert.DoesNotContain("dva", alert.Title + alert.Details, StringComparison.Ordinal);
         }
 
-        // A host that is really unreachable keeps the old wording.
+        // A host that is really unreachable keeps the old rule and wording.
         var downAlert = unreachable[down.Id];
+        Assert.Equal($"server-unreachable:{down.Id:N}", downAlert.Key);
         Assert.Equal("down is unreachable", downAlert.Title);
         Assert.Contains("is unreachable (since", downAlert.Details, StringComparison.Ordinal);
         Assert.DoesNotContain("authentication", downAlert.Title + downAlert.Details, StringComparison.OrdinalIgnoreCase);
@@ -183,16 +191,18 @@ public sealed class SshAuthFailureConsumerTests
 
         // One attempt for the minute: the second 30 s evaluation did not touch the host.
         Assert.Equal(1, lab.Transports.Attempts(host));
-        Assert.Contains(first, condition => condition.Rule == "server-unreachable" && condition.ServerId == host.Id);
-        Assert.Contains(second, condition => condition.Rule == "server-unreachable" && condition.ServerId == host.Id);
-        Assert.DoesNotContain(second, condition => condition.Rule == "server-unreachable" && condition.ServerId == healthy.Id);
+        // (Changed with the ssh-auth-failed rule: a failed login is no longer a "server-unreachable" condition.)
+        Assert.Contains(first, condition => condition.Rule == "ssh-auth-failed" && condition.ServerId == host.Id);
+        Assert.Contains(second, condition => condition.Rule == "ssh-auth-failed" && condition.ServerId == host.Id);
+        Assert.DoesNotContain(first, condition => condition.Rule == "server-unreachable");
+        Assert.DoesNotContain(second, condition => condition.ServerId == healthy.Id && condition.Rule is "server-unreachable" or "ssh-auth-failed");
 
         // The key works again: the next evaluation after the minute connects and the condition is gone.
         lab.Transports.Script(host.Host).ConnectFails = null;
         clock.Advance(TimeSpan.FromSeconds(31));
         var third = await source.GetActiveConditionsAsync(CancellationToken.None);
         Assert.Equal(2, lab.Transports.Attempts(host));
-        Assert.DoesNotContain(third, condition => condition.Rule == "server-unreachable");
+        Assert.DoesNotContain(third, condition => condition.Rule is "server-unreachable" or "ssh-auth-failed");
     }
 
     [Fact]

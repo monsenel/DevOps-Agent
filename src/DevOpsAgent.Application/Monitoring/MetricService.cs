@@ -97,7 +97,7 @@ public sealed class MetricService(
         }
 
         // The first failure is still surfaced to the poller. An unreachable host (in backoff) is expected state, not a
-        // polling failure: it is reported by the server-unreachable alert instead.
+        // polling failure: it is reported by the server-unreachable or ssh-auth-failed alert instead.
         var firstError = collected.Select(item => item.Error).FirstOrDefault(error => error is not null and not HostUnreachableException)
             ?? failures.FirstOrDefault();
         if (firstError is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(firstError).Throw();

@@ -21,6 +21,9 @@ public sealed class AlertSignalSource(
 {
     private const int MaxParallelServers = 8;
 
+    /// <summary>The alert rule of a failed SSH login (D-039): separate from <c>server-unreachable</c>.</summary>
+    public const string AuthFailedRule = "ssh-auth-failed";
+
     private readonly MonitoringCycleOptions _cycle = cycleOptions ?? new MonitoringCycleOptions();
 
     public async Task<IReadOnlyList<AlertCondition>> GetActiveConditionsAsync(CancellationToken cancellationToken)
@@ -87,10 +90,14 @@ public sealed class AlertSignalSource(
             }
             else if (remoteStatus is null && unreachable is { IsAuthFailure: true })
             {
-                // T7.R19: a failed login keeps the connectivity rule (same key, severity and lifecycle) but says what it is, so
-                // the owner fixes the key instead of hunting for a network problem. The text is the pool's fixed wording: no key
-                // file, path, passphrase or user name.
-                result.Add(Condition("server-unreachable", server.Id.ToString("N"), AlertSeverity.High, server.Id, server.Host,
+                // T7.R19 / D-039: a failed login is its own rule, "ssh-auth-failed" (own key per server, High like the outage
+                // rule), so the Alerts page and the notification (rule name only, D-028) say what it is and the owner fixes the
+                // key instead of hunting for a network problem. It never shares the key of "server-unreachable": a host that goes
+                // from unreachable to auth failed (or back) resolves one alert and opens the other in the same evaluation, and a
+                // dependent behind an auth-failed jump host gets its own ssh-auth-failed alert. While the retries are paused
+                // (three failed logins in a row) the alert stays open and its details say so. The text is the pool's fixed
+                // wording: no key file, path, passphrase or user name.
+                result.Add(Condition(AuthFailedRule, server.Id.ToString("N"), AlertSeverity.High, server.Id, server.Host,
                     unreachable.ViaJumpServerName is null
                         ? $"{server.Name}: SSH authentication failed"
                         : $"{server.Name}: SSH authentication failed on jump host {unreachable.ViaJumpServerName}",

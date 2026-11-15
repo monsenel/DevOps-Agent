@@ -146,6 +146,7 @@ public sealed class SshAuthFailurePauseTests
         // The alert never goes away because of the pause: every evaluation reports it, and once paused it says so.
         Assert.All(all, conditions => Assert.Single(conditions, condition => condition.ServerId == host.Id));
         var pausedAlert = Assert.Single(all[^1]);
+        Assert.Equal("ssh-auth-failed", pausedAlert.Rule);
         Assert.Contains("SSH authentication failed", pausedAlert.Title, StringComparison.Ordinal);
         Assert.Contains("authentication failed — automatic retries paused", pausedAlert.Details, StringComparison.Ordinal);
         Assert.Equal(all[0].Single().Key, pausedAlert.Key);
