@@ -12,13 +12,13 @@
 
 ## Current
 
-- **Task:** T7.R1 SSH connection lifecycle — dead hosts must not slow the app
-- **Status:** in-progress
+- **Task:** T7.R1 done; next T7.R2
+- **Status:** —
 - **Last updated:** 2026-11-15 by ZCode
 
 ## WIP notes
 
-- T7.R1 checkpoint: `HostReachabilityTracker` (Application/Servers, singleton `IHostReachability`) holds per-host backoff (1 min doubling to 15 min, single retry in flight). `SshConnectionPool` now connects through `ISshTransportFactory` (`SshNetTransportFactory` wraps SSH.NET) and throws `HostUnreachableException` immediately for a host in backoff or behind an unreachable jump; `SshRunOptions.BypassBackoff` bypasses it. Alert engine SSH phase runs 8 in parallel (`IAuthLogScanSource` gives each scan its own scope); discovery skips a server's remaining collectors once it is unreachable; health checks skip servers in backoff; metrics no longer report unreachable hosts as cycle failures. Next: capability test bypass + "Retry now" + unreachable status on Servers, cycle timing logs, fake-transport tests, live checks.
+None.
 
 The 2026-11-15 review fixed small issues in `fix(review): …` commits (build 0 warnings, 342/342 tests), applied the owner's decisions (D-026–D-031) and filed the larger findings as T7.R tasks in PLAN.md › M7.
 
@@ -26,7 +26,6 @@ The 2026-11-15 review fixed small issues in `fix(review): …` commits (build 0 
 
 | Task | Severity | Summary |
 |---|---|---|
-| T7.R1 | high | SSH connection lifecycle: per-host backoff, dead jump short-circuit, cycles within interval, leases |
 | T7.R2 | high | Stale marking (text badge + last seen) for unreachable servers' nodes |
 | T7.R3 | high | Container restart-loop alert rule (restart counts) |
 | T7.R4 | medium | `restart_service` guard for sshd/docker; decide on `restart_container` |
@@ -120,7 +119,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T6.4 | SSH attack detection and bans | done | `feat(T6.4): verify SSH attack detection in disposable lab` |
 | T6.5 | Updates | done | `feat(T6.5): verify security update workflow and resilient scans` |
 | T6.6 | MVP hardening pass | done | `feat(T6.6): MVP hardening and release closeout` |
-| T7.R1 | SSH connection lifecycle | in-progress | |
+| T7.R1 | SSH connection lifecycle | done | `feat(T7.R1): dead hosts never slow discovery, metrics or alerts` |
 | T7.R2 | Stale nodes for unreachable servers | todo | |
 | T7.R3 | Container restart-loop alert rule | todo | |
 | T7.R4 | Agent action guardrails | todo | |
@@ -142,6 +141,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 ## Session log
 
 One line per session: date · tool/model · tasks touched · result.
+
+- 2026-11-15 · ZCode / Claude · T7.R1 done · live on the fixed-IP lab with a 192.0.2.1 entry: discovery 15.3 s (Partial 3/1); 10 consecutive metric cycles max 15.6 s (first), then 9–240 ms; `docker stop dva-srv-edge` → srv-app/srv-db "unreachable via jump host srv-edge" with no connect attempts logged for them; Retry now recovered srv-app in ~2 s; natural recovery 35 s after start; build 0 warnings, 347/347 tests
 
 - 2026-11-15 · ZCode / Claude · started T7.R1 · owner scope: per-host backoff (1 min doubling to 15 min), jump short-circuit, bounded parallel cycles, Retry now; lab recreated with fixed private IPs via a copy of the lab script (dva-testlab-fixed.sh, outside the repo)
 
