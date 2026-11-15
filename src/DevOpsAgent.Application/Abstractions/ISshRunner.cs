@@ -27,6 +27,15 @@ public interface ISshConnectionPool : IDisposable
     Task<ISshCommandSession> GetSessionAsync(Guid serverId, bool bypassBackoff, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Like the overload above, with a call deadline that includes connect time (T7.R17): connecting (and waiting for
+    /// another caller's connect) is cut off when <paramref name="deadline"/> passes, and the session's first command gets
+    /// only what is left of it. A connect cut off by the deadline counts as a failed attempt for the host's backoff.
+    /// Pools without deadline support ignore it.
+    /// </summary>
+    Task<ISshCommandSession> GetSessionAsync(Guid serverId, bool bypassBackoff, TimeSpan deadline, CancellationToken cancellationToken) =>
+        GetSessionAsync(serverId, bypassBackoff, cancellationToken);
+
+    /// <summary>
     /// Retires any pooled connection for the server, e.g. after its host, user or key changed or it was removed. Commands
     /// already running on it finish; the connection is closed when the last of them ends and new callers connect afresh.
     /// </summary>

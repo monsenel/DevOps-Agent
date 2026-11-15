@@ -80,13 +80,23 @@ public sealed class SshNetTransportFactory(
 
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(_options.ConnectionTimeoutSeconds, 1, 300)));
+            // SSH.NET notices the token only at certain points of the handshake (and a channel opened through a blackholed
+            // jump target not at all), so the wait itself is cancellable; the cleanup below disposes the client, which ends
+            // the abandoned attempt in the background.
+            var connecting = client.ConnectAsync(timeout.Token);
             try
             {
-                await client.ConnectAsync(timeout.Token);
+                await connecting.WaitAsync(timeout.Token);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
+                _ = connecting.ContinueWith(static task => _ = task.Exception, TaskScheduler.Default);
                 throw new SshOperationTimeoutException($"Connecting to {server.Host}:{server.Port} timed out.");
+            }
+            catch (OperationCanceledException)
+            {
+                _ = connecting.ContinueWith(static task => _ = task.Exception, TaskScheduler.Default);
+                throw;
             }
 
             return new SshNetTransport(client, privateKey, tunnel, jumpTransport);

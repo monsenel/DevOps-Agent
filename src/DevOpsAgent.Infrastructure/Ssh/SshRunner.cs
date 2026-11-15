@@ -22,8 +22,10 @@ public sealed class SshRunner(ISshConnectionPool connectionPool) : ISshRunner
         }
 
         var wrappedCommand = RemoteCommand.Wrap(command, options.UseSudo);
-        // The lease is released in every outcome (result, failure, timeout, cancellation).
-        using var session = await connectionPool.GetSessionAsync(serverId, options.BypassBackoff, cancellationToken);
+        // The timeout is the deadline of the whole call (T7.R17): connecting, or waiting for a connect another caller
+        // started, is cut off at it and the command gets what is left. The lease is released in every outcome (result,
+        // failure, timeout, cancellation).
+        using var session = await connectionPool.GetSessionAsync(serverId, options.BypassBackoff, options.Timeout, cancellationToken);
         return await session.ExecuteAsync(wrappedCommand, options.Timeout, cancellationToken);
     }
 }

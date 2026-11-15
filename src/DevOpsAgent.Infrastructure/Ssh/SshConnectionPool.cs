@@ -1,8 +1,10 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net.Sockets;
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Domain.Servers;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Renci.SshNet.Common;
 
@@ -18,12 +20,18 @@ namespace DevOpsAgent.Infrastructure.Ssh;
 /// its jump entry, so a jump tunnel outlives the commands running through it. Only <see cref="Dispose"/> (shutdown) closes
 /// clients regardless of leases.
 /// </para>
+/// <para>
+/// T7.R17: a call has one deadline that covers connecting as well as the command; repeated command timeouts put the host in
+/// the same backoff as a failed connect; and once the host application is stopping (<paramref name="lifetime"/>) no new
+/// connection or command starts and the ones in flight are abandoned at once, whatever token their caller passed.
+/// </para>
 /// </summary>
 public sealed class SshConnectionPool(
     IServiceScopeFactory scopeFactory,
     ISshTransportFactory transportFactory,
     IHostReachability reachability,
-    ILogger<SshConnectionPool> logger) : ISshConnectionPool
+    ILogger<SshConnectionPool> logger,
+    IHostApplicationLifetime? lifetime = null) : ISshConnectionPool
 {
     private readonly ConcurrentDictionary<Guid, ConnectionEntry> _connections = new();
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _connectionLocks = new();
@@ -39,10 +47,44 @@ public sealed class SshConnectionPool(
     /// <summary>Clients that are open: pooled ones and retired ones still finishing a command (diagnostics and tests).</summary>
     public int LiveClients => _live.Count;
 
-    public async Task<ISshCommandSession> GetSessionAsync(Guid serverId, bool bypassBackoff, CancellationToken cancellationToken)
+    // Cancelled when the host starts stopping (SIGTERM): the point after which nothing may start or keep waiting.
+    private CancellationToken Stopping => lifetime?.ApplicationStopping ?? CancellationToken.None;
+
+    private bool IsStopping => _disposed || Stopping.IsCancellationRequested;
+
+    private IHostReachability Reachability => reachability;
+
+    private ILogger Log => logger;
+
+    public Task<ISshCommandSession> GetSessionAsync(Guid serverId, bool bypassBackoff, CancellationToken cancellationToken) =>
+        GetSessionAsync(serverId, bypassBackoff, Timeout.InfiniteTimeSpan, cancellationToken);
+
+    public async Task<ISshCommandSession> GetSessionAsync(Guid serverId, bool bypassBackoff, TimeSpan deadline, CancellationToken cancellationToken)
     {
-        var lease = await GetOrConnectAsync(serverId, [], bypassBackoff, cancellationToken);
-        return new SshCommandSession(lease, reason => Invalidate(serverId, lease.Entry, reason));
+        // Once the host is stopping, a new request is refused before anything is loaded or connected.
+        if (IsStopping) throw new SshShutdownException();
+
+        var startedAt = Stopwatch.GetTimestamp();
+        using var scope = new CallScope(cancellationToken, Stopping, deadline);
+        try
+        {
+            var lease = await GetOrConnectAsync(serverId, [], bypassBackoff, scope);
+            var budget = deadline == Timeout.InfiniteTimeSpan ? (TimeSpan?)null : deadline;
+            return new SshCommandSession(this, lease, serverId, bypassBackoff, startedAt, budget,
+                reason => Invalidate(serverId, lease.Entry, reason));
+        }
+        catch (OperationCanceledException) when (scope.ShuttingDown)
+        {
+            // The host is stopping: a clean cancellation, not a failure of the server.
+            throw new SshShutdownException();
+        }
+        catch (OperationCanceledException) when (scope.DeadlineExpired)
+        {
+            // Out of time while waiting (for the server record, or behind another caller's connect). The caller that was
+            // connecting has already recorded the failure.
+            throw new SshOperationTimeoutException(
+                $"Connecting did not complete within the {deadline.TotalSeconds:0.#} s deadline of the call.");
+        }
     }
 
     public void Evict(Guid serverId)
@@ -64,8 +106,11 @@ public sealed class SshConnectionPool(
             return;
         }
 
-        // Shutdown closes every client at once, leased or not; commands still running fail with the closed connection.
-        // Dependents first, so a tunnel is released while its jump client is still open.
+        // Shutdown closes every client at once, leased or not. Dependents first, so a tunnel is released while its jump
+        // client is still open. Nothing here waits for a connect in flight: such an attempt notices the pool is closed (or
+        // the stopping token) and ends itself, and a connection it finishes late is closed by its caller. The connect
+        // gates are deliberately not disposed: a caller still holding one must be able to release it (disposing made that
+        // throw ObjectDisposedException into the host).
         _disposed = true;
         foreach (var connection in _live.Keys.OrderByDescending(entry => entry.Depth))
         {
@@ -74,12 +119,6 @@ public sealed class SshConnectionPool(
 
         _live.Clear();
         _connections.Clear();
-        foreach (var gate in _connectionLocks.Values)
-        {
-            gate.Dispose();
-        }
-
-        _connectionLocks.Clear();
     }
 
     // The returned lease belongs to the caller, who must dispose it (the session does; a jump lease is released once the
@@ -88,9 +127,9 @@ public sealed class SshConnectionPool(
         Guid serverId,
         HashSet<Guid> visited,
         bool bypassBackoff,
-        CancellationToken cancellationToken)
+        CallScope scope)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (IsStopping) throw new SshShutdownException();
         if (!visited.Add(serverId))
         {
             throw new InvalidOperationException("The configured jump-server route contains a cycle.");
@@ -102,7 +141,7 @@ public sealed class SshConnectionPool(
             for (var attempt = 0; attempt < 2; attempt++)
             {
                 var generation = Generation(serverId);
-                var server = await LoadServerAsync(serverId, cancellationToken);
+                var server = await LoadServerAsync(serverId, scope.Token);
                 EntryLease? jumpLease = null;
                 try
                 {
@@ -110,7 +149,7 @@ public sealed class SshConnectionPool(
                     {
                         try
                         {
-                            jumpLease = await GetOrConnectAsync(jumpId, visited, bypassBackoff, cancellationToken);
+                            jumpLease = await GetOrConnectAsync(jumpId, visited, bypassBackoff, scope);
                         }
                         catch (HostUnreachableException jumpUnreachable)
                         {
@@ -122,7 +161,7 @@ public sealed class SshConnectionPool(
                     }
 
                     // The jump lease keeps the tunnel's client open while this hop connects through it.
-                    var connection = await ConnectHopAsync(server, jumpLease, generation, bypassBackoff, cancellationToken);
+                    var connection = await ConnectHopAsync(server, jumpLease, generation, bypassBackoff, scope);
                     if (connection is not null) return connection;
                 }
                 finally
@@ -144,9 +183,18 @@ public sealed class SshConnectionPool(
         EntryLease? jumpLease,
         int generation,
         bool bypassBackoff,
-        CancellationToken cancellationToken)
+        CallScope scope)
     {
         var jumpConnection = jumpLease?.Entry;
+
+        // A host whose commands keep timing out is skipped even though its client may still be connected (T7.R17): the
+        // backoff must hold until the host answers a command, not only until a connect succeeds.
+        if (!bypassBackoff && reachability.Get(server.Id) is { Kind: HostFailureKind.CommandTimeout }
+            && reachability.IsBlocked(server.Id, out var commandBackoff))
+        {
+            throw new HostUnreachableException(server.Id, server.Name, commandBackoff!);
+        }
+
         if (TryReuse(server.Id, jumpConnection) is { } pooled) return pooled;
 
         // A host in backoff, or one another caller is already retrying, fails immediately.
@@ -160,7 +208,7 @@ public sealed class SshConnectionPool(
         try
         {
             var gate = _connectionLocks.GetOrAdd(server.Id, static _ => new SemaphoreSlim(1, 1));
-            await gate.WaitAsync(cancellationToken);
+            await gate.WaitAsync(scope.Token);
             try
             {
                 if (TryReuse(server.Id, jumpConnection) is { } current) return current;
@@ -176,17 +224,36 @@ public sealed class SshConnectionPool(
                 ISshTransport transport;
                 try
                 {
-                    transport = await transportFactory.ConnectAsync(server, jumpConnection?.Transport, cancellationToken);
+                    transport = await ConnectAbandonableAsync(server, jumpConnection?.Transport, scope.Token);
                 }
-                catch (Exception exception) when (!(exception is OperationCanceledException && cancellationToken.IsCancellationRequested))
+                catch (Exception exception) when (scope.ShuttingDown || IsStopping)
+                {
+                    // Shutdown aborted the attempt (or tore the client down under it): not a failure of the server, so it
+                    // never backs the host off or opens an alert.
+                    logger.LogDebug("SSH connect to {ServerName} abandoned: the application is stopping", server.Name);
+                    throw exception is SshShutdownException ? exception : new SshShutdownException();
+                }
+                catch (Exception exception) when (!(exception is OperationCanceledException && scope.CallerCancelled))
                 {
                     // Evicted while connecting: the failure belongs to the old settings and must not back off the new ones.
                     if (Generation(server.Id) != generation) return null;
 
-                    var state = reachability.RecordFailure(server.Id, exception);
+                    // Cut off by the call's own deadline: the host did not answer in time, which is what a connect timeout is.
+                    var failure = exception is OperationCanceledException && scope.DeadlineExpired
+                        ? new SshOperationTimeoutException(
+                            $"Connecting to {server.Host}:{server.Port} did not complete within the call deadline.")
+                        : exception;
+                    var state = reachability.RecordFailure(server.Id, failure);
                     outcomeRecorded = true;
-                    logger.LogInformation("{ServerName} is unreachable; next retry at {NextRetryUtc:u}", server.Name, state.NextRetryUtc);
+                    logger.LogInformation("{ServerName} is unreachable (could not connect); next retry at {NextRetryUtc:u}", server.Name, state.NextRetryUtc);
                     throw new HostUnreachableException(server.Id, server.Name, state);
+                }
+
+                if (IsStopping)
+                {
+                    // Connected just as the host started stopping: nothing may outlive the shutdown.
+                    transport.Dispose();
+                    throw new SshShutdownException();
                 }
 
                 reachability.RecordSuccess(server.Id);
@@ -196,12 +263,12 @@ public sealed class SshConnectionPool(
                 var created = new ConnectionEntry(server.Id, server.Name, transport, jumpConnection, jumpLease?.Entry.RetainAsJump(), logger, Forget);
                 _live[created] = 0;
                 var lease = created.Retain();
-                if (_disposed)
+                if (IsStopping)
                 {
                     // Shut down while connecting: nothing may outlive the pool.
                     created.Shutdown();
                     lease.Dispose();
-                    throw new ObjectDisposedException(nameof(SshConnectionPool));
+                    throw new SshShutdownException();
                 }
 
                 _connections[server.Id] = created;
@@ -237,7 +304,28 @@ public sealed class SshConnectionPool(
 
     private static HostReachabilityState StateFrom(HostUnreachableException exception) =>
         new(exception.ServerId, exception.UnreachableSinceUtc, exception.NextRetryUtc, 1,
-            exception.LastFailure?.Message ?? exception.Message, false, exception.LastFailure);
+            exception.LastFailure?.Message ?? exception.Message, false, exception.LastFailure, exception.Kind);
+
+    // The transport is asked to stop when the token fires, but SSH.NET does not always notice promptly (a handshake with a
+    // blackholed peer, a channel to a dead jump target). The caller stops waiting at once; what the attempt opens later is
+    // closed here, so an abandoned connect never leaks a client or keeps the host alive.
+    private async Task<ISshTransport> ConnectAbandonableAsync(Server server, ISshTransport? jump, CancellationToken cancellationToken)
+    {
+        var connecting = transportFactory.ConnectAsync(server, jump, cancellationToken);
+        try
+        {
+            return await connecting.WaitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _ = connecting.ContinueWith(static task =>
+            {
+                if (task.IsCompletedSuccessfully) task.Result.Dispose();
+                else _ = task.Exception; // observed, never rethrown
+            }, TaskScheduler.Default);
+            throw;
+        }
+    }
 
     private async Task<Server> LoadServerAsync(Guid serverId, CancellationToken cancellationToken)
     {
@@ -265,6 +353,37 @@ public sealed class SshConnectionPool(
         if (_connections.TryRemove(serverId, out var previous))
         {
             previous.Retire(reason);
+        }
+    }
+
+    /// <summary>
+    /// The three reasons a call stops waiting, kept apart: its caller cancelled, the host is stopping, or the call's
+    /// deadline (connect time included) passed.
+    /// </summary>
+    private sealed class CallScope : IDisposable
+    {
+        private readonly CancellationToken _caller;
+        private readonly CancellationToken _stopping;
+        private readonly CancellationTokenSource _deadline = new();
+        private readonly CancellationTokenSource _linked;
+
+        public CallScope(CancellationToken caller, CancellationToken stopping, TimeSpan deadline)
+        {
+            _caller = caller;
+            _stopping = stopping;
+            if (deadline != Timeout.InfiniteTimeSpan) _deadline.CancelAfter(deadline);
+            _linked = CancellationTokenSource.CreateLinkedTokenSource(caller, stopping, _deadline.Token);
+        }
+
+        public CancellationToken Token => _linked.Token;
+        public bool CallerCancelled => _caller.IsCancellationRequested;
+        public bool ShuttingDown => _stopping.IsCancellationRequested && !_caller.IsCancellationRequested;
+        public bool DeadlineExpired => _deadline.IsCancellationRequested && !_caller.IsCancellationRequested && !_stopping.IsCancellationRequested;
+
+        public void Dispose()
+        {
+            _linked.Dispose();
+            _deadline.Dispose();
         }
     }
 
@@ -451,8 +570,17 @@ public sealed class SshConnectionPool(
         }
     }
 
-    private sealed class SshCommandSession(EntryLease lease, Action<string> retire) : ISshCommandSession
+    private sealed class SshCommandSession(
+        SshConnectionPool pool,
+        EntryLease lease,
+        Guid serverId,
+        bool bypassBackoff,
+        long startedAt,
+        TimeSpan? budget,
+        Action<string> retire) : ISshCommandSession
     {
+        private int _budgetUsed;
+
         private ConnectionEntry Entry => lease.Entry;
         private SshTimeoutTracker Timeouts => Entry.Timeouts;
 
@@ -476,21 +604,41 @@ public sealed class SshConnectionPool(
             }
 
             ObjectDisposedException.ThrowIf(lease.IsReleased, this);
+            // After shutdown began nothing new starts, on a client leased earlier as well.
+            var stopping = pool.Stopping;
+            if (pool.IsStopping) throw new SshShutdownException();
+
+            timeout = WithinCallDeadline(timeout);
             var transport = Entry.Transport;
+            // The call is bounded here as well as inside SSH.NET: its own timeout and cancellation do not always end a
+            // command on a dead peer, and Dispose does not wake a command already running (T7.R15 live run). The wait is
+            // abandoned when the deadline passes, the caller cancels or the host stops; a late result is discarded.
+            using var deadline = new CancellationTokenSource(timeout);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, stopping, deadline.Token);
+            var running = transport.ExecuteAsync(command, timeout, linked.Token);
             try
             {
-                var result = await transport.ExecuteAsync(command, timeout, cancellationToken);
+                var result = await running.WaitAsync(linked.Token);
                 Timeouts.RecordSuccess();
+                pool.Reachability.RecordCommandSuccess(serverId);
                 return result;
             }
-            catch (SshOperationTimeoutException) when (Timeouts.RecordTimeout())
+            catch (OperationCanceledException) when (linked.IsCancellationRequested)
             {
-                // A silently dead peer (blackholed route) keeps IsConnected true and every command waits its full timeout.
-                // One slow command is tolerated; repeated consecutive timeouts mean the session is dead, so retire it.
-                // Retiring never closes the client under other commands (for example a running package update): they
-                // finish, and the last lease to end disposes it.
-                retire("repeated command timeouts");
-                throw;
+                Abandon(running);
+                if (cancellationToken.IsCancellationRequested) throw;
+                if (stopping.IsCancellationRequested) throw new SshShutdownException();
+                throw RegisterTimeout(new SshOperationTimeoutException(
+                    $"The command did not finish within {timeout.TotalSeconds:0.#} s."));
+            }
+            catch (Exception) when (stopping.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                // The host is stopping and tore the client down under the command.
+                throw new SshShutdownException();
+            }
+            catch (SshOperationTimeoutException exception)
+            {
+                throw RegisterTimeout(exception);
             }
             catch (Exception exception) when (SshTransportFailure.IsTransportFailure(exception) && !transport.IsConnected)
             {
@@ -500,6 +648,47 @@ public sealed class SshConnectionPool(
                 throw;
             }
         }
+
+        // The first command of a session has only what is left of the call's deadline after connecting.
+        private TimeSpan WithinCallDeadline(TimeSpan timeout)
+        {
+            if (budget is not { } total || Interlocked.Exchange(ref _budgetUsed, 1) != 0) return timeout;
+            var remaining = total - Stopwatch.GetElapsedTime(startedAt);
+            if (remaining <= TimeSpan.Zero)
+            {
+                throw new SshOperationTimeoutException(
+                    $"Connecting used up the {total.TotalSeconds:0.#} s deadline of the call; the command was not started.");
+            }
+
+            return remaining < timeout ? remaining : timeout;
+        }
+
+        // A silently dead peer (blackholed route, frozen process) keeps IsConnected true and every command waits its full
+        // timeout. One slow command is tolerated. Three in a row on this client recycle it: it is retired, never closed
+        // under other commands (for example a running package update), and the last lease to end disposes it. The host
+        // itself goes into backoff when the timeouts continue on the fresh client (IHostReachability.CommandTimeoutThreshold),
+        // or at once when it was already in backoff and this was its retry.
+        private SshOperationTimeoutException RegisterTimeout(SshOperationTimeoutException exception)
+        {
+            var recycle = Timeouts.RecordTimeout();
+            var backoff = pool.Reachability.RecordCommandTimeout(serverId, exception, force: bypassBackoff);
+            if (backoff is not null)
+            {
+                pool.Log.LogInformation("{ServerName} is not answering commands; next retry at {NextRetryUtc:u}",
+                    Entry.ServerName, backoff.NextRetryUtc);
+            }
+
+            if (recycle || backoff is not null)
+            {
+                retire(recycle ? "repeated command timeouts" : "host is not answering commands");
+            }
+
+            return exception;
+        }
+
+        // The abandoned command may still finish or fail later; nobody waits for it, so its outcome is only observed.
+        private static void Abandon(Task running) =>
+            _ = running.ContinueWith(static task => _ = task.Exception, TaskScheduler.Default);
     }
 }
 
