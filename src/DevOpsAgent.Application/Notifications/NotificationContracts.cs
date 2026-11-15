@@ -4,8 +4,9 @@ using DevOpsAgent.Application.Monitoring;
 namespace DevOpsAgent.Application.Notifications;
 
 public sealed record NotificationSettings(bool TelegramEnabled, string TelegramChatId, bool HasTelegramBotToken,
-    bool NtfyEnabled, string NtfyBaseUrl, string NtfyTopic, bool HasNtfyToken, AlertSeverity MinimumSeverity);
+    bool NtfyEnabled, string NtfyBaseUrl, bool HasNtfyTopic, bool HasNtfyToken, AlertSeverity MinimumSeverity);
 
+/// <summary>Blank secret fields (bot token, ntfy topic, ntfy token) keep the stored value.</summary>
 public sealed record NotificationSettingsInput(bool TelegramEnabled, string TelegramBotToken, string TelegramChatId,
     bool NtfyEnabled, string NtfyBaseUrl, string NtfyTopic, string NtfyToken, AlertSeverity MinimumSeverity);
 

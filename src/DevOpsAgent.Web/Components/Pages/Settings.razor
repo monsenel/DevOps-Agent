@@ -121,7 +121,12 @@
                 <SwitchRow Title="Enable ntfy" Helper="Publish to a topic on ntfy or your self-hosted server" @bind-Value="_ntfyEnabled" />
                 <div class="connection-form-grid">
                     <Field Id="ntfy-url" Label="Server URL" @bind-Value="_ntfyBaseUrl" Mono="true" />
-                    <Field Id="ntfy-topic" Label="Topic" @bind-Value="_ntfyTopic" Mono="true" />
+                    <div class="field">
+                        <label for="ntfy-topic">Topic</label>
+                        <input id="ntfy-topic" type="password" autocomplete="new-password" @bind="_ntfyTopic" @bind:event="oninput"
+                               placeholder="@(_hasNtfyTopic ? "Saved; blank keeps current topic" : "Topic")" />
+                        <span class="field-helper">@(_hasNtfyTopic ? "A topic is saved. Leave blank to keep it." : "Anyone who knows the topic can read it; stored encrypted and never shown again.")</span>
+                    </div>
                     <div class="field">
                         <label for="ntfy-token">Access token (optional)</label>
                         <input id="ntfy-token" type="password" autocomplete="new-password" @bind="_ntfyToken" @bind:event="oninput"
@@ -333,6 +338,7 @@
     private string _ntfyTopic = string.Empty;
     private string _ntfyToken = string.Empty;
     private bool _hasNtfyToken;
+    private bool _hasNtfyTopic;
     private AlertSeverity _minimumSeverity = AlertSeverity.Medium;
     private bool _savingNotifications;
     private bool _testingNotifications;
@@ -433,7 +439,7 @@
             _hasTelegramToken = saved.HasTelegramBotToken;
             _ntfyEnabled = saved.NtfyEnabled;
             _ntfyBaseUrl = saved.NtfyBaseUrl;
-            _ntfyTopic = saved.NtfyTopic;
+            _hasNtfyTopic = saved.HasNtfyTopic;
             _hasNtfyToken = saved.HasNtfyToken;
             _minimumSeverity = saved.MinimumSeverity;
             _notificationsLoaded = true;
@@ -455,9 +461,11 @@
                 _ntfyEnabled, _ntfyBaseUrl, _ntfyTopic, _ntfyToken, _minimumSeverity), CancellationToken.None);
             _telegramToken = string.Empty;
             _ntfyToken = string.Empty;
+            _ntfyTopic = string.Empty;
             var saved = await Notifications.GetAsync(CancellationToken.None);
             _hasTelegramToken = saved.HasTelegramBotToken;
             _hasNtfyToken = saved.HasNtfyToken;
+            _hasNtfyTopic = saved.HasNtfyTopic;
             _notificationMessage = "Notification settings saved.";
         }
         catch (ArgumentException exception) { _notificationError = exception.Message; }
@@ -475,9 +483,11 @@
                 _ntfyEnabled, _ntfyBaseUrl, _ntfyTopic, _ntfyToken, _minimumSeverity), CancellationToken.None);
             _telegramToken = string.Empty;
             _ntfyToken = string.Empty;
+            _ntfyTopic = string.Empty;
             var saved = await Notifications.GetAsync(CancellationToken.None);
             _hasTelegramToken = saved.HasTelegramBotToken;
             _hasNtfyToken = saved.HasNtfyToken;
+            _hasNtfyTopic = saved.HasNtfyTopic;
             await Notifications.TestAsync(CancellationToken.None);
             _notificationMessage = "Test notification sent.";
         }
