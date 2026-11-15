@@ -19,6 +19,15 @@ public sealed class HostReachabilityTracker(TimeProvider timeProvider) : IHostRe
     /// </summary>
     public static readonly TimeSpan AuthFailedBackoff = TimeSpan.FromMinutes(1);
 
+    /// <summary>
+    /// A failed login may be retried this much before its minute is over. Retries are driven by the 30 s alert and 60 s metric
+    /// cycles; a cycle that lands a few milliseconds before the deadline (always, when the failure itself happened in a
+    /// cycle: the deadline is the attempt time plus a minute plus the attempt's own duration) would otherwise push the retry a
+    /// whole cycle later and make a "1 minute" retry a 90 second one (measured live). Only login failures get it; the
+    /// backoff of an outage is unchanged.
+    /// </summary>
+    public static readonly TimeSpan AuthFailedRetrySlack = TimeSpan.FromSeconds(1);
+
     private readonly ConcurrentDictionary<Guid, HostReachabilityState> _states = new();
     // Consecutive command timeouts per host. They outlive a recycled client: the count only ends with a successful command.
     private readonly ConcurrentDictionary<Guid, int> _timeouts = new();
@@ -29,8 +38,12 @@ public sealed class HostReachabilityTracker(TimeProvider timeProvider) : IHostRe
     public bool IsBlocked(Guid serverId, out HostReachabilityState? state)
     {
         state = Get(serverId);
-        return state is not null && (state.RetryInProgress || timeProvider.GetUtcNow() < state.NextRetryUtc);
+        return state is not null && (state.RetryInProgress || !Elapsed(state, timeProvider.GetUtcNow()));
     }
+
+    // The retry time of a failed login is reached AuthFailedRetrySlack early (see there).
+    private static bool Elapsed(HostReachabilityState state, DateTimeOffset now) =>
+        now >= (state.Kind == HostFailureKind.AuthFailed ? state.NextRetryUtc - AuthFailedRetrySlack : state.NextRetryUtc);
 
     public bool TryBeginAttempt(Guid serverId, bool bypassBackoff, out HostReachabilityState? blockedBy)
     {
@@ -38,7 +51,7 @@ public sealed class HostReachabilityTracker(TimeProvider timeProvider) : IHostRe
         {
             blockedBy = null;
             if (!_states.TryGetValue(serverId, out var state)) return true;
-            if (!bypassBackoff && (state.RetryInProgress || timeProvider.GetUtcNow() < state.NextRetryUtc))
+            if (!bypassBackoff && (state.RetryInProgress || !Elapsed(state, timeProvider.GetUtcNow())))
             {
                 blockedBy = state;
                 return false;

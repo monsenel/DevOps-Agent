@@ -146,10 +146,10 @@ public sealed class SshAuthFailureTests
             Assert.Equal(HostFailureKind.AuthFailed, state.Kind);
             Assert.Equal(failure, state.ConsecutiveFailures);
             seen.Add(state.NextRetryUtc - clock.GetUtcNow());
-            // Nothing earlier than the minute; at the minute the retry is allowed again.
-            clock.Advance(TimeSpan.FromSeconds(59));
+            // Nothing earlier than the minute (less the one second of slack); at the minute the retry is allowed again.
+            clock.Advance(TimeSpan.FromSeconds(58));
             Assert.False(tracker.TryBeginAttempt(login, bypassBackoff: false, out _));
-            clock.Advance(TimeSpan.FromSeconds(1));
+            clock.Advance(TimeSpan.FromSeconds(2));
         }
 
         Assert.All(seen, wait => Assert.Equal(TimeSpan.FromMinutes(1), wait));
@@ -167,6 +167,29 @@ public sealed class SshAuthFailureTests
         }
 
         Assert.Equal(new[] { 1, 2, 4, 8, 15, 15 }, doubled);
+    }
+
+    [Fact]
+    public void ACycleThatLandsJustBeforeTheMinuteIsOverStillRetriesALoginFailureButNotAnOutage()
+    {
+        var clock = new ManualClock();
+        var tracker = new HostReachabilityTracker(clock);
+        var login = Guid.NewGuid();
+        var outage = Guid.NewGuid();
+        tracker.RecordFailure(login, new SshAuthFailedException(SshAuthFailure.ServerRejectedKey));
+        tracker.RecordFailure(outage, new SocketException((int)SocketError.TimedOut));
+
+        // 40 ms early, as a 30 s cycle phase-locked to the failure lands: the login is retried, the outage is not.
+        clock.Advance(TimeSpan.FromMinutes(1) - TimeSpan.FromMilliseconds(40));
+        Assert.False(tracker.IsBlocked(login, out _));
+        Assert.True(tracker.TryBeginAttempt(login, bypassBackoff: false, out _));
+        Assert.True(tracker.IsBlocked(outage, out _));
+        Assert.False(tracker.TryBeginAttempt(outage, bypassBackoff: false, out _));
+        // But not a whole second early.
+        var other = Guid.NewGuid();
+        tracker.RecordFailure(other, new SshAuthFailedException(SshAuthFailure.ServerRejectedKey));
+        clock.Advance(TimeSpan.FromSeconds(58));
+        Assert.True(tracker.IsBlocked(other, out _));
     }
 
     [Fact]
@@ -238,10 +261,10 @@ public sealed class SshAuthFailureTests
             Assert.Equal(failure, lab.Transports.Attempts(host));
 
             // Inside the minute the host is skipped without an attempt.
-            clock.Advance(TimeSpan.FromSeconds(59));
+            clock.Advance(TimeSpan.FromSeconds(58));
             await Assert.ThrowsAsync<HostUnreachableException>(() => lab.Run(host, Short));
             Assert.Equal(failure, lab.Transports.Attempts(host));
-            clock.Advance(TimeSpan.FromSeconds(1));
+            clock.Advance(TimeSpan.FromSeconds(2));
         }
 
         // "Retry now" attempts during the backoff; it fails again with the same one-minute wait.
