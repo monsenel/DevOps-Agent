@@ -232,7 +232,7 @@ public sealed class SshAuthFailureConsumerTests
         Assert.DoesNotContain("/keys/", text, StringComparison.Ordinal);
     }
 
-    private static AlertSignalSource AlertSource(HangLab lab) =>
+    internal static AlertSignalSource AlertSource(HangLab lab) =>
         new(lab.Servers, new HangMetrics(), new EmptyChecks(), new EmptySnapshots(), lab.Runner,
             new AuthLogScanner(lab.Runner, new HangSettings(), Options.Create(new SecurityMonitoringOptions()), lab.Time),
             new DriftService(new EmptySnapshots(), null!),

@@ -6,7 +6,9 @@ namespace DevOpsAgent.Application.Servers;
 /// <summary>
 /// In-memory per-host backoff: 1 minute after the first failure, doubling per further failure up to 15 minutes. Connection
 /// failures and repeated command timeouts (T7.R17) share the same schedule. Login failures (T7.R19) are a state of their
-/// own with a constant 1 minute retry.
+/// own with a constant 1 minute retry, and after <see cref="IHostReachability.AuthFailedAttemptLimit"/> in a row the host is
+/// paused: no automatic attempt at all until the owner retries, tests or edits it (D-039). The state lives in memory only, so
+/// an application restart forgets it.
 /// </summary>
 public sealed class HostReachabilityTracker(TimeProvider timeProvider) : IHostReachability
 {
@@ -41,9 +43,11 @@ public sealed class HostReachabilityTracker(TimeProvider timeProvider) : IHostRe
         return state is not null && (state.RetryInProgress || !Elapsed(state, timeProvider.GetUtcNow()));
     }
 
-    // The retry time of a failed login is reached AuthFailedRetrySlack early (see there).
+    // The retry time of a failed login is reached AuthFailedRetrySlack early (see there). A host whose automatic retries are
+    // paused never reaches it: only a bypass attempt or Reset gets past.
     private static bool Elapsed(HostReachabilityState state, DateTimeOffset now) =>
-        now >= (state.Kind == HostFailureKind.AuthFailed ? state.NextRetryUtc - AuthFailedRetrySlack : state.NextRetryUtc);
+        !state.AutomaticRetriesPaused
+        && now >= (state.Kind == HostFailureKind.AuthFailed ? state.NextRetryUtc - AuthFailedRetrySlack : state.NextRetryUtc);
 
     public bool TryBeginAttempt(Guid serverId, bool bypassBackoff, out HostReachabilityState? blockedBy)
     {
@@ -94,10 +98,15 @@ public sealed class HostReachabilityTracker(TimeProvider timeProvider) : IHostRe
             // A change between "cannot connect" and "cannot log in" is a new situation: its count and its "since" start over,
             // so a login failure never inherits the long backoff of an outage (and the other way round).
             var continuing = previous is not null && (previous.Kind == HostFailureKind.AuthFailed) == (kind == HostFailureKind.AuthFailed);
+            // A failure of the other kind (or none on record) starts the count at 1, so only consecutive login failures count
+            // towards the pause. A failed login stays at the limit once paused: a manual attempt that fails again keeps the
+            // host paused and never pushes the count further.
             var failures = continuing ? previous!.ConsecutiveFailures + 1 : 1;
+            if (kind == HostFailureKind.AuthFailed) failures = Math.Min(failures, IHostReachability.AuthFailedAttemptLimit);
+            var paused = kind == HostFailureKind.AuthFailed && failures >= IHostReachability.AuthFailedAttemptLimit;
             // A host that cannot even be connected to is now unreachable, whatever it was before.
             return _states[serverId] = new HostReachabilityState(serverId, continuing ? previous!.UnreachableSinceUtc : now,
-                now + BackoffFor(kind, failures), failures, failure.Message, RetryInProgress: false, failure, kind,
+                paused ? DateTimeOffset.MaxValue : now + BackoffFor(kind, failures), failures, failure.Message, RetryInProgress: false, failure, kind,
                 cause ?? (failure is SshAuthFailedException auth ? SshAuthFailedException.Describe(auth.Reason) : null));
         }
     }

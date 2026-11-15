@@ -36,13 +36,23 @@ public sealed record HostReachabilityState(
     bool RetryInProgress,
     Exception? LastFailure,
     HostFailureKind Kind = HostFailureKind.Connect,
-    string? Cause = null);
+    string? Cause = null)
+{
+    /// <summary>
+    /// The login failed <see cref="IHostReachability.AuthFailedAttemptLimit"/> times in a row: no automatic connection attempt
+    /// is made any more (fail2ban safety, D-039). Only "Retry now", "Test connection" or an edit of the server's connection
+    /// settings ends it.
+    /// </summary>
+    public bool AutomaticRetriesPaused =>
+        Kind == HostFailureKind.AuthFailed && ConsecutiveFailures >= IHostReachability.AuthFailedAttemptLimit;
+}
 
 /// <summary>
 /// Per-host reachability with backoff (T7.R1, T7.R17, T7.R19): after a connection-level failure, or after
 /// <see cref="CommandTimeoutThreshold"/> consecutive command timeouts, a host is skipped for 1 minute, doubling up to
-/// 15 minutes, and reset by the first success. A failed login is skipped for 1 minute and never longer. Callers never wait
-/// on a host in backoff.
+/// 15 minutes, and reset by the first success. A failed login is skipped for 1 minute and never longer, until it has failed
+/// <see cref="AuthFailedAttemptLimit"/> times in a row: then automatic attempts stop altogether (paused) until "Retry now",
+/// "Test connection" or a settings change. Callers never wait on a host in backoff.
 /// </summary>
 public interface IHostReachability
 {
@@ -52,6 +62,12 @@ public interface IHostReachability
     /// itself, not a stale connection, is not answering.
     /// </summary>
     const int CommandTimeoutThreshold = 4;
+
+    /// <summary>
+    /// Consecutive failed logins after which a host's automatic connection attempts stop (D-039): each attempt is a login
+    /// the server's fail2ban may count against the app's own address. The first attempts keep the one minute cadence.
+    /// </summary>
+    const int AuthFailedAttemptLimit = 3;
 
     /// <summary>The backoff state, or null when the host is not known to be unreachable.</summary>
     HostReachabilityState? Get(Guid serverId);
@@ -116,6 +132,7 @@ public sealed class HostUnreachableException : Exception
         LastFailure = state.LastFailure;
         Kind = state.Kind;
         Cause = state.Cause;
+        AutomaticRetriesPaused = state.AutomaticRetriesPaused;
     }
 
     public Guid ServerId { get; }
@@ -132,6 +149,9 @@ public sealed class HostUnreachableException : Exception
     /// <summary>The login failed (the host itself, or the jump host named in <see cref="ViaJumpServerName"/>, answered).</summary>
     public bool IsAuthFailure => Kind == HostFailureKind.AuthFailed;
 
+    /// <summary>The login failed so often that automatic retries of the host (or of the jump host on the route) are paused.</summary>
+    public bool AutomaticRetriesPaused { get; }
+
     /// <summary>
     /// "name is unreachable (since …, next retry …): could not connect." or "…: commands timed out." The cause is named, so a
     /// host that connects but does not answer is not mistaken for one that cannot be reached. A failed login reads
@@ -145,6 +165,9 @@ public sealed class HostUnreachableException : Exception
         if (state.Kind == HostFailureKind.AuthFailed)
         {
             var reason = string.IsNullOrWhiteSpace(state.Cause) ? string.Empty : $" ({state.Cause})";
+            // Paused: there is no next retry to name. Only the owner (Retry now, Test connection, an edit) ends it.
+            if (state.AutomaticRetriesPaused)
+                return $"{serverName}{route}: authentication failed — automatic retries paused{reason}. Since {Time(state.UnreachableSinceUtc)}.";
             return $"{serverName}{route}: authentication failed{reason}. Since {Time(state.UnreachableSinceUtc)}, {retry}.";
         }
 

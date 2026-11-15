@@ -138,8 +138,10 @@ public sealed class SshAuthFailureTests
         var login = Guid.NewGuid();
         var outage = Guid.NewGuid();
 
+        // D-039 amendment: after AuthFailedAttemptLimit (3) consecutive failures the retries stop; this test covers the
+        // attempts that are still automatic (the cadence of the pause itself is in SshAuthFailurePauseTests).
         var seen = new List<TimeSpan>();
-        for (var failure = 1; failure <= 40; failure++)
+        for (var failure = 1; failure < IHostReachability.AuthFailedAttemptLimit; failure++)
         {
             Assert.True(tracker.TryBeginAttempt(login, bypassBackoff: false, out _));
             var state = tracker.RecordFailure(login, new SshAuthFailedException(SshAuthFailure.ServerRejectedKey));
@@ -244,14 +246,15 @@ public sealed class SshAuthFailureTests
     }
 
     [Fact]
-    public async Task ThePoolRetriesAFailedLoginEveryMinuteForeverAndRetryNowEditAndSuccessClearIt()
+    public async Task ThePoolRetriesAFailedLoginEveryMinuteUntilTheLimitAndRetryNowEditAndSuccessClearIt()
     {
         var clock = new ManualClock();
         using var lab = new HangLab(clock);
         var host = lab.Add("srv", "10.0.0.1", script => script.ConnectFails = () => new SshAuthenticationException("Permission denied"));
 
-        // Nine consecutive failures, each at the end of the previous minute: never a longer wait.
-        for (var failure = 1; failure <= 9; failure++)
+        // D-039 amendment: the automatic attempts are limited to the first three (the pause is tested in
+        // SshAuthFailurePauseTests); each is at the end of the previous minute: never a longer wait.
+        for (var failure = 1; failure < IHostReachability.AuthFailedAttemptLimit; failure++)
         {
             await Assert.ThrowsAsync<HostUnreachableException>(() => lab.Run(host, Short));
             var state = lab.Reachability.Get(host.Id)!;
@@ -267,23 +270,23 @@ public sealed class SshAuthFailureTests
             clock.Advance(TimeSpan.FromSeconds(2));
         }
 
-        // "Retry now" attempts during the backoff; it fails again with the same one-minute wait.
+        // "Retry now" attempts whenever it is pressed; it is the third failure in a row and pauses the host.
         await Assert.ThrowsAsync<HostUnreachableException>(() => lab.Run(host, Short, bypass: true));
-        Assert.Equal(10, lab.Transports.Attempts(host));
-        Assert.Equal(TimeSpan.FromMinutes(1), lab.Reachability.Get(host.Id)!.NextRetryUtc - clock.GetUtcNow());
+        Assert.Equal(3, lab.Transports.Attempts(host));
+        Assert.True(lab.Reachability.Get(host.Id)!.AutomaticRetriesPaused);
 
         // Editing the server (Evict) clears the state and the next call tries at once with the new settings.
         lab.Pool.Evict(host.Id);
         Assert.Null(lab.Reachability.Get(host.Id));
         await Assert.ThrowsAsync<HostUnreachableException>(() => lab.Run(host, Short));
-        Assert.Equal(11, lab.Transports.Attempts(host));
+        Assert.Equal(4, lab.Transports.Attempts(host));
 
         // The key is fixed: the next retry (or Retry now) connects and the state is gone.
         lab.Transports.Script(host.Host).ConnectFails = null;
         clock.Advance(TimeSpan.FromMinutes(1));
         await lab.Run(host, Short);
         Assert.Null(lab.Reachability.Get(host.Id));
-        Assert.Equal(12, lab.Transports.Attempts(host));
+        Assert.Equal(5, lab.Transports.Attempts(host));
     }
 
     [Fact]

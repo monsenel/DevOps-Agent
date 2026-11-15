@@ -414,6 +414,8 @@ public sealed class SshConnectionPool(
                 outcomeRecorded = true;
                 if (loginFailure is null)
                     logger.LogInformation("{ServerName} is unreachable (could not connect); next retry at {NextRetryUtc:u}", server.Name, state.NextRetryUtc);
+                else if (state.AutomaticRetriesPaused)
+                    logger.LogWarning("{ServerName}: authentication failed ({Reason}); automatic retries are paused until Retry now, Test connection or an edit of the server", server.Name, state.Cause);
                 else
                     logger.LogInformation("{ServerName}: authentication failed ({Reason}); next retry at {NextRetryUtc:u}", server.Name, state.Cause, state.NextRetryUtc);
                 outcome = FlightOutcome.Failed(state);
@@ -490,7 +492,8 @@ public sealed class SshConnectionPool(
             : null;
 
     private static HostReachabilityState StateFrom(HostUnreachableException exception) =>
-        new(exception.ServerId, exception.UnreachableSinceUtc, exception.NextRetryUtc, 1,
+        new(exception.ServerId, exception.UnreachableSinceUtc, exception.NextRetryUtc,
+            exception.AutomaticRetriesPaused ? IHostReachability.AuthFailedAttemptLimit : 1,
             exception.LastFailure?.Message ?? exception.Message, false, exception.LastFailure, exception.Kind, exception.Cause);
 
     // The transport is asked to stop when the token fires, but SSH.NET does not always notice promptly (a handshake with a
