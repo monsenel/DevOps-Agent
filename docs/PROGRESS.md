@@ -12,8 +12,8 @@
 
 ## Current
 
-- **Task:** T7.R1–T7.R3 and T7.R15 done; next T7.R4
-- **Status:** —
+- **Task:** T7.R17 (owner reordered it before T7.R7; only the R17 items, not R7's wider scope)
+- **Status:** in-progress
 - **Last updated:** 2026-11-15 by ZCode
 
 ## WIP notes
@@ -137,7 +137,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T7.R14 | Sudoers-pinnable privileged commands | todo | |
 | T7.R15 | SSH client leases | done | `feat(T7.R15): pooled SSH clients are leased and never closed under a running command` |
 | T7.R16 | Stale carry-forward correctness | todo | |
-| T7.R17 | Cycle deadlines and alert stalls | todo | |
+| T7.R17 | Cycle deadlines and alert stalls | in-progress | |
 | T7.R18 | Restart-loop rule follow-ups | todo | |
 | T7.R19 | SSH failure classification and reachability UI | todo | |
 
@@ -148,6 +148,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 ## Session log
 
 One line per session: date · tool/model · tasks touched · result.
+
+- 2026-11-15 · ZCode / Claude · started T7.R17 · owner order: command-timeout backoff, auth scan skip, deadlines incl. connect time, cycle deadlines, shutdown tokens (SIGTERM < 8 s), compose stop_grace_period; baseline build 0 warnings, 379/379 tests
 
 - 2026-11-15 · ZCode / Claude · T7.R15 done · D-036: commands lease pooled clients, evict/edit/3 timeouts retire an entry that is disposed when its last lease ends, jump tunnels are held by their dependents, shutdown still disposes at once; live on the lab through the real `ServerService`/`SshRunner`/`SshConnectionPool` (throwaway harness in /tmp, isolated DB, srv-app via srv-edge), 60 s `sleep` on srv-app: key-file edit of srv-app at +20 s (a name-only edit at +10 s correctly evicts nothing) -> retired with 1 command running, a ping at +30 s got a new client, the command finished exit 0 in 60.1 s with its output and the old client was disposed 1 ms after it ended (08:44:53.663 -> .664); jump edit (srv-edge) at +15 s -> both retired, command exit 0 in 60.0 s, srv-app client disposed then srv-edge client 22 ms later, a ping at +25 s reconnected through a new jump client; 3 timed-out 1 s probes at +11..13 s -> retired with 2 commands running, command exit 0 in 60.1 s, disposed on its end; pre-change control (same harness, commit f5f7061): client disposed at +20.1 s (edit) / +13.0 s (3 timeouts) and the 60 s command never returned, failing with SshOperationTimeoutException after its 120 s timeout; shutdown with a command in flight: Dispose returned in 31 ms, the command still waited for its timeout (SSH.NET, T7.R17 note); build 0 warnings, 379/379 tests (12 new)
 
