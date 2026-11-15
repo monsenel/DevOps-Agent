@@ -13,7 +13,7 @@
 ## Current
 
 - **Task:** T7.R25 and T7.R26 done (owner order 2026-11-16); T8.1–T8.9 next. T7.R4 and T7.R16 still held by the owner.
-- **Status:** T8.8 done; next T8.9
+- **Status:** T8.1–T8.9 done; v0.2.0 tagged locally (not pushed)
 - **Last updated:** 2026-11-16 by ZCode
 
 ## WIP notes
@@ -156,7 +156,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T8.6 | Updates select all and sources | done | `feat(T8.6): select all / security only and package sources with per-package origin` |
 | T8.7 | Impact preview on proposed actions | done | `feat(T8.7): impact section on every approval card from the latest graph` |
 | T8.8 | edit_config tool | done | `feat(T8.8): edit_config with backup, validation, reload, health check and automatic rollback` |
-| T8.9 | Dependency awareness for updates | todo | |
+| T8.9 | Dependency awareness for updates | done | `feat(T8.9): update cards name the services each package restarts and warn for Docker and nginx` |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
 
@@ -166,6 +166,7 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 
 One line per session: date · tool/model · tasks touched · result.
 
+- 2026-11-16 · ZCode / Claude · T8.9 done · D-044: `ImpactService.PackageImpacts` (Docker engine → all containers + warning, nginx packages → domains + warning, service-named packages → that service, others none) on the apply_updates card; build 0 warnings, 680 tests (1 new); live: stand-in model proposed `apply_updates docker.io nginx libexpat1` on srv-app → warnings for Docker (4 containers) and nginx, libexpat1 "no service in the graph"; rejected
 - 2026-11-16 · ZCode / Claude · T8.8 done · D-043: `edit_config` (EditConfigArgs; `ConfigEditPolicy` allowlist + deny list; `UnifiedDiff` apply/create; `ConfigEditService` prepare = read + content/hash/diff, execute = stage as user → root apply (hash check, backup, atomic write, validate, reload, self-restore) → health (server checks + domains via 127.0.0.1 with Host header) → root rollback → cleanup); Action log shows the diff; chat offers the tool for config-change prompts; AppSudoCommands templates; build 0 warnings, 679 tests (17 new incl. the apply/rollback scripts run for real in /bin/sh); live on srv-edge (see D-043): wrong upstream port → nginx -t ok, 502 on api.test.local → automatic rollback (file md5 back to 18eb78f8…, api 200); valid keepalive change succeeded and was reverted; no sudo alert; lab backups removed
 - 2026-11-16 · ZCode / Claude · T8.7 done · `ImpactService`: per target server, the nodes an action touches (restart_service by unit name, nginx = process + its server blocks/upstreams; restart_container by name; edit_config by FilePath, all nginx nodes for /etc/nginx/**; apply_updates/block_ip/unblock_ip/run_shell = whole host incl. children), dependents = sources of inbound declared/observed edges (network attachments ignored) 2 levels, other servers, domains reached backwards through nginx (6 hops); warnings for stale targets (StaleCarryForward attributes), graphs older than 24 h, targets missing from the graph and no discovery; `ActionImpact` component (own DI scope) in chat proposals, the Action log review and the Updates proposal; system prompt tells the agent to call query_graph and state the impact before a mutating proposal; build 0 warnings, 662 tests (5 new); live (isolated :5199, srv-app added via jump, TOFU recorded its key, discovery 3/3): stand-in model proposed `docker restart -- 'web'` on srv-app → card Impact: target container web on srv-app, domain app.test.local, direct dependent "server block · app.test.local" on srv-edge, other servers srv-edge; rejected (web not restarted)
 - 2026-11-16 · ZCode / Claude · T8.6 done · Updates: "Select all" checkbox in each server table and per group, "Select security only" per server and per group (read-only servers never selectable); package sources above each table (`PackageSourcesParser`: apt one-line `.list` incl. `[signed-by=…]`, deb822 `.sources` incl. inline keys, `Enabled: no`, multiple types/URIs/suites; `dnf -C repolist -v` id/name/baseurl-metalink-mirrors), stored per scan (`UpdateScans.SourcesJson`, migration `AddUpdateScanSources`); Source column = label/origin of the candidate's source from `apt-cache policy` (e.g. "Docker CE · jammy" vs "Ubuntu · jammy"), host when no release line; all new commands read-only without sudo (apt-cache, cat of source files, `dnf -C`); build 0 warnings, 657 tests (5 new, 1 updated for the extra read-only call); live (isolated :5199, staging set to Confirm): srv-edge sources 3 rows from `debian.sources`; lab libexpat1 downgraded to deb12u2 → Source "Debian-Security · bookworm-security", Security; header checkbox selected/cleared the row, Select security only and Select all in staging selected it, Review + Approve applied it (exit 0, restarted none, reboot no) → libexpat1 back to deb12u5; srv-db: repositories unreachable (no egress, as before)

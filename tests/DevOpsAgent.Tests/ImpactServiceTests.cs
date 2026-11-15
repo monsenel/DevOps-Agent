@@ -137,6 +137,33 @@ public sealed class ImpactServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task UpdateCards_NameWhatEachPackageRestarts_AndWarnForDockerAndNginx()
+    {
+        var service = await LabAsync();
+
+        var app = await service.ForAsync("apply_updates", """{"packages":["docker-ce","docker-ce-cli","libssl3"]}""", _app.Id, default);
+        var edge = await service.ForAsync("apply_updates", """{"packages":["nginx-common","openssl"]}""", _edge.Id, default);
+        var db = await service.ForAsync("apply_updates", """{"packages":["postgresql-15"]}""", _db.Id, default);
+
+        var docker = app.Packages!.Single(item => item.Package == "docker-ce");
+        Assert.True(docker.RestartsDockerOrNginx);
+        Assert.Equal(["api", "web", "worker-pg"], docker.Services);
+        Assert.False(app.Packages!.Single(item => item.Package == "docker-ce-cli").RestartsDockerOrNginx);
+        Assert.Equal("no service in the graph", app.Packages!.Single(item => item.Package == "libssl3").Effect);
+        Assert.Contains(app.Warnings, item => item.Contains("docker-ce restarts the Docker daemon on srv-app: 3 containers restart", StringComparison.Ordinal));
+
+        var nginx = edge.Packages!.Single(item => item.Package == "nginx-common");
+        Assert.True(nginx.RestartsDockerOrNginx);
+        Assert.Equal(["api.test.local", "app.test.local"], nginx.Services);
+        Assert.Contains(edge.Warnings, item => item.Contains("nginx-common restarts nginx on srv-edge: api.test.local, app.test.local are briefly unavailable", StringComparison.Ordinal));
+
+        Assert.Equal(["postgres"], db.Packages!.Single().Services);
+        Assert.Equal("restarts postgres", db.Packages!.Single().Effect);
+        Assert.DoesNotContain(db.Warnings, item => item.Contains("restarts", StringComparison.Ordinal));
+        Assert.Null((await service.ForAsync("restart_container", """{"container":"api"}""", _app.Id, default)).Packages);
+    }
+
+    [Fact]
     public async Task TheAgentIsToldToCheckImpactBeforeProposingAChange()
     {
         await using var chat = await ChatServiceHarness.CreateAsync();

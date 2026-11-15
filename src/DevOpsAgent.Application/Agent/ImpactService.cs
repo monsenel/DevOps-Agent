@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Discovery;
 using DevOpsAgent.Domain.Agent;
@@ -119,8 +120,68 @@ public sealed class ImpactService(IServerRepository servers, ISnapshotRepository
 
         var otherServers = dependents.Select(item => item.Server).OfType<string>().Where(name => name != serverName)
             .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
-        return new ImpactPreview(description, dependents, otherServers, [.. domains], warnings, latest.StartedAtUtc, true);
+        IReadOnlyList<PackageImpact>? packages = null;
+        if (toolName == "apply_updates" && args.TryGetProperty("packages", out var names) && names.ValueKind == JsonValueKind.Array)
+        {
+            var onServer = graph.Nodes.Where(node => node.ServerId == serverId).ToArray();
+            packages = PackageImpacts(names.EnumerateArray().Select(item => item.GetString()).OfType<string>().ToArray(), onServer, graph, serverName);
+            foreach (var package in packages.Where(item => item.RestartsDockerOrNginx))
+                warnings.Add(package.Effect == "Docker"
+                    ? $"{package.Package} restarts the Docker daemon on {serverName}: {Count(package.Services.Count, "container")} restart with it unless Docker's live-restore is on."
+                    : $"{package.Package} restarts nginx on {serverName}: {(package.Services.Count == 0 ? "the sites it serves are" : string.Join(", ", package.Services) + " are")} briefly unavailable.");
+        }
+
+        return new ImpactPreview(description, dependents, otherServers, [.. domains], warnings, latest.StartedAtUtc, true, packages);
     }
+
+    /// <summary>
+    /// What each package update touches on the server (T8.9), from the package name and the graph: the Docker engine restarts
+    /// every container, nginx its sites, and a package named like a running service (postgresql-15, redis-server,
+    /// openssh-server …) that service. Other packages (libraries) touch nothing the graph can name.
+    /// </summary>
+    public static IReadOnlyList<PackageImpact> PackageImpacts(IReadOnlyList<string> packages, IReadOnlyList<GraphNode> serverNodes,
+        GraphBuildResult graph, string serverName)
+    {
+        var containers = serverNodes.Where(node => node.Kind == GraphNodeKind.Container).Select(node => node.Name).Order(StringComparer.Ordinal).ToArray();
+        var nginxBlocks = serverNodes.Where(IsNginxConfig).Select(node => node.Id).ToHashSet();
+        var domainNames = graph.Nodes.Where(node => node.Kind == GraphNodeKind.Domain).ToDictionary(node => node.Id, node => node.Name);
+        var nginxDomains = graph.Edges.Where(edge => nginxBlocks.Contains(edge.TargetNodeId) && domainNames.ContainsKey(edge.SourceNodeId))
+            .Select(edge => domainNames[edge.SourceNodeId]).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
+        var services = serverNodes.Where(node => node.Kind == GraphNodeKind.Service && !IsNginxConfig(node)).Select(node => node.Name)
+            .Distinct(StringComparer.Ordinal).ToArray();
+        var result = new List<PackageImpact>();
+        foreach (var package in packages)
+        {
+            var name = package.Split(':')[0].ToLowerInvariant();
+            if (DockerEngine.Contains(name))
+                result.Add(new PackageImpact(package, "Docker", containers, RestartsDockerOrNginx: true));
+            else if (name.StartsWith("docker", StringComparison.Ordinal))
+                result.Add(new PackageImpact(package, "Docker tooling, no daemon restart", [], false));
+            else if (name == "nginx" || name.StartsWith("nginx-", StringComparison.Ordinal) || name.StartsWith("libnginx-mod-", StringComparison.Ordinal))
+                result.Add(new PackageImpact(package, "nginx", nginxDomains, RestartsDockerOrNginx: true));
+            else if (services.FirstOrDefault(service => ServiceMatches(name, service)) is { } service)
+                result.Add(new PackageImpact(package, $"restarts {service}", [service], false));
+            else
+                result.Add(new PackageImpact(package, "no service in the graph", [], false));
+        }
+
+        return result;
+    }
+
+    private static readonly HashSet<string> DockerEngine = new(["docker-ce", "docker.io", "docker-engine", "moby-engine", "containerd.io", "containerd", "runc"],
+        StringComparer.Ordinal);
+
+    // openssh-server → sshd, postgresql-15 → postgres, redis-server → redis-server, mariadb-server → mariadbd/mysqld.
+    private static bool ServiceMatches(string package, string service)
+    {
+        var unit = service.ToLowerInvariant();
+        if (package == unit) return true;
+        var stem = Regex.Replace(package, @"(-server|-common|-core|-\d+(\.\d+)*)$", string.Empty, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+        return stem.Length > 2 && (unit == stem || unit.StartsWith(stem, StringComparison.Ordinal) || stem.StartsWith(unit, StringComparison.Ordinal)
+            || (stem == "openssh" && unit == "sshd") || (stem == "postgresql" && unit.StartsWith("postgres", StringComparison.Ordinal)));
+    }
+
+    private static string Count(int count, string noun) => count == 0 ? $"all {noun}s on it" : $"{count} {noun}{(count == 1 ? string.Empty : "s")}";
 
     // Which nodes of the server the action touches, and how to say it.
     private static (string Description, Func<IReadOnlyList<GraphNode>, IReadOnlyList<GraphNode>> Select) Describe(string tool, JsonElement args, string serverName)
