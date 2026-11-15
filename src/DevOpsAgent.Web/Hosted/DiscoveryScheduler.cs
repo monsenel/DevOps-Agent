@@ -6,10 +6,15 @@ namespace DevOpsAgent.Web.Hosted;
 public sealed class DiscoveryScheduler(
     IServiceScopeFactory scopeFactory,
     TimeProvider timeProvider,
+    IHostApplicationLifetime lifetime,
     ILogger<DiscoveryScheduler> logger) : BackgroundService
 {
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(CancellationToken serviceStopping)
     {
+        // The token of a hosted service is only cancelled when the host reaches that service in its sequential stop, which
+        // can be long after SIGTERM while an earlier service is still stopping (T7.R17). ApplicationStopping fires first.
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(serviceStopping, lifetime.ApplicationStopping);
+        var stoppingToken = linked.Token;
         var lastAttemptAt = timeProvider.GetUtcNow();
         try
         {

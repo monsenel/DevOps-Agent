@@ -18,6 +18,13 @@ public sealed class SecurityMonitoringOptions
 public interface IAuthLogScanSource
 {
     Task<IReadOnlyList<AlertCondition>> ScanAsync(Server server, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The conditions from the last saved scan state, without any remote command (T7.R17): used instead of a scan while the
+    /// server's status probe fails, so the host's recent security alerts stay as they were and no second call hangs.
+    /// </summary>
+    Task<IReadOnlyList<AlertCondition>> GetCachedAsync(Server server, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AlertCondition>>([]);
 }
 
 /// <summary>Gives each scan its own DI scope, so parallel scans never share a DbContext.</summary>
@@ -29,6 +36,13 @@ public sealed class ScopedAuthLogScanSource(IServiceScopeFactory scopes) : IAuth
         var scanner = scope.ServiceProvider.GetRequiredService<AuthLogScanner>();
         return await scanner.ScanAsync(server, cancellationToken);
     }
+
+    public async Task<IReadOnlyList<AlertCondition>> GetCachedAsync(Server server, CancellationToken cancellationToken)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        var scanner = scope.ServiceProvider.GetRequiredService<AuthLogScanner>();
+        return await scanner.GetCachedAsync(server, cancellationToken);
+    }
 }
 
 public sealed class AuthLogScanner(ISshRunner sshRunner, IAppSettingRepository settings,
@@ -36,6 +50,13 @@ public sealed class AuthLogScanner(ISshRunner sshRunner, IAppSettingRepository s
 {
     private static readonly TimeSpan Window = TimeSpan.FromMinutes(5);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    public async Task<IReadOnlyList<AlertCondition>> GetCachedAsync(Server server, CancellationToken cancellationToken)
+    {
+        var now = timeProvider.GetUtcNow();
+        var state = await ReadStateAsync($"security.auth-log.{server.Id:N}", now, cancellationToken);
+        return BuildConditions(server, ActiveWindow(state.RecentEvents, now), state.NewLoginIps, [], "Scan unavailable.");
+    }
 
     public async Task<IReadOnlyList<AlertCondition>> ScanAsync(Server server, CancellationToken cancellationToken)
     {
@@ -48,7 +69,7 @@ public sealed class AuthLogScanner(ISshRunner sshRunner, IAppSettingRepository s
             response = await sshRunner.RunAsync(server.Id, BuildCommand(state.CursorUtc),
                 new SshRunOptions(TimeSpan.FromSeconds(20), UseSudo: true), cancellationToken);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (OperationCanceledException exception) when (exception is SshShutdownException || cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception) { return BuildConditions(server, ActiveWindow(state.RecentEvents, now), state.NewLoginIps, [], "Scan unavailable."); }
         if (response.ExitCode is not 0)
             return BuildConditions(server, ActiveWindow(state.RecentEvents, now), state.NewLoginIps, [], "Scan unavailable.");

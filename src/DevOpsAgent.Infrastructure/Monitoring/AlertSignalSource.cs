@@ -3,6 +3,7 @@ using DevOpsAgent.Application.Discovery;
 using DevOpsAgent.Application.Monitoring;
 using DevOpsAgent.Domain.Discovery;
 using DevOpsAgent.Domain.Monitoring;
+using DevOpsAgent.Domain.Servers;
 
 namespace DevOpsAgent.Infrastructure.Monitoring;
 
@@ -15,9 +16,12 @@ public sealed class AlertSignalSource(
     IAuthLogScanSource authLogScanner,
     DriftService drift,
     ContainerRestartMonitor containerRestarts,
-    TimeProvider timeProvider) : IAlertSignalSource
+    TimeProvider timeProvider,
+    MonitoringCycleOptions? cycleOptions = null) : IAlertSignalSource
 {
     private const int MaxParallelServers = 8;
+
+    private readonly MonitoringCycleOptions _cycle = cycleOptions ?? new MonitoringCycleOptions();
 
     public async Task<IReadOnlyList<AlertCondition>> GetActiveConditionsAsync(CancellationToken cancellationToken)
     {
@@ -26,23 +30,40 @@ public sealed class AlertSignalSource(
         var inventory = await servers.ListAsync(cancellationToken);
 
         // SSH phase, bounded in parallel (T7.R1): a host in backoff fails immediately, so one dead server never delays the
-        // others. The status probe runs first, so an unreachable host is already in backoff when its auth-log scan runs:
-        // the scan then fails at once and keeps recent security alerts from its saved state. Each scan has its own scope;
-        // the database reads below stay sequential because the scoped repositories share one DbContext.
+        // others. The status probe runs first. When it fails the auth-log scan is not run (T7.R17): a host that cannot answer
+        // a 20 s status probe would only hold its slot for another 20 s, so its saved scan state is reported instead and its
+        // recent security alerts stay open. The remote phase has a deadline shorter than the 30 s interval: a host still
+        // being probed when it passes counts as a failed probe for this cycle, and the others are unaffected. Each scan has
+        // its own scope; the database reads below stay sequential because the scoped repositories share one DbContext.
+        using var cycle = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cycle.CancelAfter(_cycle.AlertCycleDeadline);
+        var cycleToken = cycle.Token;
         using var throttle = new SemaphoreSlim(MaxParallelServers);
         var remote = await Task.WhenAll(inventory.Select(async server =>
         {
-            await throttle.WaitAsync(cancellationToken);
             try
             {
-                var status = await TryGetRemoteStatusAsync(server.Id, cancellationToken);
-                var auth = await authLogScanner.ScanAsync(server, cancellationToken);
-                return (Server: server, Status: status, Auth: auth);
+                await throttle.WaitAsync(cycleToken);
+                try
+                {
+                    var status = await TryGetRemoteStatusAsync(server.Id, cycleToken, cancellationToken);
+                    var auth = status.Status is null
+                        ? await authLogScanner.GetCachedAsync(server, cancellationToken)
+                        : await ScanOrCachedAsync(server, cycleToken, cancellationToken);
+                    return (Server: server, Status: status, Auth: auth);
+                }
+                finally { throttle.Release(); }
             }
-            finally { throttle.Release(); }
+            catch (OperationCanceledException) when (cycleToken.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                // Out of time before this host's turn: a failed probe for this cycle, nothing else.
+                var failed = (Status: (RemoteServiceStatus?)null, HostKeyMismatch: (SshHostKeyMismatchException?)null,
+                    Unreachable: (HostUnreachableException?)null, ProbeFailure: (string?)DeadlineText());
+                return (Server: server, Status: failed, Auth: await authLogScanner.GetCachedAsync(server, cancellationToken));
+            }
         }));
 
-        foreach (var (server, (remoteStatus, hostKeyMismatch, unreachable), auth) in remote)
+        foreach (var (server, (remoteStatus, hostKeyMismatch, unreachable, probeFailure), auth) in remote)
         {
             result.AddRange(auth);
             result.AddRange(await containerRestarts.GetConditionsAsync(server.Id, server.Name, cancellationToken));
@@ -67,7 +88,8 @@ public sealed class AlertSignalSource(
             else if (remoteStatus is null)
             {
                 result.Add(Condition("server-unreachable", server.Id.ToString("N"), AlertSeverity.High, server.Id, server.Host,
-                    $"{server.Name} is unreachable", unreachable?.Message ?? "The scheduled read-only SSH status check could not reach the server."));
+                    $"{server.Name} is unreachable", unreachable?.Message
+                        ?? $"The scheduled read-only SSH status probe failed: {probeFailure ?? "no usable answer"}."));
             }
             else
             {
@@ -122,22 +144,42 @@ public sealed class AlertSignalSource(
         return result;
     }
 
-    private async Task<(RemoteServiceStatus? Status, SshHostKeyMismatchException? HostKeyMismatch, HostUnreachableException? Unreachable)> TryGetRemoteStatusAsync(
-        Guid serverId, CancellationToken cancellationToken)
+    private string DeadlineText() =>
+        $"it did not finish within the {_cycle.AlertCycleDeadline.TotalSeconds:0.#} s alert cycle deadline";
+
+    private async Task<IReadOnlyList<AlertCondition>> ScanOrCachedAsync(Server server, CancellationToken cycleToken, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await authLogScanner.ScanAsync(server, cycleToken);
+        }
+        catch (OperationCanceledException exception) when (exception is not SshShutdownException && !cancellationToken.IsCancellationRequested)
+        {
+            // The cycle deadline passed during the scan: keep what the last scan saw.
+            return await authLogScanner.GetCachedAsync(server, cancellationToken);
+        }
+    }
+
+    private async Task<(RemoteServiceStatus? Status, SshHostKeyMismatchException? HostKeyMismatch, HostUnreachableException? Unreachable, string? ProbeFailure)> TryGetRemoteStatusAsync(
+        Guid serverId, CancellationToken cycleToken, CancellationToken cancellationToken)
     {
         const string command = "printf '__DVA_DOCKER__\\n'; if command -v docker >/dev/null 2>&1; then docker ps -a --format '{{.Names}}\\t{{.State}}'; fi; " +
             "printf '__DVA_SYSTEMD_FAILED__\\n'; systemctl --failed --type=service --no-legend --plain 2>/dev/null || true";
         try
         {
-            var response = await sshRunner.RunAsync(serverId, command, new SshRunOptions(TimeSpan.FromSeconds(20)), cancellationToken);
-            return (response.ExitCode == 0 ? RemoteServiceStatusParser.Parse(response.StandardOutput) : null, null, null);
+            var response = await sshRunner.RunAsync(serverId, command, new SshRunOptions(TimeSpan.FromSeconds(20)), cycleToken);
+            return response.ExitCode == 0
+                ? (RemoteServiceStatusParser.Parse(response.StandardOutput), null, null, null)
+                : (null, null, null, $"the status command exited with code {response.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown"}");
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (OperationCanceledException exception) when (exception is SshShutdownException || cancellationToken.IsCancellationRequested) { throw; }
+        // The cycle deadline passed while the probe was running.
+        catch (OperationCanceledException) { return (null, null, null, DeadlineText()); }
         // While a host is in backoff the original failure (for example a changed host key) travels with the exception,
         // so a host-key mismatch keeps its own alert instead of turning into "unreachable".
-        catch (HostUnreachableException exception) { return (null, SshFailures.HostKeyMismatch(exception), exception); }
-        catch (SshHostKeyMismatchException exception) { return (null, exception, null); }
-        catch (Exception) { return (null, null, null); }
+        catch (HostUnreachableException exception) { return (null, SshFailures.HostKeyMismatch(exception), exception, null); }
+        catch (SshHostKeyMismatchException exception) { return (null, exception, null, null); }
+        catch (Exception exception) { return (null, null, null, exception.Message); }
     }
 
     private static void AddThreshold(IReadOnlyList<MetricSample> samples, string metric, string key, double threshold,

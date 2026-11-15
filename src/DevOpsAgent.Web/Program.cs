@@ -50,6 +50,7 @@ builder.Services.AddScoped<GraphBuilder>();
 builder.Services.AddScoped<ProviderStatusState>();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddSingleton<AlertStatusState>();
+builder.Services.AddSingleton(builder.Configuration.GetSection(MonitoringCycleOptions.SectionName).Get<MonitoringCycleOptions>() ?? new MonitoringCycleOptions());
 builder.Services.AddHostedService<DiscoveryScheduler>();
 builder.Services.AddHostedService<MetricPollerService>();
 builder.Services.AddHostedService<MetricRollupHostedService>();

@@ -21,6 +21,9 @@ services:
     volumes:
       - ./data:/data
       - ./keys:/keys:ro
+    # Shutdown ends in-flight SSH work at once (T7.R17), but leave Docker's SIGKILL well beyond the host's own
+    # shutdown timeout (30 s) so a slow SQLite close or Kestrel drain is never cut off.
+    stop_grace_period: 40s
     restart: unless-stopped
 
   ollama:

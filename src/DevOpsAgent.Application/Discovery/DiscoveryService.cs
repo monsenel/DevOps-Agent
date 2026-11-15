@@ -155,7 +155,7 @@ public sealed class DiscoveryService(
             await snapshotRepository.CompleteAsync(snapshot, runs.ToArray(), timeProvider.GetUtcNow(),
                 succeededServers, failedServers, cancelled: false, cancellationToken);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException exception) when (exception is SshShutdownException || cancellationToken.IsCancellationRequested)
         {
             await snapshotRepository.CompleteAsync(snapshot, runs.ToArray(), timeProvider.GetUtcNow(),
                 succeededServers, failedServers, cancelled: true, CancellationToken.None);
@@ -227,7 +227,7 @@ public sealed class DiscoveryService(
                     result.Data is { } dataResult ? JsonSerializer.Serialize(dataResult) : null);
             }
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException exception) when (exception is SshShutdownException || cancellationToken.IsCancellationRequested)
         {
             throw;
         }

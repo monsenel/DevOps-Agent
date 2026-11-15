@@ -42,7 +42,7 @@ public sealed class ServerCapabilityService(
             return new ServerCapabilityResult(serverId, true, osInfo, uptime.StandardOutput.Trim(), sudoCapable,
                 ParseAvailableCommands(availableCommands.StandardOutput), null, testedAt);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException exception) when (exception is SshShutdownException || cancellationToken.IsCancellationRequested)
         {
             throw;
         }

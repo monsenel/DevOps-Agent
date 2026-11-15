@@ -2,10 +2,15 @@ using DevOpsAgent.Application.Monitoring;
 
 namespace DevOpsAgent.Web.Hosted;
 
-public sealed class HealthCheckHostedService(IServiceScopeFactory scopeFactory, ILogger<HealthCheckHostedService> logger) : BackgroundService
+public sealed class HealthCheckHostedService(IServiceScopeFactory scopeFactory, IHostApplicationLifetime lifetime,
+    ILogger<HealthCheckHostedService> logger) : BackgroundService
 {
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(CancellationToken serviceStopping)
     {
+        // The token of a hosted service is only cancelled when the host reaches that service in its sequential stop, which
+        // can be long after SIGTERM while an earlier service is still stopping (T7.R17). ApplicationStopping fires first.
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(serviceStopping, lifetime.ApplicationStopping);
+        var stoppingToken = linked.Token;
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(60));
         while (!stoppingToken.IsCancellationRequested)
         {

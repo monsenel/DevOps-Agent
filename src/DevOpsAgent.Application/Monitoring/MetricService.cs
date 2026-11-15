@@ -8,8 +8,12 @@ public sealed class MetricService(
     IMetricRepository metrics,
     ISshRunner sshRunner,
     ContainerRestartMonitor containerRestarts,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    MonitoringCycleOptions? cycleOptions = null)
 {
+    private readonly MonitoringCycleOptions _cycle = cycleOptions ?? new MonitoringCycleOptions();
+
+
     public async Task PollAsync(CancellationToken cancellationToken)
     {
         var inventory = await servers.ListAsync(cancellationToken);
@@ -32,22 +36,36 @@ public sealed class MetricService(
             }
         }
 
+        // T7.R17: the remote part of the cycle has a deadline shorter than the 60 s interval. A host that is still being
+        // polled when it passes is marked failed for this cycle; the results of the other hosts are stored as usual.
+        using var cycle = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cycle.CancelAfter(_cycle.MetricCycleDeadline);
+        var cycleToken = cycle.Token;
         using var semaphore = new SemaphoreSlim(8);
         var collected = await Task.WhenAll(inventory.Where(server => previousByServer.ContainsKey(server.Id)).Select(async server =>
         {
-            await semaphore.WaitAsync(cancellationToken);
             try
             {
-                var result = await sshRunner.RunAsync(server.Id, MetricsParser.CollectionCommand,
-                    new SshRunOptions(TimeSpan.FromSeconds(30)), cancellationToken);
-                var containers = await TryReadContainersAsync(server, cancellationToken);
-                return (Server: server, Result: (RemoteCommandResult?)result, Error: (Exception?)null, Containers: containers);
+                await semaphore.WaitAsync(cycleToken);
+                try
+                {
+                    var result = await sshRunner.RunAsync(server.Id, MetricsParser.CollectionCommand,
+                        new SshRunOptions(TimeSpan.FromSeconds(30)), cycleToken);
+                    var containers = await TryReadContainersAsync(server, cycleToken, cancellationToken);
+                    return (Server: server, Result: (RemoteCommandResult?)result, Error: (Exception?)null, Containers: containers);
+                }
+                finally { semaphore.Release(); }
+            }
+            catch (OperationCanceledException) when (cycleToken.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                return (Server: server, Result: (RemoteCommandResult?)null,
+                    Error: (Exception?)new TimeoutException($"{server.Name} did not answer within the {_cycle.MetricCycleDeadline.TotalSeconds:0.#} s metric cycle deadline."),
+                    Containers: (ContainerQuery?)null);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
                 return (Server: server, Result: (RemoteCommandResult?)null, Error: (Exception?)exception, Containers: (ContainerQuery?)null);
             }
-            finally { semaphore.Release(); }
         }));
 
         foreach (var (server, result, _, containers) in collected)
@@ -89,15 +107,25 @@ public sealed class MetricService(
 
     // T7.R3: container states and restart counts, read-only, in the same cycle. Docker usually works without sudo for the
     // SSH user; only when it is refused and the server allows sudo is the identical query repeated with sudo.
-    private async Task<ContainerQuery?> TryReadContainersAsync(Domain.Servers.Server server, CancellationToken cancellationToken)
+    // T7.R17: a side query with its own short budget (both attempts together), so a hung Docker daemon can neither add 20 s
+    // to the host's slot nor lose the metric result already collected: its failure, timeout or the cycle deadline only
+    // means "no container sample this cycle". Only the application stopping aborts the cycle.
+    private async Task<ContainerQuery?> TryReadContainersAsync(
+        Domain.Servers.Server server, CancellationToken cycleToken, CancellationToken stoppingToken)
     {
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(cycleToken);
+        budget.CancelAfter(_cycle.ContainerQueryTimeout);
         try
         {
-            var options = new SshRunOptions(TimeSpan.FromSeconds(20));
-            var response = await sshRunner.RunAsync(server.Id, ContainerStatusQuery.Command, options, cancellationToken);
+            var options = new SshRunOptions(_cycle.ContainerQueryTimeout);
+            var response = await sshRunner.RunAsync(server.Id, ContainerStatusQuery.Command, options, budget.Token);
             if (response.ExitCode != 0 && server.SudoCapable == true)
-                response = await sshRunner.RunAsync(server.Id, ContainerStatusQuery.Command, options with { UseSudo = true }, cancellationToken);
+                response = await sshRunner.RunAsync(server.Id, ContainerStatusQuery.Command, options with { UseSudo = true }, budget.Token);
             return response.ExitCode == 0 ? new ContainerQuery(ContainerStatusQuery.Parse(response.StandardOutput)) : null;
+        }
+        catch (OperationCanceledException exception) when (exception is not SshShutdownException && !stoppingToken.IsCancellationRequested)
+        {
+            return null;
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
