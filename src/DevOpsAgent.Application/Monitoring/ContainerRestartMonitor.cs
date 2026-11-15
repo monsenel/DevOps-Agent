@@ -18,14 +18,15 @@ public static class ContainerStatusQuery
     /// Lists every container with its state and restart count; prints a marker when Docker is not installed.
     /// T7.R18: a container removed between <c>ps</c> and <c>inspect</c> makes <c>inspect</c> exit 1 although it printed the
     /// others. That is not a failure (exit 0, the vanished container is simply missing, and no sudo retry follows). The exit
-    /// code of <c>inspect</c> only survives when it printed no container and did not complain about a missing object, which
-    /// is a real daemon failure.
+    /// code of <c>inspect</c> survives as soon as it printed anything that is neither a container line nor a complaint about
+    /// a missing object (a daemon that dies half-way prints the containers it got to and then an error): a sample that is
+    /// missing containers for that reason must not look complete, or the alerts of those containers would resolve.
     /// </summary>
     public const string Command =
         "if command -v docker >/dev/null 2>&1; then ids=$(docker ps -aq --no-trunc) || exit $?; "
         + "if [ -n \"$ids\" ]; then out=$(docker inspect -f '{{.Id}}|{{.Name}}|{{.State.Status}}|{{.RestartCount}}' $ids 2>&1); rc=$?; "
         + "printf '%s\\n' \"$out\"; "
-        + "if [ $rc -ne 0 ] && ! printf '%s\\n' \"$out\" | grep -Eq '[|]|No such (object|container)'; then exit $rc; fi; fi; "
+        + "if [ $rc -ne 0 ] && printf '%s\\n' \"$out\" | grep -Eqv '^$|^[^|]+[|][^|]*[|][^|]*[|][0-9]+$|No such (object|container)'; then exit $rc; fi; fi; "
         + "else printf '%s\\n' '" + NoDockerMarker + "'; fi";
 
     /// <returns>Null when Docker is not installed on the server; otherwise its containers.</returns>

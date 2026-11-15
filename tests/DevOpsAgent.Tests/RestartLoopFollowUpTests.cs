@@ -322,6 +322,14 @@ public sealed class RestartLoopFollowUpTests
         Assert.Equal(0, vanished.ExitCode);
         Assert.Empty(ContainerStatusQuery.Parse(vanished.Output)!);
 
+        // A daemon that dies half-way prints the containers it got to and then an error: the sample is missing containers for a
+        // reason that is not "removed", so it is a failure (the open alerts of the missing ones must not resolve from it).
+        var halfway = RunShell(ContainerStatusQuery.Command, new FakeDocker
+        {
+            PsOut = "id1\nid2", InspectOut = "id1|/web|running|0", InspectErr = "Cannot connect to the Docker daemon at unix:///var/run/docker.sock", InspectRc = 1
+        });
+        Assert.Equal(1, halfway.ExitCode);
+
         // A daemon that dies after `ps` is a real failure.
         var dead = RunShell(ContainerStatusQuery.Command, new FakeDocker { PsOut = "id1", InspectErr = "Cannot connect to the Docker daemon at unix:///var/run/docker.sock", InspectRc = 1 });
         Assert.Equal(1, dead.ExitCode);
