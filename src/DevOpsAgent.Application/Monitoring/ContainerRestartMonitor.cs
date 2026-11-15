@@ -86,17 +86,17 @@ public sealed class ContainerRestartMonitor(IAppSettingRepository settings, Time
             {
                 var status = cycle.Containers.FirstOrDefault(item => item.Name == current.Name);
                 if (status is null) { previous = null; continue; }
-                var increase = previous is not null && previous.Id == status.Id ? Math.Max(0, status.RestartCount - previous.RestartCount) : 0;
-                var restarting = string.Equals(status.State, "restarting", StringComparison.OrdinalIgnoreCase);
+                var sameContainer = previous is not null && previous.Id == status.Id;
+                var increase = sameContainer ? Math.Max(0, status.RestartCount - previous!.RestartCount) : 0;
+                var restarting = IsRestarting(status);
                 if (increase > 0 || restarting) activity.Add((cycle.AtUtc, increase, restarting));
                 previous = status;
             }
 
-            if (activity.Count == 0) continue;
-            var triggered = activity.Any(item => item.Restarting
-                || activity.Where(other => other.At > item.At - Window && other.At <= item.At).Sum(other => other.Restarts) >= RestartThreshold);
-            var lastActivity = activity.Max(item => item.At);
-            if (!triggered || now - lastActivity >= Window) continue;
+            // Only activity inside the window can raise or keep the alert: an old loop must not make one new restart look like one.
+            var triggered = activity.Any(item => item.At > now - Window
+                && (item.Restarting || activity.Where(other => other.At > item.At - Window && other.At <= item.At).Sum(other => other.Restarts) >= RestartThreshold));
+            if (!triggered) continue;
 
             result.Add(new RestartLoop(current.Name, current.State, current.RestartCount,
                 activity.Where(item => item.At > now - Window).Sum(item => item.Restarts)));
@@ -104,6 +104,8 @@ public sealed class ContainerRestartMonitor(IAppSettingRepository settings, Time
 
         return result;
     }
+
+    private static bool IsRestarting(ContainerStatus status) => string.Equals(status.State, "restarting", StringComparison.OrdinalIgnoreCase);
 
     private async Task<IReadOnlyList<ContainerCycle>> ReadAsync(Guid serverId, CancellationToken cancellationToken)
     {

@@ -74,6 +74,23 @@ public sealed class ContainerRestartMonitorTests
     }
 
     [Fact]
+    public void OneRestartAfterAResolvedLoopDoesNotReopenTheAlert()
+    {
+        // Restarts in minutes 1-3 open the alert, which resolves at minute 13; one more restart at minute 20 is a single
+        // restart, however recent the earlier loop still is in the stored history.
+        var history = Cycles(("web", "id1", "running", new[] { 0, 1, 2, 3 }));
+        for (var minute = 4; minute <= 19; minute++) history.Add(Cycle(Start.AddMinutes(minute), ("web", "id1", "running", 3)));
+        history.Add(Cycle(Start.AddMinutes(20), ("web", "id1", "running", 4)));
+
+        IReadOnlyList<RestartLoop> At(int minute) =>
+            ContainerRestartMonitor.Evaluate(history.Where(cycle => cycle.AtUtc <= Start.AddMinutes(minute)).ToList(), Start.AddMinutes(minute));
+
+        Assert.Single(At(3));
+        Assert.Empty(At(13));
+        Assert.Empty(At(20));
+    }
+
+    [Fact]
     public void HealthyLongRunningContainersWithOldRestartCountsDoNotAlert()
     {
         // A container that restarted many times long ago keeps a high but steady counter.
