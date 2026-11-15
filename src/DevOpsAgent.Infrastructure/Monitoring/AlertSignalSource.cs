@@ -12,19 +12,38 @@ public sealed class AlertSignalSource(
     IHealthCheckRepository healthChecks,
     ISnapshotRepository snapshots,
     ISshRunner sshRunner,
-    AuthLogScanner authLogScanner,
+    IAuthLogScanSource authLogScanner,
     DriftService drift,
     TimeProvider timeProvider) : IAlertSignalSource
 {
+    private const int MaxParallelServers = 8;
+
     public async Task<IReadOnlyList<AlertCondition>> GetActiveConditionsAsync(CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
         var result = new List<AlertCondition>();
         var inventory = await servers.ListAsync(cancellationToken);
-        foreach (var server in inventory)
+
+        // SSH phase, bounded in parallel (T7.R1): a host in backoff fails immediately, so one dead server never delays the
+        // others. The status probe runs first, so an unreachable host is already in backoff when its auth-log scan runs:
+        // the scan then fails at once and keeps recent security alerts from its saved state. Each scan has its own scope;
+        // the database reads below stay sequential because the scoped repositories share one DbContext.
+        using var throttle = new SemaphoreSlim(MaxParallelServers);
+        var remote = await Task.WhenAll(inventory.Select(async server =>
         {
-            result.AddRange(await authLogScanner.ScanAsync(server, cancellationToken));
-            var (remoteStatus, hostKeyMismatch) = await TryGetRemoteStatusAsync(server.Id, cancellationToken);
+            await throttle.WaitAsync(cancellationToken);
+            try
+            {
+                var status = await TryGetRemoteStatusAsync(server.Id, cancellationToken);
+                var auth = await authLogScanner.ScanAsync(server, cancellationToken);
+                return (Server: server, Status: status, Auth: auth);
+            }
+            finally { throttle.Release(); }
+        }));
+
+        foreach (var (server, (remoteStatus, hostKeyMismatch, unreachable), auth) in remote)
+        {
+            result.AddRange(auth);
             // The exception names the host whose key mismatched. Behind a jump chain that can be the jump host, in which
             // case this server is merely unreachable (the jump host raises its own mismatch alert).
             var mismatchIsOwn = hostKeyMismatch is not null && hostKeyMismatch.Port == server.Port
@@ -46,7 +65,7 @@ public sealed class AlertSignalSource(
             else if (remoteStatus is null)
             {
                 result.Add(Condition("server-unreachable", server.Id.ToString("N"), AlertSeverity.High, server.Id, server.Host,
-                    $"{server.Name} is unreachable", "The scheduled read-only SSH status check could not reach the server."));
+                    $"{server.Name} is unreachable", unreachable?.Message ?? "The scheduled read-only SSH status check could not reach the server."));
             }
             else
             {
@@ -100,7 +119,7 @@ public sealed class AlertSignalSource(
         return result;
     }
 
-    private async Task<(RemoteServiceStatus? Status, SshHostKeyMismatchException? HostKeyMismatch)> TryGetRemoteStatusAsync(
+    private async Task<(RemoteServiceStatus? Status, SshHostKeyMismatchException? HostKeyMismatch, HostUnreachableException? Unreachable)> TryGetRemoteStatusAsync(
         Guid serverId, CancellationToken cancellationToken)
     {
         const string command = "printf '__DVA_DOCKER__\\n'; if command -v docker >/dev/null 2>&1; then docker ps -a --format '{{.Names}}\\t{{.State}}'; fi; " +
@@ -108,11 +127,14 @@ public sealed class AlertSignalSource(
         try
         {
             var response = await sshRunner.RunAsync(serverId, command, new SshRunOptions(TimeSpan.FromSeconds(20)), cancellationToken);
-            return (response.ExitCode == 0 ? RemoteServiceStatusParser.Parse(response.StandardOutput) : null, null);
+            return (response.ExitCode == 0 ? RemoteServiceStatusParser.Parse(response.StandardOutput) : null, null, null);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (SshHostKeyMismatchException exception) { return (null, exception); }
-        catch (Exception) { return (null, null); }
+        // While a host is in backoff the original failure (for example a changed host key) travels with the exception,
+        // so a host-key mismatch keeps its own alert instead of turning into "unreachable".
+        catch (HostUnreachableException exception) { return (null, SshFailures.HostKeyMismatch(exception), exception); }
+        catch (SshHostKeyMismatchException exception) { return (null, exception, null); }
+        catch (Exception) { return (null, null, null); }
     }
 
     private static void AddThreshold(IReadOnlyList<MetricSample> samples, string metric, string key, double threshold,

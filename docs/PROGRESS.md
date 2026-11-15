@@ -18,7 +18,9 @@
 
 ## WIP notes
 
-None. The 2026-11-15 review fixed small issues in `fix(review): …` commits (build 0 warnings, 342/342 tests), applied the owner's decisions (D-026–D-031) and filed the larger findings as T7.R tasks in PLAN.md › M7.
+- T7.R1 checkpoint: `HostReachabilityTracker` (Application/Servers, singleton `IHostReachability`) holds per-host backoff (1 min doubling to 15 min, single retry in flight). `SshConnectionPool` now connects through `ISshTransportFactory` (`SshNetTransportFactory` wraps SSH.NET) and throws `HostUnreachableException` immediately for a host in backoff or behind an unreachable jump; `SshRunOptions.BypassBackoff` bypasses it. Alert engine SSH phase runs 8 in parallel (`IAuthLogScanSource` gives each scan its own scope); discovery skips a server's remaining collectors once it is unreachable; health checks skip servers in backoff; metrics no longer report unreachable hosts as cycle failures. Next: capability test bypass + "Retry now" + unreachable status on Servers, cycle timing logs, fake-transport tests, live checks.
+
+The 2026-11-15 review fixed small issues in `fix(review): …` commits (build 0 warnings, 342/342 tests), applied the owner's decisions (D-026–D-031) and filed the larger findings as T7.R tasks in PLAN.md › M7.
 
 ### Open review tasks (PLAN.md › M7)
 

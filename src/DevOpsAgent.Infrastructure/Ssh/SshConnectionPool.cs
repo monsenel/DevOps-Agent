@@ -3,29 +3,30 @@ using System.Net.Sockets;
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Domain.Servers;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
-using Renci.SshNet;
 using Renci.SshNet.Common;
 
 namespace DevOpsAgent.Infrastructure.Ssh;
 
+/// <summary>
+/// Pooled SSH connections, one per server, routed through jump hosts. A connection-level failure puts the host in backoff
+/// (<see cref="IHostReachability"/>): until its next retry every request for it, and for every server behind it, fails
+/// immediately with <see cref="HostUnreachableException"/> instead of waiting on a connect timeout (T7.R1).
+/// </summary>
 public sealed class SshConnectionPool(
     IServiceScopeFactory scopeFactory,
-    ISecretProtector secretProtector,
-    IServerKeyStore keyStore,
-    IOptions<SshConnectionOptions> options) : ISshConnectionPool
+    ISshTransportFactory transportFactory,
+    IHostReachability reachability) : ISshConnectionPool
 {
     private readonly ConcurrentDictionary<Guid, ConnectionEntry> _connections = new();
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _connectionLocks = new();
     // Bumped by Evict so a connect that started with old server settings never caches its result.
     private readonly ConcurrentDictionary<Guid, int> _generations = new();
-    private readonly SshConnectionOptions _options = options.Value;
     private bool _disposed;
 
-    public async Task<ISshCommandSession> GetSessionAsync(Guid serverId, CancellationToken cancellationToken)
+    public async Task<ISshCommandSession> GetSessionAsync(Guid serverId, bool bypassBackoff, CancellationToken cancellationToken)
     {
-        var connection = await GetOrConnectAsync(serverId, [], cancellationToken);
-        return new SshCommandSession(connection.Client, connection.Timeouts, () =>
+        var connection = await GetOrConnectAsync(serverId, [], bypassBackoff, cancellationToken);
+        return new SshCommandSession(connection.Transport, connection.Timeouts, () =>
         {
             Invalidate(serverId, connection);
             return Task.CompletedTask;
@@ -37,6 +38,8 @@ public sealed class SshConnectionPool(
         // Sessions that depend on this entry as a jump host notice the replaced entry on their next request and reconnect.
         if (_disposed) return;
         _generations.AddOrUpdate(serverId, 1, static (_, current) => current + 1);
+        // New settings deserve an immediate attempt rather than the old settings' backoff.
+        reachability.Reset(serverId);
         RemoveConnection(serverId);
     }
 
@@ -67,6 +70,7 @@ public sealed class SshConnectionPool(
     private async Task<ConnectionEntry> GetOrConnectAsync(
         Guid serverId,
         HashSet<Guid> visited,
+        bool bypassBackoff,
         CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -82,35 +86,24 @@ public sealed class SshConnectionPool(
             {
                 var generation = Generation(serverId);
                 var server = await LoadServerAsync(serverId, cancellationToken);
-                var jumpConnection = server.JumpServerId is Guid jumpId
-                    ? await GetOrConnectAsync(jumpId, visited, cancellationToken)
-                    : null;
-
-                var gate = _connectionLocks.GetOrAdd(serverId, static _ => new SemaphoreSlim(1, 1));
-                await gate.WaitAsync(cancellationToken);
-                try
+                ConnectionEntry? jumpConnection = null;
+                if (server.JumpServerId is Guid jumpId)
                 {
-                    if (_connections.TryGetValue(serverId, out var current)
-                        && current.Client.IsConnected
-                        && (jumpConnection is null || jumpConnection.Client.IsConnected)
-                        && ReferenceEquals(current.JumpConnection, jumpConnection))
+                    try
                     {
-                        return current;
+                        jumpConnection = await GetOrConnectAsync(jumpId, visited, bypassBackoff, cancellationToken);
                     }
-
-                    RemoveConnection(serverId);
-                    // Jump liveness relies on the jump's own command timeouts: a failing target behind a healthy jump must not recycle the jump.
-                    var created = await CreateConnectionAsync(server, jumpConnection, cancellationToken);
-                    _connections[serverId] = created;
-                    if (Generation(serverId) == generation) return created;
-
-                    // Evicted while connecting: do not keep a connection built from stale settings.
-                    Invalidate(serverId, created);
+                    catch (HostUnreachableException jumpUnreachable)
+                    {
+                        // No connection is attempted to a server whose jump host is unreachable.
+                        var state = reachability.Get(jumpUnreachable.ServerId) ?? StateFrom(jumpUnreachable);
+                        throw new HostUnreachableException(server.Id, server.Name, state,
+                            jumpUnreachable.ViaJumpServerName ?? jumpUnreachable.ServerName);
+                    }
                 }
-                finally
-                {
-                    gate.Release();
-                }
+
+                var connection = await ConnectHopAsync(server, jumpConnection, generation, bypassBackoff, cancellationToken);
+                if (connection is not null) return connection;
             }
 
             throw new InvalidOperationException("The server settings changed while connecting. Try again.");
@@ -121,95 +114,89 @@ public sealed class SshConnectionPool(
         }
     }
 
+    private async Task<ConnectionEntry?> ConnectHopAsync(
+        Server server,
+        ConnectionEntry? jumpConnection,
+        int generation,
+        bool bypassBackoff,
+        CancellationToken cancellationToken)
+    {
+        if (TryReuse(server.Id, jumpConnection) is { } pooled) return pooled;
+
+        // A host in backoff, or one another caller is already retrying, fails immediately.
+        var claimedRetry = reachability.Get(server.Id) is not null;
+        if (!reachability.TryBeginAttempt(server.Id, bypassBackoff, out var blockedBy))
+        {
+            throw new HostUnreachableException(server.Id, server.Name, blockedBy!);
+        }
+
+        var outcomeRecorded = false;
+        try
+        {
+            var gate = _connectionLocks.GetOrAdd(server.Id, static _ => new SemaphoreSlim(1, 1));
+            await gate.WaitAsync(cancellationToken);
+            try
+            {
+                if (TryReuse(server.Id, jumpConnection) is { } current) return current;
+
+                // Waited behind an attempt that just failed: do not try again until the backoff expires.
+                if (!claimedRetry && !bypassBackoff && reachability.IsBlocked(server.Id, out var failedMeanwhile))
+                {
+                    throw new HostUnreachableException(server.Id, server.Name, failedMeanwhile!);
+                }
+
+                RemoveConnection(server.Id);
+                ISshTransport transport;
+                try
+                {
+                    transport = await transportFactory.ConnectAsync(server, jumpConnection?.Transport, cancellationToken);
+                }
+                catch (Exception exception) when (!(exception is OperationCanceledException && cancellationToken.IsCancellationRequested))
+                {
+                    reachability.RecordFailure(server.Id, exception);
+                    outcomeRecorded = true;
+                    throw new HostUnreachableException(server.Id, server.Name, reachability.Get(server.Id)!);
+                }
+
+                reachability.RecordSuccess(server.Id);
+                outcomeRecorded = true;
+                var created = new ConnectionEntry(transport, jumpConnection);
+                _connections[server.Id] = created;
+                if (Generation(server.Id) == generation) return created;
+
+                // Evicted while connecting: do not keep a connection built from stale settings.
+                Invalidate(server.Id, created);
+                return null;
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+        finally
+        {
+            if (!outcomeRecorded) reachability.EndAttempt(server.Id);
+        }
+    }
+
+    private ConnectionEntry? TryReuse(Guid serverId, ConnectionEntry? jumpConnection) =>
+        _connections.TryGetValue(serverId, out var current)
+        && current.Transport.IsConnected
+        && (jumpConnection is null || jumpConnection.Transport.IsConnected)
+        && ReferenceEquals(current.JumpConnection, jumpConnection)
+            ? current
+            : null;
+
+    private static HostReachabilityState StateFrom(HostUnreachableException exception) =>
+        new(exception.ServerId, exception.UnreachableSinceUtc, exception.NextRetryUtc, 1,
+            exception.LastFailure?.Message ?? exception.Message, false, exception.LastFailure);
+
     private async Task<Server> LoadServerAsync(Guid serverId, CancellationToken cancellationToken)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var repository = scope.ServiceProvider.GetRequiredService<IServerRepository>();
         return await repository.GetAsync(serverId, cancellationToken)
             ?? throw new KeyNotFoundException("Server was not found in inventory.");
-    }
-
-    private async Task<ConnectionEntry> CreateConnectionAsync(
-        Server server,
-        ConnectionEntry? jumpConnection,
-        CancellationToken cancellationToken)
-    {
-        ForwardedPortLocal? tunnel = null;
-        PrivateKeyFile? privateKey = null;
-        SshClient? client = null;
-        string? rejectedFingerprint = null;
-        try
-        {
-            var host = server.Host;
-            var port = server.Port;
-            if (jumpConnection is not null)
-            {
-                tunnel = new ForwardedPortLocal("127.0.0.1", 0, server.Host, checked((uint)server.Port));
-                jumpConnection.Client.AddForwardedPort(tunnel);
-                tunnel.Start();
-                if (!tunnel.IsStarted || tunnel.BoundPort == 0)
-                {
-                    throw new InvalidOperationException("The jump-host tunnel did not start.");
-                }
-
-                host = "127.0.0.1";
-                port = checked((int)tunnel.BoundPort);
-            }
-
-            var keyPath = keyStore.GetFullPath(server.KeyFile);
-            var passphrase = string.IsNullOrEmpty(server.ProtectedKeyPassphrase)
-                ? null
-                : secretProtector.Unprotect(server.ProtectedKeyPassphrase);
-            privateKey = new PrivateKeyFile(keyPath, passphrase);
-            var authentication = new PrivateKeyAuthenticationMethod(server.User, privateKey);
-            var connectionInfo = new ConnectionInfo(host, port, server.User, authentication)
-            {
-                Timeout = TimeSpan.FromSeconds(Math.Clamp(_options.ConnectionTimeoutSeconds, 1, 300))
-            };
-
-            client = new SshClient(connectionInfo)
-            {
-                KeepAliveInterval = TimeSpan.FromSeconds(Math.Clamp(_options.KeepAliveSeconds, 0, 3600))
-            };
-            var knownHosts = new KnownHostsVerifier(_options.KnownHostsFile);
-            client.HostKeyReceived += (_, eventArgs) =>
-            {
-                eventArgs.CanTrust = knownHosts.Matches(server.Host, server.Port, eventArgs.HostKey);
-                if (!eventArgs.CanTrust)
-                {
-                    rejectedFingerprint = eventArgs.FingerPrintSHA256;
-                }
-            };
-
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(_options.ConnectionTimeoutSeconds, 1, 300)));
-            await client.ConnectAsync(timeout.Token);
-            return new ConnectionEntry(client, privateKey, tunnel, jumpConnection);
-        }
-        catch (Exception) when (rejectedFingerprint is not null)
-        {
-            client?.Dispose();
-            privateKey?.Dispose();
-            ReleaseTunnel(tunnel, jumpConnection);
-            throw new SshHostKeyMismatchException(server.Host, server.Port, rejectedFingerprint);
-        }
-        catch
-        {
-            client?.Dispose();
-            privateKey?.Dispose();
-            ReleaseTunnel(tunnel, jumpConnection);
-            throw;
-        }
-    }
-
-    // Stops the tunnel and detaches it from the jump client, which would otherwise keep every dead tunnel registered.
-    private static void ReleaseTunnel(ForwardedPortLocal? tunnel, ConnectionEntry? jumpConnection)
-    {
-        if (tunnel is null) return;
-        // The jump client may already be disposed or disconnected (for example when it was replaced first).
-        try { tunnel.Stop(); } catch (Exception exception) when (exception is ObjectDisposedException or SshException) { }
-        try { jumpConnection?.Client.RemoveForwardedPort(tunnel); } catch (Exception exception) when (exception is ObjectDisposedException or SshException) { }
-        tunnel.Dispose();
     }
 
     // A connection-level failure leaves a poisoned client in the pool; drop exactly that entry (not a newer replacement)
@@ -231,33 +218,18 @@ public sealed class SshConnectionPool(
         }
     }
 
-    private sealed class ConnectionEntry(
-        SshClient client,
-        PrivateKeyFile privateKey,
-        ForwardedPortLocal? tunnel,
-        ConnectionEntry? jumpConnection) : IDisposable
+    private sealed class ConnectionEntry(ISshTransport transport, ConnectionEntry? jumpConnection) : IDisposable
     {
-        public SshClient Client { get; } = client;
+        public ISshTransport Transport { get; } = transport;
         public ConnectionEntry? JumpConnection { get; } = jumpConnection;
         public SshTimeoutTracker Timeouts { get; } = new();
 
-        public void Dispose()
-        {
-            Client.Dispose();
-            ReleaseTunnel(tunnel, JumpConnection);
-            privateKey.Dispose();
-        }
+        public void Dispose() => Transport.Dispose();
     }
 
-    private sealed class SshCommandSession(SshClient client, SshTimeoutTracker timeouts, Func<Task> onConnectionFailure) : ISshCommandSession
+    private sealed class SshCommandSession(ISshTransport transport, SshTimeoutTracker timeouts, Func<Task> onConnectionFailure) : ISshCommandSession
     {
-        private static bool IsClientConnected(SshClient value)
-        {
-            try { return value.IsConnected; }
-            catch (ObjectDisposedException) { return false; }
-        }
-
-        public bool IsConnected => client.IsConnected;
+        public bool IsConnected => transport.IsConnected;
 
         public async Task<RemoteCommandResult> ExecuteAsync(
             string command,
@@ -276,17 +248,9 @@ public sealed class SshConnectionPool(
 
             try
             {
-                using var sshCommand = client.CreateCommand(command);
-                sshCommand.CommandTimeout = timeout;
-                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-                await sshCommand.ExecuteAsync(cancellationToken);
-                stopwatch.Stop();
+                var result = await transport.ExecuteAsync(command, timeout, cancellationToken);
                 timeouts.RecordSuccess();
-                return new RemoteCommandResult(
-                    sshCommand.ExitStatus,
-                    sshCommand.Result,
-                    sshCommand.Error,
-                    stopwatch.Elapsed);
+                return result;
             }
             catch (SshOperationTimeoutException) when (timeouts.RecordTimeout())
             {
@@ -295,7 +259,7 @@ public sealed class SshConnectionPool(
                 await onConnectionFailure();
                 throw;
             }
-            catch (Exception exception) when (SshTransportFailure.IsTransportFailure(exception) && !IsClientConnected(client))
+            catch (Exception exception) when (SshTransportFailure.IsTransportFailure(exception) && !transport.IsConnected)
             {
                 // INV-5: reconnect on failure. Only a dead transport poisons the shared client; a command timeout merely
                 // ends this command's channel and must not tear down other commands or jump tunnels sharing the client.

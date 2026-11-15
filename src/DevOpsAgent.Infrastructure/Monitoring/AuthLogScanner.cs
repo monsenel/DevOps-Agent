@@ -3,6 +3,7 @@ using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Monitoring;
 using DevOpsAgent.Domain.Monitoring;
 using DevOpsAgent.Domain.Servers;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
 namespace DevOpsAgent.Infrastructure.Monitoring;
@@ -13,8 +14,25 @@ public sealed class SecurityMonitoringOptions
     public string[] SudoAllowlist { get; set; } = [];
 }
 
+/// <summary>Runs the auth-log scan for one server; the alert engine calls it for several servers in parallel.</summary>
+public interface IAuthLogScanSource
+{
+    Task<IReadOnlyList<AlertCondition>> ScanAsync(Server server, CancellationToken cancellationToken);
+}
+
+/// <summary>Gives each scan its own DI scope, so parallel scans never share a DbContext.</summary>
+public sealed class ScopedAuthLogScanSource(IServiceScopeFactory scopes) : IAuthLogScanSource
+{
+    public async Task<IReadOnlyList<AlertCondition>> ScanAsync(Server server, CancellationToken cancellationToken)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        var scanner = scope.ServiceProvider.GetRequiredService<AuthLogScanner>();
+        return await scanner.ScanAsync(server, cancellationToken);
+    }
+}
+
 public sealed class AuthLogScanner(ISshRunner sshRunner, IAppSettingRepository settings,
-    IOptions<SecurityMonitoringOptions> options, TimeProvider timeProvider)
+    IOptions<SecurityMonitoringOptions> options, TimeProvider timeProvider) : IAuthLogScanSource
 {
     private static readonly TimeSpan Window = TimeSpan.FromMinutes(5);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);

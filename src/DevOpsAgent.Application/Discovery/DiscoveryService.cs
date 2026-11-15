@@ -81,14 +81,25 @@ public sealed class DiscoveryService(
                     progress?.Report(new DiscoveryProgress(snapshot.Id, DiscoveryProgressStage.ServerStarted,
                         server.Id, server.Name));
 
+                    string? unreachable = null;
                     foreach (var collector in orderedCollectors)
                     {
                         serverCancellationToken.ThrowIfCancellationRequested();
+                        if (unreachable is not null)
+                        {
+                            // The host (or its jump host) is unreachable: the remaining collectors are recorded as failed
+                            // without another attempt.
+                            runs.Add(new CollectorRun(snapshot.Id, server.Id, collector.Name, CollectorRunStatus.Failed,
+                                string.Empty, string.Empty, null, unreachable, null, TimeSpan.Zero, timeProvider.GetUtcNow()));
+                            continue;
+                        }
+
                         progress?.Report(new DiscoveryProgress(snapshot.Id, DiscoveryProgressStage.CollectorStarted,
                             server.Id, server.Name, collector.Name));
 
-                        var run = await RunCollectorAsync(snapshot.Id, context, collector, serverCancellationToken);
+                        var (run, hostUnreachable) = await RunCollectorAsync(snapshot.Id, context, collector, serverCancellationToken);
                         runs.Add(run);
+                        unreachable = hostUnreachable;
                         if (run.Status == CollectorRunStatus.Failed)
                         {
                             serverSucceeded = false;
@@ -160,7 +171,7 @@ public sealed class DiscoveryService(
     private static T? GetPreviousResult<T>(ServerContext context, string collectorName) where T : class =>
         context.TryGetPreviousResult<T>(collectorName, out var result) ? result : null;
 
-    private async Task<CollectorRun> RunCollectorAsync(
+    private async Task<(CollectorRun Run, string? HostUnreachable)> RunCollectorAsync(
         Guid snapshotId,
         ServerContext context,
         ICollector collector,
@@ -173,23 +184,23 @@ public sealed class DiscoveryService(
         {
             if (!await collector.IsApplicableAsync(context, cancellationToken))
             {
-                return CreateRun(CollectorRunStatus.Skipped, null, null, null);
+                return (CreateRun(CollectorRunStatus.Skipped, null, null, null), null);
             }
 
             output = await collector.CollectAsync(context, cancellationToken);
             if (output.ExitCode is not null and not 0)
             {
-                return CreateRun(CollectorRunStatus.Failed, output.ExitCode,
+                return (CreateRun(CollectorRunStatus.Failed, output.ExitCode,
                     string.IsNullOrWhiteSpace(output.StandardError)
                         ? $"Collector exited with code {output.ExitCode}."
                         : output.StandardError,
-                    null);
+                    null), null);
             }
 
             var result = collector.Parse(output);
-            return result.IsSuccess
+            return (result.IsSuccess
                 ? RecordSuccessfulResult()
-                : CreateRun(CollectorRunStatus.Failed, output.ExitCode, result.Error, null);
+                : CreateRun(CollectorRunStatus.Failed, output.ExitCode, result.Error, null), null);
 
             CollectorRun RecordSuccessfulResult()
             {
@@ -206,9 +217,13 @@ public sealed class DiscoveryService(
         {
             throw;
         }
+        catch (HostUnreachableException exception)
+        {
+            return (CreateRun(CollectorRunStatus.Failed, output.ExitCode, exception.Message, null), exception.Message);
+        }
         catch (Exception exception)
         {
-            return CreateRun(CollectorRunStatus.Failed, output.ExitCode, exception.Message, null);
+            return (CreateRun(CollectorRunStatus.Failed, output.ExitCode, exception.Message, null), null);
         }
 
         CollectorRun CreateRun(CollectorRunStatus status, int? exitCode, string? error, string? resultJson) =>

@@ -79,7 +79,7 @@ public sealed class HealthCheckServiceTests
             var snapshots = new FakeSnapshotRepository(includeGraph ? new Snapshot([Server.Id], Clock.GetUtcNow()) : null);
             var graph = includeGraph ? CreateGraph(Server.Id, snapshots.Snapshot!.Id) : null;
             Service = new HealthCheckService(_checkRepository, new FakeServerRepository(Server), snapshots,
-                new FakeGraphRepository(graph), Probe, Clock);
+                new FakeGraphRepository(graph), Probe, new DevOpsAgent.Application.Servers.HostReachabilityTracker(Clock), Clock);
         }
     }
 

@@ -22,7 +22,7 @@ public sealed class SshRunner(ISshConnectionPool connectionPool) : ISshRunner
         }
 
         var wrappedCommand = RemoteCommand.Wrap(command, options.UseSudo);
-        var session = await connectionPool.GetSessionAsync(serverId, cancellationToken);
+        var session = await connectionPool.GetSessionAsync(serverId, options.BypassBackoff, cancellationToken);
         return await session.ExecuteAsync(wrappedCommand, options.Timeout, cancellationToken);
     }
 }

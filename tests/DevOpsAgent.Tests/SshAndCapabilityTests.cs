@@ -158,7 +158,7 @@ public sealed class SshAndCapabilityTests
 
     private sealed class FakeSshConnectionPool(FakeSshCommandSession session) : ISshConnectionPool
     {
-        public Task<ISshCommandSession> GetSessionAsync(Guid serverId, CancellationToken cancellationToken) => Task.FromResult<ISshCommandSession>(session);
+        public Task<ISshCommandSession> GetSessionAsync(Guid serverId, bool bypassBackoff, CancellationToken cancellationToken) => Task.FromResult<ISshCommandSession>(session);
         public void Evict(Guid serverId) { }
         public void Dispose() { }
     }

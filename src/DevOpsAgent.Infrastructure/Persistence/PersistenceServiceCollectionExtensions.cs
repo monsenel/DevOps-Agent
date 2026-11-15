@@ -44,6 +44,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddScoped<IAlertRepository, AlertRepository>();
         services.AddScoped<IAlertSignalSource, AlertSignalSource>();
         services.AddScoped<AuthLogScanner>();
+        services.AddSingleton<IAuthLogScanSource, ScopedAuthLogScanSource>();
         services.AddTransient<IHealthProbe, HealthProbe>();
         services.AddScoped<IUpdatesCollector, DevOpsAgent.Infrastructure.Collectors.UpdatesCollectorService>();
         services.AddScoped<IChatConversationRepository, ChatConversationRepository>();
@@ -57,6 +58,8 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<ICollector, NginxCollector>();
         services.AddSingleton<ICollector, ConnectionCollector>();
         services.AddSingleton<IServerKeyStore, ServerKeyStore>();
+        services.AddSingleton<IHostReachability, DevOpsAgent.Application.Servers.HostReachabilityTracker>();
+        services.AddSingleton<ISshTransportFactory, SshNetTransportFactory>();
         services.AddSingleton<SshConnectionPool>();
         services.AddSingleton<ISshConnectionPool>(serviceProvider => serviceProvider.GetRequiredService<SshConnectionPool>());
         services.AddSingleton<ISshRunner, SshRunner>();

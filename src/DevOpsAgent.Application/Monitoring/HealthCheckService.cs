@@ -13,8 +13,11 @@ public sealed class HealthCheckService(
     ISnapshotRepository snapshots,
     IGraphRepository graphs,
     IHealthProbe probe,
+    IHostReachability reachability,
     TimeProvider timeProvider)
 {
+    private const int MaxParallelProbes = 8;
+
     public async Task<IReadOnlyList<HealthCheckDto>> ListAsync(Guid serverId, CancellationToken cancellationToken)
     {
         if (await servers.GetAsync(serverId, cancellationToken) is null) return [];
@@ -100,9 +103,17 @@ public sealed class HealthCheckService(
         var enabled = await checks.ListEnabledAsync(cancellationToken);
         var due = enabled.Where(item => item.LastCheckedAtUtc is null ||
             item.LastCheckedAtUtc.Value.AddSeconds(item.IntervalSeconds) <= now).ToArray();
-        using var semaphore = new SemaphoreSlim(16);
+        var names = (await servers.ListAsync(cancellationToken)).ToDictionary(server => server.Id, server => server.Name);
+        using var semaphore = new SemaphoreSlim(MaxParallelProbes);
         var results = await Task.WhenAll(due.Select(async item =>
         {
+            // A server in SSH backoff is not probed this cycle (T7.R1): the check reports why instead of waiting on a dead host.
+            if (reachability.IsBlocked(item.ServerId, out var backoff))
+            {
+                return (Item: item, Result: new HealthProbeResult(false, null, null,
+                    "Not probed: " + HostUnreachableException.Describe(names.GetValueOrDefault(item.ServerId, "The server"), backoff!)));
+            }
+
             await semaphore.WaitAsync(cancellationToken);
             try
             {
