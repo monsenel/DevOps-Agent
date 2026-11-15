@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 namespace DevOpsAgent.Web.Pages;
 
 [AllowAnonymous]
+[Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(LoginRateLimit.PolicyName)]
 public sealed class LoginModel(AdminCredentialVerifier credentialVerifier) : PageModel
 {
     [BindProperty]

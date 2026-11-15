@@ -1,4 +1,6 @@
 @page "/dev/components"
+@inject IWebHostEnvironment Environment
+@inject NavigationManager Navigation
 <PageTitle>Component preview · DevOps Agent</PageTitle>
 
 <Card Title="Component library preview" Class="component-preview-card">
@@ -51,4 +53,10 @@
     private string ActiveTab { get; set; } = "First";
 
     private void SetActiveTab(string value) => ActiveTab = value;
+
+    // The component preview is a development aid only; elsewhere it behaves like an unknown page.
+    protected override void OnInitialized()
+    {
+        if (!Environment.IsDevelopment()) Navigation.NavigateTo("/not-found", replace: true);
+    }
 }

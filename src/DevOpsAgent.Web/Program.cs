@@ -14,6 +14,7 @@ using DevOpsAgent.Web.Components;
 using DevOpsAgent.Web.Hosted;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -77,6 +78,15 @@ builder.Services.AddAuthorization(options =>
         .Build();
 });
 builder.Services.AddCascadingAuthenticationState();
+// Login attempts (POST /login) are limited per client address; viewing the page is not.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(LoginRateLimit.PolicyName, context => HttpMethods.IsPost(context.Request.Method)
+        ? RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = LoginRateLimit.AttemptsPerWindow, Window = LoginRateLimit.Window, QueueLimit = 0 })
+        : RateLimitPartition.GetNoLimiter("view"));
+});
 
 var app = builder.Build();
 
@@ -102,8 +112,18 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+if (!app.Environment.IsDevelopment())
+{
+    // Development-only pages (the component preview) do not exist elsewhere.
+    app.Use(async (context, next) =>
+    {
+        if (context.Request.Path.StartsWithSegments("/dev")) context.Response.StatusCode = StatusCodes.Status404NotFound;
+        else await next();
+    });
+}
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.UseAntiforgery();
 
 app.MapGet("/healthz", () => Results.Ok(new
