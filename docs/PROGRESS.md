@@ -12,9 +12,9 @@
 
 ## Current
 
-- **Task:** none — MVP closed out as v0.1.1; next is T7.R1
-- **Status:** —
-- **Last updated:** 2026-11-15 by ZCode (MVP review and close-out)
+- **Task:** T7.R1 SSH connection lifecycle — dead hosts must not slow the app
+- **Status:** in-progress
+- **Last updated:** 2026-11-15 by ZCode
 
 ## WIP notes
 
@@ -118,7 +118,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T6.4 | SSH attack detection and bans | done | `feat(T6.4): verify SSH attack detection in disposable lab` |
 | T6.5 | Updates | done | `feat(T6.5): verify security update workflow and resilient scans` |
 | T6.6 | MVP hardening pass | done | `feat(T6.6): MVP hardening and release closeout` |
-| T7.R1 | SSH connection lifecycle | todo | |
+| T7.R1 | SSH connection lifecycle | in-progress | |
 | T7.R2 | Stale nodes for unreachable servers | todo | |
 | T7.R3 | Container restart-loop alert rule | todo | |
 | T7.R4 | Agent action guardrails | todo | |
@@ -140,6 +140,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 ## Session log
 
 One line per session: date · tool/model · tasks touched · result.
+
+- 2026-11-15 · ZCode / Claude · started T7.R1 · owner scope: per-host backoff (1 min doubling to 15 min), jump short-circuit, bounded parallel cycles, Retry now; lab recreated with fixed private IPs via a copy of the lab script (dva-testlab-fixed.sh, outside the repo)
 
 - 2026-11-15 · ZCode / Claude · MVP close-out · owner decisions D-026–D-031 applied; small coverage gaps fixed; single-agent live run J1–J7 + blackhole passed on the lab (see table); post-run fixes for sudo noise, probe PATH, trace Enter and update report; build 0 warnings, 342/342 tests; tagged v0.1.1 locally (v0.1.0 was already pushed)
 
