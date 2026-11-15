@@ -150,6 +150,8 @@ Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 �
 
 One line per session: date · tool/model · tasks touched · result.
 
+- 2026-11-15 · ZCode / Claude · independent review of T7.R1–T7.R3 · static review by three read-only reviewers plus live re-run on the fixed-IP lab (isolated `/tmp` DB, no new containers): discovery with a 192.0.2.1 entry 13.3–15.4 s (0.6 s while it is in backoff), metric cycles 15.7 s first then 16–278 ms, edge down → only srv-edge is attempted, Retry now 0.8 s (srv-app) / 0.3 s (srv-db), srv-db outage stale + 0 new listeners, restart-loop alert opened on the third restart and resolved after 10 quiet minutes; 6 `fix(review-r)` commits + tests (build 0 warnings, 367 tests); T7.R15–T7.R19 filed (T7.R15 high)
+
 - 2026-11-15 · ZCode / Claude · T7.R3 done · live: `crashloop` (`--restart always`, `exit 1`) inside srv-app opened a medium restart-loop alert 24 s after start; `docker rm -f` resolved it 35 s later; lab workers raised none; 360/360 tests; tagged v0.1.2 locally
 
 - 2026-11-15 · ZCode / Claude · T7.R2 done · live: `docker stop dva-srv-db` → discovery 2/2 with srv-db, redis-server, sshd and its server block shown "stale · last seen 07:13 UTC" and Postgres/Redis listeners carried; drift 0 removals and 0 new listeners, no new-listener alert; after `docker start` + Retry now, discovery cleared stale and drift reported nothing added for srv-db (Docker DNS random ports fixed as one identity); 351/351 tests
