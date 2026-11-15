@@ -239,7 +239,10 @@ public sealed class ContainerRestartMonitor(IAppSettingRepository settings, Time
         try
         {
             var history = JsonSerializer.Deserialize<List<ContainerCycle>>(json, JsonOptions) ?? [];
-            if (history.Any(cycle => cycle is null || cycle.Containers is null || cycle.Containers.Any(container => container is null)))
+            // Valid JSON can still lack a field (the record's strings deserialize to null): such a sample would throw deep in the
+            // rules and stop every alert evaluation, so it is as unreadable as a syntax error.
+            if (history.Any(cycle => cycle is null || cycle.Containers is null || cycle.Containers.Any(container =>
+                    container is null || container.Id is null || container.Name is null || container.State is null)))
                 throw new JsonException("The stored history has null entries.");
             return history;
         }

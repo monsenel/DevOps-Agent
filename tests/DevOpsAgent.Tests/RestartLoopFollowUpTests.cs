@@ -563,6 +563,9 @@ public sealed class RestartLoopFollowUpTests
     [InlineData("{\"a\":1}")]
     [InlineData("[{\"atUtc\":\"2026-11-15T10:00:00+00:00\",\"containers\":null}]")]
     [InlineData("[{\"atUtc\":\"nope\",\"containers\":[]}]")]
+    // Valid JSON with a missing field: it must be reported like any unreadable value, not crash every alert evaluation.
+    [InlineData("[{\"atUtc\":\"2026-11-15T10:00:00+00:00\",\"containers\":[{\"id\":\"a\",\"name\":\"web\",\"restartCount\":0}]}]")]
+    [InlineData("[{\"atUtc\":\"2026-11-15T10:00:00+00:00\",\"containers\":[{\"id\":\"a\",\"state\":\"paused\",\"restartCount\":0}]}]")]
     public async Task CorruptHistoryIsLoggedWithoutItsContentsAndTreatedAsEmpty(string stored)
     {
         var rig = new Rig();
