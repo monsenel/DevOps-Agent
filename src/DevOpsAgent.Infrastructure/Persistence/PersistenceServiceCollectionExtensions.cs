@@ -62,7 +62,9 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<ISshTransportFactory, SshNetTransportFactory>();
         services.AddSingleton<SshConnectionPool>();
         services.AddSingleton<ISshConnectionPool>(serviceProvider => serviceProvider.GetRequiredService<SshConnectionPool>());
+        services.AddSingleton<ServerStateEvents>();
         services.AddSingleton<SudoPasswordGate>();
+        services.AddSingleton<IKnownSecrets>(serviceProvider => serviceProvider.GetRequiredService<SudoPasswordGate>());
         services.AddSingleton<ISshRunner, SshRunner>();
         services.AddHttpClient("llm", client => client.Timeout = Timeout.InfiniteTimeSpan);
         services.AddHttpClient("health", client => client.Timeout = TimeSpan.FromSeconds(10));

@@ -18,13 +18,22 @@ namespace DevOpsAgent.Infrastructure.Ssh;
 /// attempt is written down before the password is sent, so an attempt cut off by a crash is found afterwards and counts as
 /// unknown. Password sudo on a server runs one at a time until it is confirmed or its outcome is recorded.
 /// </para>
+/// <para>
+/// It also holds the redaction list of every server (T7.R26, <see cref="IKnownSecrets"/>): all stored sudo passwords, so the
+/// output of any server is cleaned of all of them. Background state changes are announced through
+/// <see cref="ServerStateEvents"/>, so the Servers page shows them without a reload.
+/// </para>
 /// </summary>
 public sealed partial class SudoPasswordGate(
     IServiceScopeFactory scopeFactory,
     ISecretProtector secretProtector,
     TimeProvider timeProvider,
-    ILogger<SudoPasswordGate> logger)
+    ILogger<SudoPasswordGate> logger,
+    ServerStateEvents? events = null) : IKnownSecrets
 {
+    /// <summary>How long the list of all stored passwords is reused before it is read again (edits invalidate it at once).</summary>
+    private static readonly TimeSpan SecretsLifetime = TimeSpan.FromSeconds(60);
+
     /// <summary>
     /// A password sudo is not started with less than this left of its call or cycle deadline (owner decision, T7.R25): PAM
     /// answers a wrong password within its 2-3 s failure delay, so the outcome is seen well before the deadline.
@@ -59,6 +68,67 @@ public sealed partial class SudoPasswordGate(
     /// <summary>Servers with a password sudo of this process between "attempt started" and its recorded outcome.</summary>
     private readonly ConcurrentDictionary<Guid, byte> _inFlight = new();
 
+    /// <summary>Decrypted passwords by protected value, so a refresh of the list does not decrypt them again.</summary>
+    private readonly ConcurrentDictionary<string, string> _plain = new(StringComparer.Ordinal);
+    private readonly SemaphoreSlim _secretsLoad = new(1, 1);
+    private volatile SecretsSnapshot? _secrets;
+
+    private sealed record SecretsSnapshot(IReadOnlyList<string> Secrets, long LoadedAt);
+
+    public async Task<IReadOnlyList<string>> GetAsync(CancellationToken cancellationToken)
+    {
+        if (_secrets is { } current && timeProvider.GetElapsedTime(current.LoadedAt) < SecretsLifetime) return current.Secrets;
+        await _secretsLoad.WaitAsync(cancellationToken);
+        try
+        {
+            if (_secrets is { } loaded && timeProvider.GetElapsedTime(loaded.LoadedAt) < SecretsLifetime) return loaded.Secrets;
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var servers = await scope.ServiceProvider.GetRequiredService<IServerRepository>().ListAsync(cancellationToken);
+            var secrets = new List<string>();
+            foreach (var protectedValue in servers.Select(server => server.ProtectedSudoPassword).OfType<string>().Where(value => value.Length > 0))
+            {
+                if (!_plain.TryGetValue(protectedValue, out var plain))
+                {
+                    try { plain = _plain[protectedValue] = secretProtector.Unprotect(protectedValue); }
+                    catch (Exception exception) when (exception is not OperationCanceledException) { continue; } // logged by ReadAsync
+                }
+
+                secrets.Add(plain);
+            }
+
+            var ordered = secrets.Distinct(StringComparer.Ordinal).OrderByDescending(secret => secret.Length).ToArray();
+            _secrets = new SecretsSnapshot(ordered, timeProvider.GetTimestamp());
+            return ordered;
+        }
+        finally
+        {
+            _secretsLoad.Release();
+        }
+    }
+
+    public void Invalidate() => _secrets = null;
+
+    /// <summary>
+    /// Every server's result passes through here: redacted with every stored sudo password of every server, and with the
+    /// server's own one even before the shared list has caught up with an edit.
+    /// </summary>
+    internal async Task<RemoteCommandResult> RedactAsync(RemoteCommandResult result, string? ownPassword, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<string> secrets;
+        try { secrets = await GetAsync(CancellationToken.None); }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // The list cannot be read: keep only the server's own password out, and say so without any detail.
+            logger.LogWarning("The list of stored sudo passwords could not be read ({ErrorType}); output is redacted with this server's password only",
+                exception.GetType().Name);
+            secrets = [];
+        }
+
+        if (!string.IsNullOrEmpty(ownPassword) && !secrets.Contains(ownPassword, StringComparer.Ordinal))
+            secrets = [.. secrets.Append(ownPassword).OrderByDescending(secret => secret.Length)];
+        return KnownSecretRedaction.Redact(result, secrets);
+    }
+
     /// <summary>
     /// The server's sudo password state, read fresh from the database for every call. An attempt that was started but whose
     /// outcome was never recorded, and that is not running in this process, becomes "outcome unknown" here.
@@ -74,6 +144,7 @@ public sealed partial class SudoPasswordGate(
         {
             // A paused password is decrypted too: it is never sent, but it stays on the redaction list.
             password = secretProtector.Unprotect(protectedValue);
+            if (_plain.TryAdd(protectedValue, password)) Invalidate(); // a password the shared list does not hold yet
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -93,6 +164,7 @@ public sealed partial class SudoPasswordGate(
             await TrySaveAsync(repository, server, "an interrupted sudo password attempt");
             logger.LogWarning("{ServerName}: a sudo password attempt was interrupted before its outcome was known; password sudo is paused until Retry now or the password is edited or removed",
                 server.Name);
+            events?.NotifyChanged(serverId);
         }
 
         var pausedHere = _paused.TryGetValue(serverId, out var paused) && paused.ProtectedValue == protectedValue;
@@ -152,7 +224,11 @@ public sealed partial class SudoPasswordGate(
         try
         {
             var name = await UpdateAsync(serverId, protectedValue, server => server.RecordSudoPasswordSucceeded());
-            if (alertOpen && name is not null) logger.LogInformation("{ServerName}: sudo works again with the stored sudo password", name);
+            if (alertOpen && name is not null)
+            {
+                logger.LogInformation("{ServerName}: sudo works again with the stored sudo password", name);
+                events?.NotifyChanged(serverId);
+            }
         }
         catch (Exception exception)
         {
@@ -185,6 +261,7 @@ public sealed partial class SudoPasswordGate(
         if (server?.SudoPasswordOutcomeUnknownAtUtc is null) return;
         server.ClearSudoPasswordOutcomeUnknown();
         await repository.SaveAsync(server, cancellationToken);
+        events?.NotifyChanged(serverId);
     }
 
     private async Task RecordPausedAsync(Guid serverId, string protectedValue, bool rejected)
@@ -201,6 +278,7 @@ public sealed partial class SudoPasswordGate(
                 else server.RecordSudoPasswordOutcomeUnknown(now);
             });
             if (name is null) return;
+            events?.NotifyChanged(serverId);
             if (rejected)
                 logger.LogWarning("{ServerName}: the sudo password was rejected; no sudo is used on this server until its sudo password is edited or removed",
                     name);
@@ -251,15 +329,9 @@ public sealed partial class SudoPasswordGate(
         RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex RejectionLine();
 
-    /// <summary>The server's redaction list: its sudo password never leaves the runner in anything the server sent back.</summary>
+    /// <summary>Redacts one password only; the runner uses <see cref="RedactAsync"/> (every stored password, T7.R26).</summary>
     public static RemoteCommandResult Redact(RemoteCommandResult result, string? password) =>
-        string.IsNullOrEmpty(password)
-            ? result
-            : result with
-            {
-                StandardOutput = result.StandardOutput.Replace(password, Redacted, StringComparison.Ordinal),
-                StandardError = result.StandardError.Replace(password, Redacted, StringComparison.Ordinal)
-            };
+        string.IsNullOrEmpty(password) ? result : KnownSecretRedaction.Redact(result, [password]);
 
     public static RemoteCommandResult NotRun(string message) => new(1, string.Empty, message, TimeSpan.Zero);
 }

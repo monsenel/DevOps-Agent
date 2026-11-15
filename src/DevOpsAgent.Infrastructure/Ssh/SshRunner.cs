@@ -42,13 +42,13 @@ public sealed class SshRunner(
         var credential = await sudoPasswords.ReadAsync(serverId, cancellationToken);
         if (!options.UseSudo || credential.Kind == SudoCredentialKind.None)
         {
-            // Every command's output goes through the server's redaction list, not only sudo's.
+            // Every command's output is redacted with every stored sudo password of every server (T7.R26), not only sudo's.
             var result = await ExecuteAsync(serverId, RemoteCommand.Wrap(command, options.UseSudo), null, options, cancellationToken);
-            return SudoPasswordGate.Redact(result, credential.Password);
+            return await sudoPasswords.RedactAsync(result, credential.Password, cancellationToken);
         }
 
-        return await RunWithSudoPasswordAsync(serverId, marker => RemoteCommand.WrapWithSudoPassword(command, marker),
-            RemoteCommand.Wrap(command, useSudo: true), credential, options, cancellationToken);
+        return await sudoPasswords.RedactAsync(await RunWithSudoPasswordAsync(serverId, marker => RemoteCommand.WrapWithSudoPassword(command, marker),
+            RemoteCommand.Wrap(command, useSudo: true), credential, options, cancellationToken), credential.Password, cancellationToken);
     }
 
     public async Task<RemoteCommandResult> ProbeSudoAsync(Guid serverId, SshRunOptions options, CancellationToken cancellationToken)
@@ -62,13 +62,10 @@ public sealed class SshRunner(
         // only an edit or removal lifts that pause, and RunWithSudoPasswordAsync returns the "not run" result for it.
         await sudoPasswords.ClearOutcomeUnknownAsync(serverId, cancellationToken);
         var credential = await sudoPasswords.ReadAsync(serverId, cancellationToken);
-        if (credential.Kind == SudoCredentialKind.None)
-        {
-            return await ExecuteAsync(serverId, RemoteCommand.SudoProbe, null, options, cancellationToken);
-        }
-
-        return await RunWithSudoPasswordAsync(serverId, RemoteCommand.SudoPasswordProbe, RemoteCommand.SudoProbe,
-            credential, options, cancellationToken);
+        var result = credential.Kind == SudoCredentialKind.None
+            ? await ExecuteAsync(serverId, RemoteCommand.SudoProbe, null, options, cancellationToken)
+            : await RunWithSudoPasswordAsync(serverId, RemoteCommand.SudoPasswordProbe, RemoteCommand.SudoProbe, credential, options, cancellationToken);
+        return await sudoPasswords.RedactAsync(result, credential.Password, cancellationToken);
     }
 
     private async Task<RemoteCommandResult> RunWithSudoPasswordAsync(

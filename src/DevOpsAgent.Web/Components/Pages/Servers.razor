@@ -4,7 +4,9 @@
 @inject DevOpsAgent.Application.Abstractions.IHostReachability Reachability
 @inject DiscoveryService Discovery
 @inject NavigationManager Navigation
+@inject DevOpsAgent.Application.Abstractions.ServerStateEvents StateEvents
 @using Microsoft.AspNetCore.Components
+@implements IDisposable
 <PageTitle>Servers · DevOps Agent</PageTitle>
 
 <div class="page-stack">
@@ -200,11 +202,12 @@
                         @* Write-only: the value is never rendered by the server, so neither the saved password nor what was typed
                            is sent back to the browser (T7.R24). *@
                         <input id="server-sudo-password" type="password" autocomplete="new-password" spellcheck="false"
+                               minlength="@ServerService.MinSudoPasswordLength" maxlength="@ServerService.MaxSudoPasswordLength"
                                aria-describedby="server-sudo-password-help"
                                placeholder="@(_editingId.HasValue && _hasSudoPassword ? "Saved · enter to replace" : "Optional")"
                                disabled="@_form.RemoveSudoPassword"
                                @onchange="args => _form.SudoPassword = args.Value as string" />
-                        <span class="field-helper" id="server-sudo-password-help">Only for hosts where passwordless (NOPASSWD) sudo is not possible. Encrypted at rest, never shown again. Leave blank to keep the saved password.</span>
+                        <span class="field-helper" id="server-sudo-password-help">Only for hosts where passwordless (NOPASSWD) sudo is not possible. At least @ServerService.MinSudoPasswordLength characters. Encrypted at rest, never shown again. Leave blank to keep the saved password.</span>
                         @if (_editingId.HasValue && _hasSudoPassword)
                         {
                             <label class="health-enabled" for="server-sudo-password-remove">
@@ -412,6 +415,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // A rejection, an unknown outcome or a confirmation recorded in the background shows up without a reload (T7.R26).
+        StateEvents.Changed += OnServerStateChanged;
         await LoadAsync();
         if (string.IsNullOrWhiteSpace(UnknownHost)) return;
 
@@ -430,6 +435,24 @@
     {
         _servers = await ServersService.ListAsync(CancellationToken.None);
         _keyFiles = ServersService.ListKeyFiles();
+    }
+
+    private void OnServerStateChanged(Guid serverId) => _ = InvokeAsync(async () =>
+    {
+        try
+        {
+            await LoadAsync();
+            StateHasChanged();
+        }
+        catch (Exception) when (_disposed) { } // the page was closed while it reloaded
+    });
+
+    private bool _disposed;
+
+    public void Dispose()
+    {
+        _disposed = true;
+        StateEvents.Changed -= OnServerStateChanged;
     }
 
     private void OpenCreate()

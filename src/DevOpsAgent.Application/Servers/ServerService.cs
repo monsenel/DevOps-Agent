@@ -8,7 +8,8 @@ public sealed class ServerService(
     IServerRepository repository,
     ISecretProtector secretProtector,
     IServerKeyStore keyStore,
-    ISshConnectionPool connectionPool)
+    ISshConnectionPool connectionPool,
+    IKnownSecrets? knownSecrets = null)
 {
     public async Task<IReadOnlyList<ServerSummary>> ListAsync(CancellationToken cancellationToken)
     {
@@ -28,6 +29,7 @@ public sealed class ServerService(
             NormalizeGroup(input.Group), SerializeTags(input.Tags), ProtectPassphrase(input.KeyPassphrase));
         ApplySudoPassword(server, input);
         await repository.AddAsync(server, cancellationToken);
+        if (input.SudoPassword is { Length: > 0 }) knownSecrets?.Invalidate();
         return ToSummary(server, servers.Append(server));
     }
 
@@ -50,6 +52,8 @@ public sealed class ServerService(
         // A new or removed sudo password also ends a rejection (T7.R24); the SSH connection itself is not affected by it.
         ApplySudoPassword(server, input);
         await repository.SaveAsync(server, cancellationToken);
+        // Every server's output is redacted with every stored sudo password (T7.R26): the shared list follows the edit.
+        if (input.SudoPassword is { Length: > 0 } || input.RemoveSudoPassword) knownSecrets?.Invalidate();
         // Only a change to how the server is reached invalidates the pooled session; renaming or retagging a server
         // must not kill live sessions (for example a running package update).
         var connectionAfter = (server.Host, server.Port, server.User, server.KeyFile, server.JumpServerId, server.ProtectedKeyPassphrase);
@@ -98,6 +102,7 @@ public sealed class ServerService(
 
         await repository.DeleteAsync(server, cancellationToken);
         connectionPool.Evict(id);
+        if (server.HasSudoPassword) knownSecrets?.Invalidate();
         return true;
     }
 
@@ -164,6 +169,9 @@ public sealed class ServerService(
         // sudo -S reads one line, so a line break would end the password early. The value is never echoed in a message.
         if (!string.IsNullOrEmpty(input.SudoPassword))
         {
+            // Every stored password is removed from all server output (T7.R26); a very short one would mangle it.
+            if (input.SudoPassword.Length < MinSudoPasswordLength)
+                throw new ArgumentException($"The sudo password must be at least {MinSudoPasswordLength} characters.", nameof(input));
             if (input.SudoPassword.Length > MaxSudoPasswordLength)
                 throw new ArgumentException($"The sudo password can be at most {MaxSudoPasswordLength} characters.", nameof(input));
             if (input.SudoPassword.Any(character => character is '\n' or '\r' or '\0'))
@@ -174,6 +182,7 @@ public sealed class ServerService(
     }
 
     public const int MaxSudoPasswordLength = 512;
+    public const int MinSudoPasswordLength = 6;
 
     private void ApplySudoPassword(Server server, ServerInput input)
     {

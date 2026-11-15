@@ -477,17 +477,19 @@ public sealed partial class SudoPasswordTests
         private readonly ServiceProvider _services;
         private readonly AsyncServiceScope _scope;
 
-        private SudoLab(string databasePath, ServiceProvider services, TimeProvider clock)
+        private SudoLab(string databasePath, ServiceProvider services, TimeProvider clock, ServerStateEvents? events)
         {
             _databasePath = databasePath;
             _services = services;
             _scope = services.CreateAsyncScope();
             Repository = _scope.ServiceProvider.GetRequiredService<IServerRepository>();
-            Inventory = new ServerService(Repository, Protector, new KeyStore(), new NoPool());
-            var gate = new SudoPasswordGate(services.GetRequiredService<IServiceScopeFactory>(), Protector, clock, Logs);
+            Gate = new SudoPasswordGate(services.GetRequiredService<IServiceScopeFactory>(), Protector, clock, Logs, events);
+            Inventory = new ServerService(Repository, Protector, new KeyStore(), new NoPool(), Gate);
             Pool = new SessionPool(Session);
-            Runner = new SshRunner(Pool, gate, clock);
+            Runner = new SshRunner(Pool, Gate, clock);
         }
+
+        public SudoPasswordGate Gate { get; }
 
         public RecordingSession Session { get; } = new();
         public SessionPool Pool { get; }
@@ -498,7 +500,7 @@ public sealed partial class SudoPasswordTests
         public SshRunner Runner { get; }
         public Guid ServerId { get; private set; }
 
-        public static async Task<SudoLab> CreateAsync(string? sudoPassword, TimeProvider? clock = null)
+        public static async Task<SudoLab> CreateAsync(string? sudoPassword, TimeProvider? clock = null, ServerStateEvents? events = null)
         {
             var path = Path.Combine(Path.GetTempPath(), $"dva-sudo-{Guid.NewGuid():N}.db");
             var services = new ServiceCollection()
@@ -508,7 +510,7 @@ public sealed partial class SudoPasswordTests
             await using (var setup = services.CreateAsyncScope())
                 await setup.ServiceProvider.GetRequiredService<AppDbContext>().Database.EnsureCreatedAsync();
 
-            var lab = new SudoLab(path, services, clock ?? TimeProvider.System);
+            var lab = new SudoLab(path, services, clock ?? TimeProvider.System, events);
             lab.Session.AcceptedPassword = Password;
             var created = await lab.Inventory.CreateAsync(lab.Input("db") with { SudoPassword = sudoPassword }, CancellationToken.None);
             lab.ServerId = created.Id;
@@ -592,6 +594,8 @@ public sealed partial class SudoPasswordTests
         public Task? Freeze { get; set; }
         /// <summary>Replaces what sudo does with the password (an unknown answer, a dropped connection ...).</summary>
         public Func<RemoteCommandResult>? SudoAnswer { get; set; }
+        /// <summary>What a command without the password prints, instead of "ok".</summary>
+        public string? PlainOutput { get; set; }
         public IReadOnlyList<SessionCall> Calls => _calls.ToArray();
         public int SudoAttempts => Volatile.Read(ref _sudoAttempts);
         /// <summary>The most password sudo commands that were authenticating at the same time.</summary>
@@ -610,7 +614,7 @@ public sealed partial class SudoPasswordTests
         {
             var call = new SessionCall(command, standardInput, timeout);
             _calls.Enqueue(call);
-            if (!call.IsSudoS) return Result(0, command.StartsWith("printf", StringComparison.Ordinal) ? command : "ok", "");
+            if (!call.IsSudoS) return Result(0, command.StartsWith("printf", StringComparison.Ordinal) ? command : PlainOutput ?? "ok", "");
 
             Assert.NotNull(marker);
             Assert.Contains($"\"{marker.Value}\"", command, StringComparison.Ordinal);
