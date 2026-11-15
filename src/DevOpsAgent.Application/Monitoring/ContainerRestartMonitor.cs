@@ -81,11 +81,34 @@ public sealed class ContainerRestartMonitor(IAppSettingRepository settings, Time
     public async Task RecordAsync(Guid serverId, IReadOnlyList<ContainerStatus>? containers, CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
-        var history = containers is null ? [] : (await ReadAsync(serverId, cancellationToken))
-            .Where(cycle => cycle.AtUtc >= now - Retention && cycle.AtUtc >= now - HistoryLimit)
+        var history = containers is null ? [] : Retain(await ReadAsync(serverId, cancellationToken), now)
             .Append(new ContainerCycle(now, containers))
             .ToList();
         await settings.SetAsync(Key(serverId), JsonSerializer.Serialize(history, JsonOptions), cancellationToken);
+    }
+
+    /// <summary>
+    /// Keeps the last 30 minutes of sampled time, and never more than <see cref="HistoryLimit"/> of wall-clock time. Time
+    /// in which the server was not sampled (gaps longer than <see cref="MaxSampleAge"/>) does not age the history, so the
+    /// samples from before an outage are still there to be compared with the first ones after it.
+    /// </summary>
+    private static List<ContainerCycle> Retain(IReadOnlyList<ContainerCycle> history, DateTimeOffset now)
+    {
+        var kept = new List<ContainerCycle>();
+        var newer = now;
+        var sampled = TimeSpan.Zero;
+        foreach (var cycle in history.OrderByDescending(item => item.AtUtc))
+        {
+            if (cycle.AtUtc < now - HistoryLimit) break;
+            var step = newer - cycle.AtUtc;
+            if (step <= MaxSampleAge) sampled += step;
+            if (sampled > Retention) break;
+            kept.Add(cycle);
+            newer = cycle.AtUtc;
+        }
+
+        kept.Reverse();
+        return kept;
     }
 
     public async Task<IReadOnlyList<AlertCondition>> GetConditionsAsync(Guid serverId, string serverName, CancellationToken cancellationToken)
