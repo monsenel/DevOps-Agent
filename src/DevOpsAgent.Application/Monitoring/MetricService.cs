@@ -119,7 +119,7 @@ public sealed class MetricService(
         {
             var options = new SshRunOptions(_cycle.ContainerQueryTimeout);
             var response = await sshRunner.RunAsync(server.Id, ContainerStatusQuery.Command, options, budget.Token);
-            if (response.ExitCode != 0 && server.SudoCapable == true)
+            if (response.ExitCode != 0 && server.CanUseSudo)
                 response = await sshRunner.RunAsync(server.Id, ContainerStatusQuery.Command, options with { UseSudo = true }, budget.Token);
             return response.ExitCode == 0 ? new ContainerQuery(ContainerStatusQuery.Parse(response.StandardOutput)) : null;
         }

@@ -2777,6 +2777,10 @@ p {
     font-weight: 700;
 }
 
+.server-sudo {
+    white-space: nowrap;
+}
+
 .server-reachability {
     display: block;
     max-width: 280px;

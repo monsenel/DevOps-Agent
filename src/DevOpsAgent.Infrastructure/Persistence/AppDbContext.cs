@@ -79,6 +79,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(server => server.User).HasMaxLength(120).IsRequired();
             entity.Property(server => server.KeyFile).HasMaxLength(260).IsRequired();
             entity.Property(server => server.ProtectedKeyPassphrase).HasMaxLength(4096);
+            entity.Property(server => server.ProtectedSudoPassword).HasMaxLength(4096);
             entity.Property(server => server.Group).HasMaxLength(80).IsRequired();
             entity.Property(server => server.TagsJson).IsRequired();
             entity.Property(server => server.OsInfo).HasMaxLength(500);

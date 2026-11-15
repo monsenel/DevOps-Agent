@@ -35,9 +35,9 @@ public sealed class ConnectionCollector : ICollector
         if (context.TryGetPreviousResult<DockerDiscoveryResult>("docker", out var docker) && docker is not null)
         {
             var containers = docker.Containers.Where(container => container.MainPid > 0).ToArray();
-            if (containers.Length > 0 && context.Server.SudoCapable != true)
+            if (containers.Length > 0 && !context.Server.CanUseSudo)
             {
-                notes.Add("Container network connections were skipped because passwordless sudo is unavailable.");
+                notes.Add("Container network connections were skipped because sudo is unavailable.");
             }
             else
             {

@@ -10,7 +10,6 @@ public sealed class ServerCapabilityService(
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(10);
     private const string OsReleaseCommand = "cat /etc/os-release";
     private const string UptimeCommand = "uptime -p";
-    private const string SudoProbeCommand = "sudo -n true";
     // Admin tools such as nginx, iptables and nft live in /usr/sbin or /sbin, which a non-root SSH session's PATH often omits.
     private static readonly string[] ProbedCommands = ["docker", "nginx", "systemctl", "ss", "ip", "iptables", "nft"];
     public const string AvailableCommandsCommand = "PATH=\"$PATH:/usr/sbin:/sbin\"; for cmd in docker nginx systemctl ss ip iptables nft; do command -v \"$cmd\" >/dev/null 2>&1 && printf '%s\\n' \"$cmd\"; done";
@@ -24,7 +23,9 @@ public sealed class ServerCapabilityService(
                 new SshRunOptions(ProbeTimeout, BypassBackoff: true), cancellationToken);
             var uptime = await sshRunner.RunAsync(serverId, UptimeCommand,
                 new SshRunOptions(ProbeTimeout, BypassBackoff: true), cancellationToken);
-            var sudo = await sshRunner.RunAsync(serverId, SudoProbeCommand,
+            // `sudo -n true`, or with a stored sudo password one `sudo -S` attempt (which also lifts an earlier rejection:
+            // this is the owner's "Test connection" / "Retry now", T7.R24).
+            var sudo = await sshRunner.ProbeSudoAsync(serverId,
                 new SshRunOptions(ProbeTimeout, BypassBackoff: true), cancellationToken);
             var availableCommands = await sshRunner.RunAsync(serverId, AvailableCommandsCommand,
                 new SshRunOptions(ProbeTimeout, BypassBackoff: true), cancellationToken);
@@ -40,7 +41,8 @@ public sealed class ServerCapabilityService(
             server.RecordCapabilities(sudoCapable, osInfo, testedAt);
             await serverRepository.SaveAsync(server, cancellationToken);
             return new ServerCapabilityResult(serverId, true, osInfo, uptime.StandardOutput.Trim(), sudoCapable,
-                ParseAvailableCommands(availableCommands.StandardOutput), null, testedAt);
+                ParseAvailableCommands(availableCommands.StandardOutput), null, testedAt,
+                server.HasSudoPassword, server.HasSudoPassword && server.SudoPasswordRejectedAtUtc is not null);
         }
         catch (OperationCanceledException exception) when (exception is SshShutdownException || cancellationToken.IsCancellationRequested)
         {

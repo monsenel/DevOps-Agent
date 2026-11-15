@@ -11,6 +11,15 @@ public interface ISshTransport : IDisposable
 {
     bool IsConnected { get; }
     Task<RemoteCommandResult> ExecuteAsync(string command, TimeSpan timeout, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Runs <paramref name="command"/> and writes <paramref name="standardInput"/> to its stdin, then closes stdin (the sudo
+    /// password, T7.R24). Transports that cannot write input only accept null.
+    /// </summary>
+    Task<RemoteCommandResult> ExecuteAsync(string command, string? standardInput, TimeSpan timeout, CancellationToken cancellationToken) =>
+        standardInput is null
+            ? ExecuteAsync(command, timeout, cancellationToken)
+            : throw new NotSupportedException("This SSH transport cannot write to a command's input.");
 }
 
 public interface ISshTransportFactory
@@ -203,12 +212,37 @@ public sealed class SshNetTransport(
         }
     }
 
-    public async Task<RemoteCommandResult> ExecuteAsync(string command, TimeSpan timeout, CancellationToken cancellationToken)
+    public Task<RemoteCommandResult> ExecuteAsync(string command, TimeSpan timeout, CancellationToken cancellationToken) =>
+        ExecuteAsync(command, null, timeout, cancellationToken);
+
+    public async Task<RemoteCommandResult> ExecuteAsync(string command, string? standardInput, TimeSpan timeout, CancellationToken cancellationToken)
     {
         using var sshCommand = Client.CreateCommand(command);
         sshCommand.CommandTimeout = timeout;
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        await sshCommand.ExecuteAsync(cancellationToken);
+        var executing = sshCommand.ExecuteAsync(cancellationToken);
+        if (standardInput is not null)
+        {
+            // The input goes over the command's own channel and is closed at once, so the command sees EOF after it. Without
+            // input stdin is never opened, exactly as before.
+            var bytes = System.Text.Encoding.UTF8.GetBytes(standardInput);
+            try
+            {
+                await using var input = sshCommand.CreateInputStream();
+                await input.WriteAsync(bytes, cancellationToken);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                // The command may already have ended (a NOPASSWD rule does not read the password), or the channel failed;
+                // either way the command's own outcome below is what counts.
+            }
+            finally
+            {
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(bytes);
+            }
+        }
+
+        await executing;
         stopwatch.Stop();
         return new RemoteCommandResult(sshCommand.ExitStatus, sshCommand.Result, sshCommand.Error, stopwatch.Elapsed);
     }

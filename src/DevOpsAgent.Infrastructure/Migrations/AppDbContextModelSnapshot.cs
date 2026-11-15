@@ -698,8 +698,15 @@ namespace DevOpsAgent.Infrastructure.Migrations
                         .HasMaxLength(4096)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ProtectedSudoPassword")
+                        .HasMaxLength(4096)
+                        .HasColumnType("TEXT");
+
                     b.Property<bool?>("SudoCapable")
                         .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset?>("SudoPasswordRejectedAtUtc")
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TagsJson")
                         .IsRequired()

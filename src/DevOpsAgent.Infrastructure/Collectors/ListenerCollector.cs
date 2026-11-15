@@ -21,7 +21,7 @@ public sealed class ListenerCollector : ICollector
 
     public async Task<CollectorOutput> CollectAsync(ServerContext context, CancellationToken cancellationToken)
     {
-        var useSudo = context.Server.SudoCapable == true;
+        var useSudo = context.Server.CanUseSudo;
         var result = await context.SshRunner.RunAsync(context.Server.Id, Command,
             new SshRunOptions(CommandTimeout, useSudo), cancellationToken);
         return new CollectorOutput(result.StandardOutput, result.StandardError, result.ExitCode, result.Duration);

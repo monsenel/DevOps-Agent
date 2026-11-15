@@ -117,7 +117,7 @@ public sealed class AlertSignalSource(
                     result.Add(Condition("docker-status-unavailable", server.Id.ToString("N"), AlertSeverity.Medium, server.Id, "docker",
                         $"{server.Name}: container status could not be read",
                         "Docker refused the SSH user (permission denied on the Docker socket) and the non-interactive sudo fallback "
-                        + (server.SudoCapable == true ? "did not help" : "is not available for this server")
+                        + (server.CanUseSudo ? "did not help" : "is not available for this server")
                         + ". Container alerts for this server are not working. Add the user to the docker group or allow passwordless sudo."));
                 // A container caught "restarting" is the restart-loop rule's (medium) business, not a stopped container; paused,
                 // created and removing containers have their own rules (container history, T7.R18). Everything else
@@ -216,7 +216,7 @@ public sealed class AlertSignalSource(
             var status = RemoteServiceStatusParser.Parse(response.StandardOutput);
             // Same non-interactive sudo fallback as the metric cycle's container query, only when Docker refused the user
             // and the server is known to allow sudo. It is the same read-only command, so no server write happens.
-            if (status.Docker == DockerFailure.PermissionDenied && server.SudoCapable == true)
+            if (status.Docker == DockerFailure.PermissionDenied && server.CanUseSudo)
             {
                 try
                 {

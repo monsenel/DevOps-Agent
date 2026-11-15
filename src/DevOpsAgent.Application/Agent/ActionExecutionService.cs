@@ -18,11 +18,15 @@ public sealed record ActionServerResult(
     long DurationMilliseconds,
     string? Error,
     string? Endpoint = null,
-    bool UseSudo = false)
+    bool UseSudo = false,
+    bool SudoPassword = false)
 {
-    /// <summary>The command as the operator should review it, including the sudo wrapper that is applied when it runs.</summary>
+    /// <summary>
+    /// The command as the operator should review it, including the sudo wrapper that is applied when it runs (<c>sudo -S</c>
+    /// on a server with a stored sudo password, whose value is never part of the command).
+    /// </summary>
     [JsonIgnore]
-    public string DisplayCommand => RemoteCommand.Wrap(Command, UseSudo);
+    public string DisplayCommand => RemoteCommand.Display(Command, UseSudo, SudoPassword);
 }
 
 public sealed record ActionLogEntry(
@@ -69,7 +73,7 @@ public sealed class ActionExecutionService(
             {
                 var plan = commandBuilder.Build(action);
                 pendingCommands = targetServers.Select(server => new ActionServerResult(server.Id, server.Name, plan.Command,
-                    null, string.Empty, string.Empty, 0, null, Endpoint(server), plan.UseSudo)).ToArray();
+                    null, string.Empty, string.Empty, 0, null, Endpoint(server), plan.UseSudo, server.HasSudoPassword)).ToArray();
             }
 
             return new ActionLogEntry(action, names, results, pendingCommands);
@@ -201,15 +205,15 @@ public sealed class ActionExecutionService(
             // Output is masked before it is stored, so the Action log, chat and model never see raw secrets.
             return new(server.Id, server.Name, plan.Command, result.ExitCode,
                 ChatContentRedactor.Redact(result.StandardOutput), ChatContentRedactor.Redact(result.StandardError),
-                (long)result.Duration.TotalMilliseconds, null, Endpoint(server), plan.UseSudo);
+                (long)result.Duration.TotalMilliseconds, null, Endpoint(server), plan.UseSudo, server.HasSudoPassword);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            return new(server.Id, server.Name, plan.Command, null, string.Empty, string.Empty, 0, "Execution cancelled.", Endpoint(server), plan.UseSudo);
+            return new(server.Id, server.Name, plan.Command, null, string.Empty, string.Empty, 0, "Execution cancelled.", Endpoint(server), plan.UseSudo, server.HasSudoPassword);
         }
         catch (Exception exception)
         {
-            return new(server.Id, server.Name, plan.Command, null, string.Empty, string.Empty, 0, exception.Message, Endpoint(server), plan.UseSudo);
+            return new(server.Id, server.Name, plan.Command, null, string.Empty, string.Empty, 0, exception.Message, Endpoint(server), plan.UseSudo, server.HasSudoPassword);
         }
         finally
         {

@@ -35,7 +35,7 @@ public sealed class DockerCollector : ICollector
             return true;
         }
 
-        if (context.Server.SudoCapable != true)
+        if (!context.Server.CanUseSudo)
         {
             return false;
         }
@@ -49,7 +49,7 @@ public sealed class DockerCollector : ICollector
     {
         var errors = new List<string>();
         var duration = TimeSpan.Zero;
-        var useSudo = context.Server.SudoCapable == true;
+        var useSudo = context.Server.CanUseSudo;
 
         var containerList = await RunAsync(ContainerListCommand);
         var containerIds = ParseIds("container", containerList, errors);

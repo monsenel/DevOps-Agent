@@ -971,8 +971,12 @@ public sealed class SshConnectionPool(
 
         public void Dispose() => lease.Dispose();
 
+        public Task<RemoteCommandResult> ExecuteAsync(string command, TimeSpan timeout, CancellationToken cancellationToken) =>
+            ExecuteAsync(command, null, timeout, cancellationToken);
+
         public async Task<RemoteCommandResult> ExecuteAsync(
             string command,
+            string? standardInput,
             TimeSpan timeout,
             CancellationToken cancellationToken)
         {
@@ -1001,7 +1005,7 @@ public sealed class SshConnectionPool(
             // SSH.NET opens the command's channel synchronously, so on a session whose peer is frozen the "async" call blocks
             // its caller for up to the connect timeout. The cycles start all their hosts from one thread: started here, one
             // frozen host would hold back every host after it and a cycle would run past its deadline.
-            var running = Task.Run(() => transport.ExecuteAsync(command, timeout, linked.Token), CancellationToken.None);
+            var running = Task.Run(() => transport.ExecuteAsync(command, standardInput, timeout, linked.Token), CancellationToken.None);
             try
             {
                 var result = await running.WaitAsync(linked.Token).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);

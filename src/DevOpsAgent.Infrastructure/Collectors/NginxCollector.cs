@@ -23,7 +23,7 @@ public sealed class NginxCollector : ICollector
 
     public async Task<CollectorOutput> CollectAsync(ServerContext context, CancellationToken cancellationToken)
     {
-        var useSudo = context.Server.SudoCapable == true;
+        var useSudo = context.Server.CanUseSudo;
         var config = await context.SshRunner.RunAsync(context.Server.Id,
             Command,
             new SshRunOptions(CommandTimeout, useSudo), cancellationToken);

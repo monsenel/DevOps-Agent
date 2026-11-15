@@ -8,4 +8,6 @@ public sealed record ServerCapabilityResult(
     bool? SudoCapable,
     IReadOnlyList<string> AvailableCommands,
     string? Error,
-    DateTimeOffset TestedAtUtc);
+    DateTimeOffset TestedAtUtc,
+    bool SudoPasswordUsed = false,
+    bool SudoPasswordRejected = false);

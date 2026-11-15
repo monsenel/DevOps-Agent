@@ -67,7 +67,12 @@
                                     </div>
                                 </td>
                                 <td>@(server.JumpServerName ?? "—")</td>
-                                <td>@(server.SudoCapable is true ? "Yes" : server.SudoCapable is false ? "No" : "Not tested")</td>
+                                @{ var sudo = server.Sudo; }
+                                <td>
+                                    @* Which sudo the app uses on this server (T7.R24); the detail is the tooltip and the screen-reader text. *@
+                                    <span class="ui-badge @(sudo.Paused ? "warn" : "neutral") server-sudo" title="@sudo.Detail">@sudo.Label</span>
+                                    <span class="visually-hidden">@sudo.Detail</span>
+                                </td>
                                 <td>@(server.LastSeenAtUtc?.ToLocalTime().ToString("g") ?? "Never")</td>
                                 @{ var unreachable = Unreachable(server.Id); }
                                 <td>
@@ -84,9 +89,9 @@
                                 </td>
                                 <td>
                                     <div class="table-actions">
-                                        @if (unreachable is not null)
+                                        @if (unreachable is not null || sudo.Paused)
                                         {
-                                            @* Retry now bypasses the backoff for this server's whole route. *@
+                                            @* Retry now bypasses the backoff for this server's whole route and tries a rejected sudo password once more. *@
                                             <button class="ui-button primary compact" type="button" @onclick="() => TestConnectionAsync(server.Id)" disabled="@(_testingId == server.Id)">Retry now</button>
                                         }
                                         <button class="ui-button secondary" type="button" @onclick="() => TestConnectionAsync(server.Id)" disabled="@(_testingId == server.Id)">Test connection</button>
@@ -178,6 +183,24 @@
                         <label for="server-passphrase">Key passphrase</label>
                         <InputText id="server-passphrase" type="password" @bind-Value="_form.KeyPassphrase" autocomplete="new-password" placeholder="@(_editingId.HasValue && _hasPassphrase ? "Saved · enter to replace" : "Optional")" />
                         <span class="field-helper">Encrypted at rest. Leave blank to keep the saved passphrase.</span>
+                    </div>
+                    <div class="field">
+                        <label for="server-sudo-password">Sudo password</label>
+                        @* Write-only: the value is never rendered by the server, so neither the saved password nor what was typed
+                           is sent back to the browser (T7.R24). *@
+                        <input id="server-sudo-password" type="password" autocomplete="new-password" spellcheck="false"
+                               aria-describedby="server-sudo-password-help"
+                               placeholder="@(_editingId.HasValue && _hasSudoPassword ? "Saved · enter to replace" : "Optional")"
+                               disabled="@_form.RemoveSudoPassword"
+                               @onchange="args => _form.SudoPassword = args.Value as string" />
+                        <span class="field-helper" id="server-sudo-password-help">Only for hosts where passwordless (NOPASSWD) sudo is not possible. Encrypted at rest, never shown again. Leave blank to keep the saved password.</span>
+                        @if (_editingId.HasValue && _hasSudoPassword)
+                        {
+                            <label class="health-enabled" for="server-sudo-password-remove">
+                                <InputCheckbox id="server-sudo-password-remove" @bind-Value="_form.RemoveSudoPassword" />
+                                Remove the saved sudo password (use sudo -n)
+                            </label>
+                        }
                     </div>
                     <div class="field">
                         <label for="server-jump">Jump server</label>
@@ -332,7 +355,7 @@
                         <div><dt>Connection</dt><dd>@(_testResult.Reachable ? "Reachable" : "Unavailable")</dd></div>
                         <div><dt>Operating system</dt><dd>@(_testResult.OsInfo ?? "Not reported")</dd></div>
                         <div><dt>Uptime</dt><dd class="mono">@(_testResult.Uptime ?? "Not reported")</dd></div>
-                        <div><dt>Passwordless sudo</dt><dd>@(_testResult.SudoCapable is true ? "Available" : "Unavailable")</dd></div>
+                        <div><dt>Sudo</dt><dd>@SudoTestText(_testResult)</dd></div>
                         <div><dt>Available tools</dt><dd>@(_testResult.AvailableCommands.Count > 0 ? string.Join(", ", _testResult.AvailableCommands) : "None found")</dd></div>
                     </dl>
                 }
@@ -352,6 +375,7 @@
     private bool _saving;
     private bool _discoverAfterSave;
     private bool _hasPassphrase;
+    private bool _hasSudoPassword;
     private bool _testDialogOpen;
     private Guid? _testingId;
     private string? _testServerName;
@@ -401,6 +425,7 @@
     {
         _editingId = null;
         _hasPassphrase = false;
+        _hasSudoPassword = false;
         _formError = null;
         _form = new ServerForm();
         _discoverAfterSave = false;
@@ -420,6 +445,7 @@
         var server = _servers.Single(item => item.Id == id);
         _editingId = id;
         _hasPassphrase = server.HasKeyPassphrase;
+        _hasSudoPassword = server.HasSudoPassword;
         _formError = null;
         _form = new ServerForm
         {
@@ -463,6 +489,15 @@
     }
 
     private void CloseTestDialog() => _testDialogOpen = false;
+
+    private static string SudoTestText(ServerCapabilityResult result) => result switch
+    {
+        { SudoPasswordRejected: true } => "Password rejected — sudo paused until the password is edited or Retry now is pressed",
+        { SudoCapable: true, SudoPasswordUsed: true } => "Available (password)",
+        { SudoCapable: true } => "Available (NOPASSWD)",
+        { SudoPasswordUsed: true } => "Unavailable (sudo with the saved password failed, but not because of a wrong password)",
+        _ => "Unavailable"
+    };
 
     private void OpenImport()
     {
@@ -649,14 +684,17 @@
         {
             var input = new ServerInput(
                 _form.Name, _form.Host, _form.Port, _form.User, _form.KeyFile, _form.KeyPassphrase, _form.JumpServerId,
-                _form.Group, _form.TagsText.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
+                _form.Group, _form.TagsText.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries),
+                _form.RemoveSudoPassword ? null : _form.SudoPassword, _form.RemoveSudoPassword);
             if (_editingId is Guid id)
             {
                 _ = await ServersService.UpdateAsync(id, input, CancellationToken.None);
+                _form.SudoPassword = null;
             }
             else
             {
                 var created = await ServersService.CreateAsync(input, CancellationToken.None);
+                _form.SudoPassword = null;
                 _formOpen = false;
                 await LoadAsync();
                 if (discoverServer)
@@ -728,6 +766,8 @@
         [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Select a private key file.")]
         public string KeyFile { get; set; } = string.Empty;
         public string? KeyPassphrase { get; set; }
+        public string? SudoPassword { get; set; }
+        public bool RemoveSudoPassword { get; set; }
         public Guid? JumpServerId { get; set; }
         [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Choose a group.")]
         public string Group { get; set; } = string.Empty;

@@ -26,6 +26,7 @@ public sealed class ServerService(
         server.Update(
             input.Name.Trim(), input.Host.Trim(), input.Port, input.User.Trim(), input.KeyFile.Trim(), input.JumpServerId,
             NormalizeGroup(input.Group), SerializeTags(input.Tags), ProtectPassphrase(input.KeyPassphrase));
+        ApplySudoPassword(server, input);
         await repository.AddAsync(server, cancellationToken);
         return ToSummary(server, servers.Append(server));
     }
@@ -46,6 +47,8 @@ public sealed class ServerService(
         server.Update(
             input.Name.Trim(), input.Host.Trim(), input.Port, input.User.Trim(), input.KeyFile.Trim(), input.JumpServerId,
             NormalizeGroup(input.Group), SerializeTags(input.Tags), ProtectPassphrase(input.KeyPassphrase));
+        // A new or removed sudo password also ends a rejection (T7.R24); the SSH connection itself is not affected by it.
+        ApplySudoPassword(server, input);
         await repository.SaveAsync(server, cancellationToken);
         // Only a change to how the server is reached invalidates the pooled session; renaming or retagging a server
         // must not kill live sessions (for example a running package update).
@@ -157,6 +160,25 @@ public sealed class ServerService(
         {
             throw new ArgumentException("Tags cannot be empty.", nameof(input));
         }
+
+        // sudo -S reads one line, so a line break would end the password early. The value is never echoed in a message.
+        if (!string.IsNullOrEmpty(input.SudoPassword))
+        {
+            if (input.SudoPassword.Length > MaxSudoPasswordLength)
+                throw new ArgumentException($"The sudo password can be at most {MaxSudoPasswordLength} characters.", nameof(input));
+            if (input.SudoPassword.Any(character => character is '\n' or '\r' or '\0'))
+                throw new ArgumentException("The sudo password cannot contain line breaks.", nameof(input));
+            if (input.RemoveSudoPassword)
+                throw new ArgumentException("Enter a new sudo password or remove the saved one, not both.", nameof(input));
+        }
+    }
+
+    public const int MaxSudoPasswordLength = 512;
+
+    private void ApplySudoPassword(Server server, ServerInput input)
+    {
+        if (!string.IsNullOrEmpty(input.SudoPassword)) server.SetSudoPassword(secretProtector.Protect(input.SudoPassword));
+        else if (input.RemoveSudoPassword) server.ClearSudoPassword();
     }
 
     private string? ProtectPassphrase(string? passphrase) => string.IsNullOrWhiteSpace(passphrase)
@@ -198,5 +220,7 @@ public sealed class ServerService(
         JsonSerializer.Deserialize<string[]>(server.TagsJson) ?? [],
         server.SudoCapable,
         server.LastSeenAtUtc,
-        server.OsInfo);
+        server.OsInfo,
+        server.HasSudoPassword,
+        server.SudoPasswordRejectedAtUtc);
 }

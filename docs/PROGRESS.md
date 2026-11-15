@@ -18,7 +18,7 @@
 
 ## WIP notes
 
-None.
+T7.R24 (sudo password): implementation compiled, existing tests green. Done: `Server.ProtectedSudoPassword` / `SudoPasswordRejectedAtUtc` / `CanUseSudo` + migration `AddServerSudoPassword`; stdin overloads on `ISshTransport` / `ISshCommandSession` (SSH.NET `CreateInputStream`); `RemoteCommand.WrapWithSudoPassword` (`LC_ALL=C sudo -S -p '' -- sh -c '…'`) and `SudoPasswordProbe`; `SudoPasswordGate` (read fresh per call, one password sudo per server at a time for a 15 s authentication window, rejection recorded before the turn is released, paused calls return exit 1 + fixed text without contacting the server, every command's output redacted); `ISshRunner.ProbeSudoAsync` (owner probe lifts a rejection, one attempt); `ServerService` set/replace/remove + validation; `ServerRepository.GetAsync` reloads an already tracked entity (Blazor circuit DbContext); call sites use `CanUseSudo`; action previews show the real wrapper; Servers page label/field/Retry now. Next: unit tests (`SudoPasswordTests`), live lab run, DECISIONS D-040, README.
 
 The 2026-11-15 review fixed small issues in `fix(review): …` commits (build 0 warnings, 342/342 tests), applied the owner's decisions (D-026–D-031) and filed the larger findings as T7.R tasks in PLAN.md › M7.
 
