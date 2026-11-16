@@ -26,6 +26,7 @@ function tokens() {
 // Layout constants of a server card, in graph pixels (the card is a compound node; its size comes from its children).
 const CARD = { pad: 14, gap: 8, rowH: 34, rowMinW: 180, rowPadX: 32, headerH: 30, icon: 20, iconGap: 8, captionH: 26, unknownPadX: 28 };
 const CLIENTS_ID = "servers-view:clients";
+const UNKNOWN_HOST_PREFIX = "servers-view:unknown:";
 const headerId = boxId => `servers-view:header:${boxId}`;
 
 // Names are matched at their start, after a leading path, and end at a separator or the end: "redis-server", "postgresql@15-main.service"
@@ -45,7 +46,9 @@ const ROLES = {
     app: { title: "Application server", icon: "server", token: "roleApp" },
     data: { title: "Data server", icon: "database", token: "roleData" },
     ci: { title: "Git / CI server", icon: "code", token: "roleCi" },
-    clients: { title: "Internet / Clients", icon: "users", token: "roleClients" }
+    clients: { title: "Internet / Clients", icon: "users", token: "roleClients" },
+    // Not a detected role: the card of an address that is not in the inventory.
+    unknownHost: { title: "Unknown host", icon: "server", token: "warn" }
 };
 
 // Stroke icons on a 24 x 24 grid, drawn in the role colour.
@@ -170,10 +173,11 @@ function applySegmentStyles() {
 // Styles of the Servers view. Everything that depends on a token is built here, so a theme change (which runs applyStyles
 // again) also regenerates the role colours and the icon images.
 function serversStyles(c) {
+    const cards = 'node[kind = "Host"], node[kind = "Clients"], node[?unknownHost]';
     const rules = [
         // The card: a compound node, with a soft glow made of its outline. Its size comes from the header and rows inside it plus the padding; its own label is the
         // caption above it and must not widen it.
-        { selector: 'node[kind = "Host"], node[kind = "Clients"]', style: {
+        { selector: cards, style: {
             "background-color": c.card, "border-width": 1.75, "border-style": "solid", "shape": "round-rectangle",
             "corner-radius": 18, "padding": CARD.pad, "compound-sizing-wrt-labels": "exclude",
             "label": "data(displayLabel)", "text-valign": "top", "text-halign": "center",
@@ -181,7 +185,7 @@ function serversStyles(c) {
             "font-family": c.mono, "font-size": 12, "font-weight": 400, "color": c.muted,
             "outline-width": 5, "outline-opacity": 0.18, "outline-offset": 0, "outline-style": "solid"
         } },
-        { selector: 'node[kind = "Clients"]', style: { "border-style": "dashed", "outline-opacity": 0.07 } },
+        { selector: 'node[kind = "Clients"], node[?unknownHost]', style: { "border-style": "dashed", "outline-opacity": 0.07 } },
         { selector: 'node[kind = "HostHeader"]', style: {
             "shape": "rectangle", "background-opacity": 0, "border-width": 0, "padding": 0,
             "width": "data(w)", "height": "data(h)", "label": "data(displayLabel)",
@@ -193,18 +197,19 @@ function serversStyles(c) {
             "background-width": `${CARD.icon}px`, "background-height": `${CARD.icon}px`,
             "background-fit": "none", "background-clip": "none"
         } },
-        // A service or container row (and a domain row in the clients card), one pill under the header.
+        // An unknown endpoint without an address stands alone; an unknown row (below) is styled by the row rules.
+        { selector: 'node[kind = "Unknown"][!unknownHost]', style: { "padding": 0, "width": "data(w)", "height": "data(h)", "text-wrap": "wrap", "text-max-width": 400 } },
+        // A service or container row (and a domain or unknown-port row in the clients and unknown cards), one pill under the header.
         { selector: "node[?row]", style: {
-            "shape": "round-rectangle", "corner-radius": 10, "background-color": c.bg, "border-width": 1, "border-color": c.line,
+            "shape": "round-rectangle", "corner-radius": 10, "background-color": c.bg, "border-width": 1, "border-style": "solid", "border-color": c.line,
             "padding": 0, "width": "data(w)", "height": "data(h)", "label": "data(displayLabel)", "text-wrap": "none",
             "text-halign": "center", "text-valign": "center", "font-family": c.font, "font-size": 13, "font-weight": 500, "color": c.ink
         } },
-        { selector: 'node[?row][kind = "Domain"]', style: { "font-family": c.mono, "font-size": 12 } },
-        { selector: 'node[kind = "Unknown"]', style: { "padding": 0, "width": "data(w)", "height": "data(h)", "text-wrap": "wrap", "text-max-width": 400 } }
+        { selector: 'node[?row][kind = "Domain"], node[?row][kind = "Unknown"]', style: { "font-family": c.mono, "font-size": 12 } }
     ];
     for (const [role, definition] of Object.entries(ROLES)) {
         const color = c[definition.token];
-        rules.push({ selector: `node[kind = "Host"][role = "${role}"], node[kind = "Clients"][role = "${role}"]`,
+        rules.push({ selector: `node[kind = "Host"][role = "${role}"], node[kind = "Clients"][role = "${role}"], node[?unknownHost][role = "${role}"]`,
             style: { "border-color": color, "outline-color": color } });
         rules.push({ selector: `node[kind = "HostHeader"][role = "${role}"]`, style: { "background-image": iconUri(definition.icon, color) } });
     }
@@ -378,6 +383,31 @@ function placeInTree(node, byId, hostByServer) {
     return host ? { box: host, row: top.id } : { box: top.id, row: null };
 }
 
+// The address an unknown endpoint is grouped by: trimmed, lowercase, without IPv6 brackets. Empty when it has none.
+function unknownAddress(node) {
+    const address = node.attributes?.Address;
+    return typeof address === "string" ? address.trim().toLocaleLowerCase().replace(/^\[|\]$/g, "") : "";
+}
+
+// Unknown endpoints with the same address are one machine: one card, one row per port. Nodes with the same address and port
+// (seen by different servers) are one row; the first by id is the row, the others are aliased to it.
+function groupUnknownHosts(nodes) {
+    const groups = new Map();
+    for (const node of nodes.filter(node => node.kind === "Unknown" && unknownAddress(node)).sort((a, b) => a.id.localeCompare(b.id))) {
+        const address = unknownAddress(node);
+        let group = groups.get(address);
+        if (!group) {
+            group = { id: `${UNKNOWN_HOST_PREFIX}${address}`, address, members: [], ports: new Map() };
+            groups.set(address, group);
+        }
+        const port = Number.isFinite(Number(node.attributes?.Port)) && node.attributes?.Port !== null && node.attributes?.Port !== "" ? String(Number(node.attributes.Port)) : "";
+        if (!group.ports.has(port)) group.ports.set(port, { row: node, nodes: [] });
+        group.ports.get(port).nodes.push(node);
+        group.members.push(node);
+    }
+    return groups;
+}
+
 function buildServers(elements, alertStatuses, serverInfo, c) {
     const nodes = [];
     const edges = [];
@@ -391,6 +421,12 @@ function buildServers(elements, alertStatuses, serverInfo, c) {
             && namesOf(node).some(name => ROLE_PATTERNS.proxy.test(name))) proxyRowByHost.set(parent.id, node.id);
     }
     const alias = new Map(nodes.map(node => [node.id, place(node, byId, hostByServer, proxyRowByHost)]));
+    const unknownHosts = groupUnknownHosts(nodes);
+    for (const group of unknownHosts.values()) {
+        for (const { row, nodes: sameRow } of group.ports.values()) {
+            for (const node of sameRow) alias.set(node.id, { box: group.id, row: row.id });
+        }
+    }
 
     // Boxes: servers, unknown endpoints, nodes without a host, and one clients card for all domains.
     const boxes = new Map();
@@ -403,6 +439,22 @@ function buildServers(elements, alertStatuses, serverInfo, c) {
     if (nodes.some(node => node.kind === "Domain")) {
         boxes.set(CLIENTS_ID, { id: CLIENTS_ID, kind: "clients", node: { id: CLIENTS_ID, kind: "Clients", label: "Internet / Clients" }, rows: [] });
     }
+    for (const group of unknownHosts.values()) {
+        // The card answers the details panel like an unknown node: its address and the observer for "Add this server".
+        const first = group.members.find(node => node.serverId) || group.members[0];
+        const rowLabels = new Map();
+        const rows = [...group.ports.entries()].sort(([a], [b]) => (a === "") - (b === "") || Number(a) - Number(b)).map(([port, entry]) => {
+            rowLabels.set(entry.row.id, port ? `:${port}` : "no port");
+            // A row stands for all unknown nodes with this address and port, so its connections are theirs together.
+            return { ...entry.row, memberNodeIds: entry.nodes.map(node => node.id) };
+        });
+        boxes.set(group.id, {
+            id: group.id, kind: "unknownHost", rows, rowLabels, address: first.attributes.Address,
+            node: { id: group.id, kind: "Unknown", label: "Unknown host", serverId: first.serverId, attributes: { Address: first.attributes.Address },
+                memberNodeIds: group.members.map(node => node.id) },
+            allStale: group.members.every(node => node.attributes?.Stale === true)
+        });
+    }
     const rowNames = new Map();
     const rowSearch = new Map();
     const cardSearch = new Map();
@@ -414,7 +466,7 @@ function buildServers(elements, alertStatuses, serverInfo, c) {
             if (placed.box !== node.id) cardSearch.set(placed.box, `${cardSearch.get(placed.box) || ""}\n${json}`);
             continue;
         }
-        if (placed.row === node.id) boxes.get(placed.box)?.rows.push(node);
+        if (placed.row === node.id && boxes.get(placed.box)?.kind !== "unknownHost") boxes.get(placed.box)?.rows.push(node);
         rowNames.set(placed.row, [...(rowNames.get(placed.row) || []), ...namesOf(node)]);
         rowSearch.set(placed.row, `${rowSearch.get(placed.row) || ""}\n${json}`);
     }
@@ -461,25 +513,28 @@ function buildServers(elements, alertStatuses, serverInfo, c) {
     for (const box of boxes.values()) {
         const attributes = box.node.attributes || {};
         const alert = box.kind === "host" ? alertStatuses[box.node.serverId] || "" : "";
-        const stale = box.kind !== "clients" && attributes.Stale === true;
+        const stale = box.kind === "unknownHost" ? box.allStale : box.kind !== "clients" && attributes.Stale === true;
         box.stale = stale;
         box.alert = alert;
         box.ownSearch = JSON.stringify(box.node).toLocaleLowerCase() + (cardSearch.get(box.id) || "");
-        if (box.kind === "host" || box.kind === "clients") {
-            const info = serverInfo[box.node.serverId] || {};
-            box.role = box.kind === "clients" ? "clients" : detectRole(box.rows.map(row => rowNames.get(row.id) || []), {
-                fromClients: fromClients.has(box.id), dataPorts: (incomingPorts.get(box.id) || []).some(port => DATA_PORTS.has(port))
-            });
+        if (box.kind === "host" || box.kind === "clients" || box.kind === "unknownHost") {
+            // The observer's server info does not describe an unknown host.
+            const info = box.kind === "unknownHost" ? {} : serverInfo[box.node.serverId] || {};
+            box.role = box.kind === "clients" ? "clients" : box.kind === "unknownHost" ? "unknownHost"
+                : detectRole(box.rows.map(row => rowNames.get(row.id) || []), {
+                    fromClients: fromClients.has(box.id), dataPorts: (incomingPorts.get(box.id) || []).some(port => DATA_PORTS.has(port))
+                });
             box.name = box.node.label || "";
             const address = info.address || (Array.isArray(attributes.Addresses) ? attributes.Addresses[0] : "");
-            const parts = box.kind === "host" ? [ROLES[box.role].title, address, info.os] : [];
+            const parts = box.kind === "host" ? [ROLES[box.role].title, address, info.os]
+                : box.kind === "unknownHost" ? ["Not in inventory", box.address] : [];
             if (alert) parts.push(`${alert} alert`);
             if (stale) parts.push(staleText(attributes.LastSeenUtc));
             box.caption = parts.filter(Boolean).join(" • ");
             box.ownSearch += ` ${JSON.stringify(info)}`.toLocaleLowerCase();
             // All rows of a card share one width: the longest label plus padding, at least the minimum, at least the header.
-            const rowFont = box.kind === "clients" ? font.domain : font.row;
-            const labelWidth = Math.max(0, ...box.rows.map(row => textWidth(row.label || "", rowFont)));
+            const rowFont = box.kind === "host" ? font.row : font.domain;
+            const labelWidth = Math.max(0, ...box.rows.map(row => textWidth(rowLabel(box, row), rowFont)));
             box.headerW = CARD.icon + CARD.iconGap + textWidth(box.name, font.header);
             box.inner = box.rows.length === 0 ? box.headerW : Math.max(box.headerW, CARD.rowMinW, labelWidth + CARD.rowPadX);
             box.w = box.inner + 2 * CARD.pad;
@@ -505,6 +560,9 @@ function buildServers(elements, alertStatuses, serverInfo, c) {
 
     return { boxes, aggregated, rowSearch, model: { alias, edgeAlias, boxes, rowSearch } };
 }
+
+// The text of a row: its name, or ":8080" / "no port" in an unknown host card.
+const rowLabel = (box, row) => box.rowLabels?.get(row.id) ?? row.label ?? "";
 
 // Positions the top-level boxes with ELK (layered, left to right) and routes the edges; resolves to the top left corner of every
 // box's slot and the bend points of every edge (an edge that skips a layer gets some, so it goes around the cards in between).
@@ -573,7 +631,7 @@ function serversElements(built, layout) {
         const top = origin.y + (box.caption ? CARD.captionH : 0);
         result.push({ data: {
             ...box.node, parent: null, role: box.role, displayLabel: box.caption, alertSeverity: box.alert, stale,
-            captionDx: (box.captionW - box.w) / 2 + 4
+            captionDx: (box.captionW - box.w) / 2 + 4, unknownHost: box.kind === "unknownHost" ? true : undefined
         } });
         result.push({ data: {
             id: headerId(box.id), kind: "HostHeader", hostId: box.id, role: box.role, parent: box.id, label: box.name,
@@ -582,7 +640,7 @@ function serversElements(built, layout) {
         selectable: false, grabbable: false });
         box.rows.forEach((row, index) => {
             result.push({ data: {
-                ...row, parent: box.id, row: true, displayLabel: row.label || "", w: box.inner, h: CARD.rowH,
+                ...row, parent: box.id, row: true, displayLabel: rowLabel(box, row), w: box.inner, h: CARD.rowH,
                 stale: row.attributes?.Stale === true ? "stale" : ""
             }, position: {
                 x: origin.x + CARD.pad + box.inner / 2,

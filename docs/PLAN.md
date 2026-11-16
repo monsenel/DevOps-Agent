@@ -444,7 +444,7 @@ Owner order 2026-11-16: T8.1–T8.9 in order, one commit each, AGENTS.md §2, DE
 - **Depends on:** T2.x graph, T8.2
 
 
-### T8.12 One box per unknown machine in the Servers view (owner request, 2026-11-16)
+### T8.12 One box per unknown machine in the Servers view (owner request, 2026-11-16) — done (D-047)
 - **Do:** In the Servers view, all Unknown endpoints with the same address are one dashed card (a VM not in the inventory, usually with several containers/services): caption "Not in inventory • <address>", header "Unknown host" with the address, one row per port (":8080", or "no port"); duplicates of the same address and port from different observers are one row. Edges to it are merged per server pair like other cards. Selecting the card offers "Add this server" and lists all its connections; selecting a row shows that endpoint as today.
 - **Done when:** Checked in a browser on a graph with several ports per unknown address; build 0 warnings, tests green.
 - **Depends on:** T8.11

@@ -243,6 +243,9 @@
     // The card the Servers view draws around all domains (graph.js); it is not a graph node.
     private const string ClientsCardId = "servers-view:clients";
 
+    // The card the Servers view draws for all unknown endpoints with one address (graph.js).
+    private const string UnknownHostCardPrefix = "servers-view:unknown:";
+
     private ElementReference _graphHost;
     private IJSObjectReference? _graphModule;
     private DotNetObjectReference<Topology>? _dotNetReference;
@@ -274,15 +277,22 @@
     private IReadOnlyList<GraphListenerDto> _selectedListeners = [];
     private IReadOnlyList<GraphEvidenceDto> _selectedEvidence = [];
     private IReadOnlyDictionary<string, string> _serverAlertStatuses = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-    private IReadOnlyList<UnknownConnection> SelectedConnections => _graph is null || _selected is not JsonElement selected
-        || !IsUnknown(selected) || ReadString(selected, "id") is not string unknownId
-        ? []
-        : _graph.Edges.Select(edge => edge.Data)
-            .Where(edge => ReadString(edge, "source") == unknownId || ReadString(edge, "target") == unknownId)
-            .Select(edge => ReadString(edge, "source") == unknownId
-                ? new UnknownConnection("Connects to", FindNodeName(ReadString(edge, "target") ?? "") ?? "Unknown endpoint", ReadValue(edge, "port"))
-                : new UnknownConnection("Connected from", FindNodeName(ReadString(edge, "source") ?? "") ?? "Unknown endpoint", ReadValue(edge, "port")))
-            .ToArray();
+    // The connections of an unknown endpoint. In the Servers view the unknown host card (and each of its rows) stands for several
+    // unknown nodes, named in "memberNodeIds"; their connections are listed together.
+    private IReadOnlyList<UnknownConnection> SelectedConnections
+    {
+        get
+        {
+            if (_graph is null || _selected is not JsonElement selected || !IsUnknown(selected) || ReadString(selected, "id") is not string unknownId) return [];
+            var ids = new HashSet<string>(ReadStringList(selected, "memberNodeIds"), StringComparer.OrdinalIgnoreCase) { unknownId };
+            return _graph.Edges.Select(edge => edge.Data)
+                .Where(edge => ids.Contains(ReadString(edge, "source") ?? "") || ids.Contains(ReadString(edge, "target") ?? ""))
+                .Select(edge => ids.Contains(ReadString(edge, "source") ?? "")
+                    ? new UnknownConnection("Connects to", EndpointName(ReadString(edge, "target") ?? "") ?? "Unknown endpoint", ReadValue(edge, "port"))
+                    : new UnknownConnection("Connected from", EndpointName(ReadString(edge, "source") ?? "") ?? "Unknown endpoint", ReadValue(edge, "port")))
+                .ToArray();
+        }
+    }
     // An edge of the Servers view stands for all connections between two cards; these are the connections it contains.
     private IReadOnlyList<EdgeConnection> SelectedMemberConnections
     {
@@ -307,7 +317,9 @@
         .ToArray();
     private string SelectedTitle => _selected is JsonElement selected && IsEdge(selected)
         ? $"{EndpointName(ReadString(selected, "source") ?? "") ?? "Source"} {(MemberEdgeIds(selected).Count > 0 ? "↔" : "→")} {EndpointName(ReadString(selected, "target") ?? "") ?? "Target"}"
-        : _selected is JsonElement node ? ReadString(node, "label") ?? ReadString(node, "kind") ?? "Selected node" : "Node or edge details";
+        : _selected is JsonElement node && ReadString(node, "id") is string cardId && cardId.StartsWith(UnknownHostCardPrefix, StringComparison.Ordinal)
+            ? $"Unknown host · {UnknownHostAddress(node)}"
+        : _selected is JsonElement other ? ReadString(other, "label") ?? ReadString(other, "kind") ?? "Selected node" : "Node or edge details";
     private int ProgressPercent => _servers.Count == 0 ? (_discovering ? 15 : 0) : _completedServers * 100 / _servers.Count;
     private string GraphSummary => _graph is null
         ? "Run discovery to build a map of your servers and services."
@@ -658,17 +670,28 @@
             if (edgeIds.Count == 0 && Guid.TryParseExact(ReadString(entity, "id"), "N", out var edgeId)) edgeIds = [edgeId];
             _selectedEvidence = _graph.Evidence.Where(item => item.EdgeId is Guid id && edgeIds.Contains(id)).ToArray();
         }
-        else if (Guid.TryParseExact(ReadString(entity, "id"), "N", out var nodeId))
+        else
         {
-            _selectedListeners = _graph.Listeners.Where(listener => listener.NodeId == nodeId).ToArray();
-            _selectedEvidence = _graph.Evidence.Where(item => item.NodeId == nodeId).ToArray();
+            // An unknown host card (or one of its rows) stands for several nodes: show what all of them have.
+            var nodeIds = ReadGuidSet(entity, "memberNodeIds");
+            if (Guid.TryParseExact(ReadString(entity, "id"), "N", out var nodeId)) nodeIds.Add(nodeId);
+            _selectedListeners = _graph.Listeners.Where(listener => nodeIds.Contains(listener.NodeId)).ToArray();
+            _selectedEvidence = _graph.Evidence.Where(item => item.NodeId is Guid id && nodeIds.Contains(id)).ToArray();
         }
     }
 
-    private static HashSet<Guid> MemberEdgeIds(JsonElement edge) => TryGetProperty(edge, "memberEdgeIds", out var members) && members.ValueKind == JsonValueKind.Array
-        ? members.EnumerateArray().Select(member => member.ValueKind == JsonValueKind.String && Guid.TryParseExact(member.GetString(), "N", out var id) ? id : Guid.Empty)
-            .Where(id => id != Guid.Empty).ToHashSet()
+    private static HashSet<Guid> MemberEdgeIds(JsonElement edge) => ReadGuidSet(edge, "memberEdgeIds");
+
+    private static HashSet<Guid> ReadGuidSet(JsonElement element, string property) => ReadStringList(element, property)
+        .Select(value => Guid.TryParseExact(value, "N", out var id) ? id : Guid.Empty).Where(id => id != Guid.Empty).ToHashSet();
+
+    private static IEnumerable<string> ReadStringList(JsonElement element, string property) => TryGetProperty(element, property, out var values) && values.ValueKind == JsonValueKind.Array
+        ? values.EnumerateArray().Where(value => value.ValueKind == JsonValueKind.String).Select(value => value.GetString()!)
         : [];
+
+    private static string UnknownHostAddress(JsonElement card) => TryGetProperty(card, "attributes", out var attributes) && ReadString(attributes, "Address") is { Length: > 0 } address
+        ? address
+        : (ReadString(card, "id") ?? string.Empty)[UnknownHostCardPrefix.Length..];
 
     // Per server: the operating system and the primary address, for the caption above its card in the Servers view.
     private Dictionary<string, object> BuildServerInfo() => _servers.ToDictionary(server => server.Id.ToString("N"),
@@ -776,6 +799,7 @@
     // address (every unknown node is labelled "Unknown").
     private string? EndpointName(string id) => id == ClientsCardId
         ? "Internet / Clients"
+        : id.StartsWith(UnknownHostCardPrefix, StringComparison.Ordinal) ? $"Unknown host · {id[UnknownHostCardPrefix.Length..]}"
         : _graph?.Nodes.Select(element => element.Data)
             .FirstOrDefault(data => string.Equals(ReadString(data, "id"), id, StringComparison.OrdinalIgnoreCase)) is JsonElement node
                 ? ReadString(node, "kind") == "Unknown" ? GraphNodeLabel.Describe(node) : ReadString(node, "label")
