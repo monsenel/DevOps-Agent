@@ -99,6 +99,33 @@ public sealed class ManagedKnownHostsTests : IDisposable
         Assert.False(File.Exists(Managed)); // a manually listed host is never recorded
     }
 
+    [Theory]
+    [InlineData("db.test ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI!!damaged!!")]
+    [InlineData("db.test ssh-ed25519")]
+    [InlineData("db.test")]
+    public async Task ADamagedLineForAHost_RefusesItInsteadOfMakingItUnknown(string damaged)
+    {
+        File.WriteAllText(Manual, damaged + "\n");
+        Directory.CreateDirectory(Path.GetDirectoryName(Managed)!);
+        File.WriteAllText(Managed, damaged.Replace("db.test", "managed.test", StringComparison.Ordinal) + "\n");
+        var store = Store();
+
+        foreach (var host in new[] { "db.test", "managed.test" })
+        {
+            Assert.Equal(HostKeyDecision.Mismatch, store.Check(host, 22, "ssh-ed25519", KeyA)); // not trusted on first use
+            Assert.Equal("unreadable entry", Assert.Single(store.GetKeys(host, 22)).Fingerprint);
+        }
+
+        var before = File.ReadAllText(Managed);
+        await store.RecordFirstUseAsync("managed.test", 22, "ssh-ed25519", KeyA, CancellationToken.None);
+        Assert.Equal(before, File.ReadAllText(Managed)); // nothing recorded beside the damaged line
+
+        // The owner can still replace the app's own damaged line, after looking at the fingerprint.
+        await store.AcceptPresentedKeyAsync("managed.test", 22, ManagedKnownHosts.Fingerprint(KeyA), CancellationToken.None);
+        Assert.Equal(HostKeyDecision.Trusted, store.Check("managed.test", 22, "ssh-ed25519", KeyA));
+        Assert.Single(File.ReadAllLines(Managed));
+    }
+
     [Fact]
     public async Task HashedNamesAndPatternsInTheOwnersFile_PinTheirHosts_SoNoneIsTrustedOnFirstUse()
     {

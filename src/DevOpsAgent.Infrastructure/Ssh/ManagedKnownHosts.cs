@@ -118,7 +118,8 @@ public sealed class ManagedKnownHosts(IOptions<SshConnectionOptions> options, Ti
         $"{(port == 22 ? host : $"[{host}]:{port.ToString(CultureInfo.InvariantCulture)}")} {keyType} {Convert.ToBase64String(key)} "
         + $"{FirstSeenTag}{timeProvider.GetUtcNow().UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture)}";
 
-    private static HostKeyInfo Info(KnownHostLine entry, bool manual) => new(entry.KeyType, Fingerprint(entry.KeyData),
+    private static HostKeyInfo Info(KnownHostLine entry, bool manual) => new(entry.KeyType,
+        entry.KeyData.Length == 0 ? "unreadable entry" : Fingerprint(entry.KeyData),
         !manual && entry.Comment is { } comment && comment.StartsWith(FirstSeenTag, StringComparison.Ordinal)
             && DateTimeOffset.TryParse(comment[FirstSeenTag.Length..], CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var seen)
             ? seen : null,
@@ -209,15 +210,17 @@ internal static class KnownHostsLines
         var trimmed = line.Trim();
         if (trimmed.Length == 0 || trimmed.StartsWith('#') || trimmed.StartsWith('@')) return null;
         var fields = trimmed.Split((char[]?)null, 4, StringSplitOptions.RemoveEmptyEntries);
-        if (fields.Length < 3) return null;
+        var names = fields[0].Split(',', StringSplitOptions.RemoveEmptyEntries);
+        // A line that names a host but whose key cannot be read (truncated, damaged base64) still pins it: with no key to
+        // match, the host is refused. Skipping the line would make the host unknown, trusted on first use and re-recorded.
+        if (fields.Length < 3) return new KnownHostLine(names, fields.Length > 1 ? fields[1] : string.Empty, [], null);
         try
         {
-            return new KnownHostLine(fields[0].Split(',', StringSplitOptions.RemoveEmptyEntries), fields[1],
-                Convert.FromBase64String(fields[2]), fields.Length > 3 ? fields[3].Trim() : null);
+            return new KnownHostLine(names, fields[1], Convert.FromBase64String(fields[2]), fields.Length > 3 ? fields[3].Trim() : null);
         }
         catch (FormatException)
         {
-            return null;
+            return new KnownHostLine(names, fields[1], [], null);
         }
     }
 }
