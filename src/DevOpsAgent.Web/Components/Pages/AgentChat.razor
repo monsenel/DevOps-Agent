@@ -59,7 +59,7 @@
             <div class="chat-error" role="alert">@_error</div>
         }
 
-        <div class="chat-messages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Conversation messages">
+        <div class="chat-messages" tabindex="0" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Conversation messages">
             @if (_messages.Count == 0 && !_isSending)
             {
                 <div class="chat-empty-state">
@@ -129,7 +129,7 @@
 
         <form class="chat-composer" @onsubmit="SendAsync" @onsubmit:preventDefault>
             <label for="chat-prompt">Message</label>
-            <textarea id="chat-prompt" @bind="_draft" @bind:event="oninput" placeholder="Ask a question…" rows="3" disabled="@_isSending"></textarea>
+            <textarea id="chat-prompt" @bind="_draft" @bind:event="oninput" placeholder="Ask a question… (Enter sends, Shift+Enter adds a line)" rows="3" disabled="@_isSending"></textarea>
             @if (_pending.Count > 0)
             {
                 <ul class="chat-attachment-chips" aria-label="Files to send">

@@ -2402,12 +2402,19 @@ p {
 
 .chat-messages {
     display: flex;
-    flex: 1;
-    min-height: 300px;
+    /* A fixed height: a long conversation scrolls inside the box instead of stretching the page (chat.js keeps the end in view). */
+    flex: none;
+    height: clamp(320px, 58vh, 640px);
     flex-direction: column;
     gap: 14px;
     overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 4px;
+}
+
+.chat-messages:focus-visible {
+    outline: 2px solid var(--dva-accent);
+    outline-offset: 2px;
 }
 
 .chat-empty-state {
