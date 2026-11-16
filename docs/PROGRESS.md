@@ -12,7 +12,7 @@
 
 ## Current
 
-- **Task:** T8.16 done. T7.R4 and T7.R16 still held by the owner; open review tasks below.
+- **Task:** T8.17 the agent's own SSH session (owner report). T7.R4 and T7.R16 still held by the owner; open review tasks below.
 - **Status:** T8.1–T8.16 done; v0.2.0 tagged locally (before T8.10 and the review-r4 fixes)
 - **Last updated:** 2026-11-16 by ZCode (review-r4 of T7.R25–T8.9: fixes committed, T7.R27–T7.R30 filed)
 
@@ -167,6 +167,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T8.14 | nginx `set` variables in proxy targets | done | `feat(T8.14): proxy targets written as an nginx set variable resolve to its value` |
 | T8.15 | BusyBox hosts: addresses and listeners | done | `feat(T8.15): BusyBox hosts get addresses, routes, listeners and connections from ip/netstat text output` |
 | T8.16 | External clients are not a hop on the Servers view | done | `feat(T8.16): an address that only connects to servers is one External client card with one row, in the first layer` |
+| T8.17 | The agent's own SSH session is not on the map | in-progress | |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
 
@@ -396,3 +397,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-16 · ZCode · T8.15 · BusyBox fallbacks (ip -o addr, ip route, netstat -tulpn/-tuln, netstat -tn) checked on real BusyBox 1.37 output; lab discovery unchanged; build 0 warnings, 756 tests (D-050)
 - 2026-11-16 · ZCode · T8.16 · started (owner: the card between Kartio-nginx and map is an external client's ephemeral source ports, drawn as if it were a hop)
 - 2026-11-16 · ZCode · T8.16 · External client card (one `client · N connections` row, first layer); checked on a copy of the owner's graph; build 0 warnings, 756 tests (D-051)
+- 2026-11-16 · ZCode · T8.17 · started (owner: the External client with SSH 22 to the map server is wrong; it is the agent's own SSH session)
