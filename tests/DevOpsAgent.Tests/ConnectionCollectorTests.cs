@@ -61,6 +61,81 @@ public sealed class ConnectionCollectorTests
         Assert.Equal(2, parsed.Data!.Value.GetProperty("Connections").GetArrayLength());
     }
 
+    [Fact]
+    public void Parse_BusyBoxNetstatFixtureReadsOnlyEstablishedTcpConnections()
+    {
+        var result = ConnectionCollectorParser.Parse(
+            File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "busybox-netstat-tn.txt")));
+
+        Assert.Equal(4, result.Connections.Count);
+        Assert.All(result.Connections, item => Assert.Equal("ESTAB", item.State));
+        Assert.Contains(result.Connections, item => item.Namespace == "host" && item.Protocol == "tcp"
+            && item.LocalAddress == "192.168.20.5" && item.LocalPort == 80
+            && item.PeerAddress == "192.168.20.9" && item.PeerPort == 51234);
+        Assert.Contains(result.Connections, item => item.LocalPort == 43210 && item.PeerAddress == "10.10.0.4"
+            && item.PeerPort == 5432);
+        Assert.Contains(result.Connections, item => item.PeerPort == 51236 && item.LocalAddress == "192.168.20.5"
+            && item.PeerAddress == "192.168.20.9");
+        Assert.DoesNotContain(result.Connections, item => item.PeerPort == 51240);
+    }
+
+    [Fact]
+    public async Task CollectAsync_FallsBackToNetstatWhenSsIsMissing()
+    {
+        var runner = new NoSsRunner();
+        var collector = new ConnectionCollector();
+        var context = new ServerContext(new Server("alpine", "alpine.test", 22, "deploy", "key", "staging"), runner);
+
+        Assert.True(await collector.IsApplicableAsync(context, CancellationToken.None));
+        var output = await collector.CollectAsync(context, CancellationToken.None);
+        var parsed = collector.Parse(output);
+
+        Assert.Equal(
+            ["command -v ss >/dev/null 2>&1", "command -v netstat >/dev/null 2>&1", "ss -tnH state established", "netstat -tn"],
+            runner.Commands);
+        Assert.Equal(0, output.ExitCode);
+        Assert.True(parsed.IsSuccess, parsed.Error);
+        Assert.Equal(4, parsed.Data!.Value.GetProperty("Connections").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task IsApplicableAsync_IsFalseWithoutSsAndNetstat()
+    {
+        var context = new ServerContext(new Server("bare", "bare.test", 22, "deploy", "key", "staging"), new NoSsRunner(hasNetstat: false));
+
+        Assert.False(await new ConnectionCollector().IsApplicableAsync(context, CancellationToken.None));
+    }
+
+    [Fact]
+    public void NamespaceNetstatCommand_IsOnTheAppSudoList()
+    {
+        Assert.Equal("nsenter -t 42 -n netstat -tn", ConnectionCollector.NamespaceNetstatCommand(42));
+        Assert.True(DevOpsAgent.Infrastructure.Monitoring.AppSudoCommands.IsAppCommand(
+            "/usr/bin/sh -c 'nsenter -t 42 -n netstat -tn'"));
+        Assert.False(DevOpsAgent.Infrastructure.Monitoring.AppSudoCommands.IsAppCommand(
+            "/usr/bin/sh -c 'nsenter -t 42 -n netstat -tn; id'"));
+    }
+
+    private sealed class NoSsRunner(bool hasNetstat = true) : ISshRunner
+    {
+        public List<string> Commands { get; } = [];
+
+        public Task<RemoteCommandResult> RunAsync(Guid serverId, string command, SshRunOptions options,
+            CancellationToken cancellationToken)
+        {
+            Commands.Add(command);
+            var (exitCode, output, error) = command switch
+            {
+                "command -v ss >/dev/null 2>&1" => (1, string.Empty, string.Empty),
+                "command -v netstat >/dev/null 2>&1" => (hasNetstat ? 0 : 1, string.Empty, string.Empty),
+                "ss -tnH state established" => (127, string.Empty, "sh: ss: not found"),
+                "netstat -tn" => (0, File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "busybox-netstat-tn.txt")), string.Empty),
+                _ => (0, string.Empty, string.Empty)
+            };
+            return Task.FromResult(new RemoteCommandResult(exitCode, output, error, TimeSpan.FromMilliseconds(1)));
+        }
+    }
+
     private static string Fixture() => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "ss-established.txt"));
 
     private sealed class RecordingSshRunner : ISshRunner

@@ -459,7 +459,7 @@ Owner order 2026-11-16: T8.1–T8.9 in order, one commit each, AGENTS.md §2, DE
 - **Done when:** Parser tests with fixtures (resolved, nested scope, conflicting values, unknown variable); the owner's map links Kartio-nginx to map after a discovery.
 - **Depends on:** T2.x nginx collector
 
-### T8.15 BusyBox hosts (Alpine): addresses and listeners (owner bug, 2026-11-16)
+### T8.15 BusyBox hosts (Alpine): addresses and listeners (owner bug, 2026-11-16) — done (D-050)
 - **Do:** The host collector falls back to the text output of `ip addr`/`ip route` when `ip -j` is not supported (BusyBox), and the listener collector falls back to `netstat -tulpn` when `ss` is missing; both read-only, parsed deterministically, with fixtures of real BusyBox output.
 - **Done when:** Parser tests on BusyBox fixtures; an Alpine server gets its addresses and its nginx row on the map.
 - **Depends on:** T8.14

@@ -104,6 +104,7 @@ public static class AppSudoCommands
         return
         [
             ListenerCollector.Command,
+            ListenerCollector.NetstatCommand,
             NginxCollector.Command,
             DockerCollector.InfoCommand,
             DockerCollector.ContainerListCommand,
@@ -111,6 +112,7 @@ public static class AppSudoCommands
             DockerCollector.ContainerInspectCommand + " dvasentinelids",
             DockerCollector.NetworkInspectCommand + " dvasentinelids",
             ConnectionCollector.NamespaceCommand(SentinelNumber),
+            ConnectionCollector.NamespaceNetstatCommand(SentinelNumber),
             AuthLogScanner.BuildCommand(DateTimeOffset.FromUnixTimeSeconds(SentinelNumber)),
             UpdatesCollector.AptScanCommand(SentinelNumber),
             Application.Monitoring.ContainerStatusQuery.Command,

@@ -7,12 +7,14 @@ namespace DevOpsAgent.Infrastructure.Collectors;
 public sealed class HostCollector : ICollector
 {
     private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(15);
-    private static readonly (string Name, string Command)[] Commands =
+    // BusyBox `ip` has no -j: it prints its usage and exits 1. Its text output (`ip -o addr show`, `ip route show`) is
+    // the fallback, parsed by HostCollectorParser. Both are read-only.
+    private static readonly (string Name, string Command, string? Fallback)[] Commands =
     [
-        ("addresses", "ip -j addr"),
-        ("routes", "ip -j route"),
-        ("hostname", "hostname 2>/dev/null || cat /proc/sys/kernel/hostname"),
-        ("hosts", "cat /etc/hosts")
+        ("addresses", "ip -j addr", "ip -o addr show"),
+        ("routes", "ip -j route", "ip route show"),
+        ("hostname", "hostname 2>/dev/null || cat /proc/sys/kernel/hostname", null),
+        ("hosts", "cat /etc/hosts", null)
     ];
 
     public string Name => "host";
@@ -27,10 +29,19 @@ public sealed class HostCollector : ICollector
     public async Task<CollectorOutput> CollectAsync(ServerContext context, CancellationToken cancellationToken)
     {
         var results = new Dictionary<string, RemoteCommandResult>(StringComparer.Ordinal);
-        foreach (var (name, command) in Commands)
+        var discardedDuration = TimeSpan.Zero;
+        foreach (var (name, command, fallback) in Commands)
         {
-            results[name] = await context.SshRunner.RunAsync(context.Server.Id, command,
+            var result = await context.SshRunner.RunAsync(context.Server.Id, command,
                 new SshRunOptions(CommandTimeout), cancellationToken);
+            if (fallback is not null && !(result.ExitCode == 0 && HostCollectorParser.IsJson(result.StandardOutput)))
+            {
+                discardedDuration += result.Duration;
+                result = await context.SshRunner.RunAsync(context.Server.Id, fallback,
+                    new SshRunOptions(CommandTimeout), cancellationToken);
+            }
+
+            results[name] = result;
         }
 
         var raw = JsonSerializer.Serialize(new HostCollectorRawOutput(
@@ -42,7 +53,7 @@ public sealed class HostCollector : ICollector
             .Where(item => item.Value.ExitCode is not 0)
             .Select(item => $"{item.Key}: {(string.IsNullOrWhiteSpace(item.Value.StandardError) ? $"exit {item.Value.ExitCode?.ToString() ?? "unknown"}" : item.Value.StandardError.Trim())}")
             .ToArray();
-        var duration = results.Values.Aggregate(TimeSpan.Zero, (total, result) => total + result.Duration);
+        var duration = results.Values.Aggregate(discardedDuration, (total, result) => total + result.Duration);
         var exitCode = errors.Length == 0 ? 0 : 1;
         return new CollectorOutput(raw, string.Join(Environment.NewLine, errors), exitCode, duration);
     }
@@ -70,5 +81,6 @@ public sealed class HostCollector : ICollector
         }
     }
 
+    // AddressesJson/RoutesJson keep their names (stored runs use them) but hold the text listing on BusyBox hosts.
     private sealed record HostCollectorRawOutput(string AddressesJson, string RoutesJson, string Hostname, string HostsFile);
 }

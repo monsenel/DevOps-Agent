@@ -8,13 +8,24 @@ public sealed class ConnectionCollector : ICollector
 {
     public static string NamespaceCommand(int pid) => $"nsenter -t {pid} -n ss -tnH state established";
 
+    public static string NamespaceNetstatCommand(int pid) => $"nsenter -t {pid} -n {NetstatCommand}";
+
+    /// <summary>Fallback for hosts without <c>ss</c> (BusyBox/Alpine): established and other non-listening TCP sockets.</summary>
+    public const string NetstatCommand = "netstat -tn";
+
+    private const string HostCommand = "ss -tnH state established";
+    private const int CommandNotFound = 127;
+
     private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(30);
 
     public string Name => "connections";
 
-    public async Task<bool> IsApplicableAsync(ServerContext context, CancellationToken cancellationToken)
+    public async Task<bool> IsApplicableAsync(ServerContext context, CancellationToken cancellationToken) =>
+        await HasCommandAsync(context, "ss", cancellationToken) || await HasCommandAsync(context, "netstat", cancellationToken);
+
+    private static async Task<bool> HasCommandAsync(ServerContext context, string command, CancellationToken cancellationToken)
     {
-        var result = await context.SshRunner.RunAsync(context.Server.Id, "command -v ss >/dev/null 2>&1",
+        var result = await context.SshRunner.RunAsync(context.Server.Id, $"command -v {command} >/dev/null 2>&1",
             new SshRunOptions(CommandTimeout), cancellationToken);
         return result.ExitCode == 0;
     }
@@ -22,8 +33,18 @@ public sealed class ConnectionCollector : ICollector
     public async Task<CollectorOutput> CollectAsync(ServerContext context, CancellationToken cancellationToken)
     {
         var collectedAtUtc = DateTimeOffset.UtcNow;
-        var host = await context.SshRunner.RunAsync(context.Server.Id, "ss -tnH state established",
+        var useNetstat = false;
+        var host = await context.SshRunner.RunAsync(context.Server.Id, HostCommand,
             new SshRunOptions(CommandTimeout), cancellationToken);
+        if (host.ExitCode == CommandNotFound)
+        {
+            useNetstat = true;
+            var ssDuration = host.Duration;
+            host = await context.SshRunner.RunAsync(context.Server.Id, NetstatCommand,
+                new SshRunOptions(CommandTimeout), cancellationToken);
+            host = host with { Duration = host.Duration + ssDuration };
+        }
+
         if (host.ExitCode is not 0)
         {
             return new CollectorOutput(host.StandardOutput, host.StandardError, host.ExitCode, host.Duration);
@@ -44,7 +65,7 @@ public sealed class ConnectionCollector : ICollector
                 foreach (var container in containers)
                 {
                     var result = await context.SshRunner.RunAsync(context.Server.Id,
-                        NamespaceCommand(container.MainPid),
+                        useNetstat ? NamespaceNetstatCommand(container.MainPid) : NamespaceCommand(container.MainPid),
                         new SshRunOptions(CommandTimeout, UseSudo: true), cancellationToken);
                     duration += result.Duration;
                     if (result.ExitCode == 0)

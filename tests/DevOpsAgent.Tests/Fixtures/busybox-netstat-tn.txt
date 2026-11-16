@@ -1,0 +1,7 @@
+Active Internet connections (w/o servers)
+Proto Recv-Q Send-Q Local Address           Foreign Address         State
+tcp        0      0 192.168.20.5:80         192.168.20.9:51234      ESTABLISHED
+tcp        0      0 192.168.20.5:22         192.168.20.77:60412     ESTABLISHED
+tcp        0      0 192.168.20.5:43210      10.10.0.4:5432          ESTABLISHED
+tcp        0      0 192.168.20.5:80         192.168.20.9:51240      TIME_WAIT
+tcp        0      0 ::ffff:192.168.20.5:80  ::ffff:192.168.20.9:51236 ESTABLISHED

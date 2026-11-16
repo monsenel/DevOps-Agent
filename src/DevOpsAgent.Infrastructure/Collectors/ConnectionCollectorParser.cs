@@ -28,6 +28,21 @@ public static class ConnectionCollectorParser
         foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             var columns = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+
+            // `netstat -tn` (BusyBox): Proto Recv-Q Send-Q Local-Address Foreign-Address State
+            if (columns.Length >= 6 && columns[0].StartsWith("tcp", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.Equals(columns[5], "ESTABLISHED", StringComparison.OrdinalIgnoreCase)
+                    && TryParseEndpoint(columns[3], out var netstatLocal, out var netstatLocalPort)
+                    && TryParseEndpoint(columns[4], out var netstatPeer, out var netstatPeerPort))
+                {
+                    yield return new EstablishedConnectionInfo(networkNamespace, containerName, "tcp", "ESTAB",
+                        netstatLocal, netstatLocalPort, netstatPeer, netstatPeerPort);
+                }
+
+                continue;
+            }
+
             var hasStateColumn = columns.Length >= 5;
             var state = hasStateColumn ? columns[0] : "ESTAB";
             var endpointOffset = hasStateColumn ? 3 : 2;
