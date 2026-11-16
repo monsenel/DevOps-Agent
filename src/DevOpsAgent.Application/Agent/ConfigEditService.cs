@@ -60,10 +60,19 @@ public sealed partial class ConfigEditService(
     {
         var command = ReadCommand(path, options.MaxContentBytes + 1);
         var result = await sshRunner.RunAsync(server.Id, command, new SshRunOptions(TimeSpan.FromSeconds(30)), cancellationToken);
-        if (result.ExitCode != 0 && !result.StandardError.Contains("DVA_NO_FILE", StringComparison.Ordinal) && server.CanUseSudo)
+        if (result.ExitCode != 0 && !result.StandardError.Contains("DVA_NO_FILE", StringComparison.Ordinal)
+            && !result.StandardError.Contains("DVA_SYMLINK=", StringComparison.Ordinal) && server.CanUseSudo)
             result = await sshRunner.RunAsync(server.Id, command, new SshRunOptions(TimeSpan.FromSeconds(30), UseSudo: true), cancellationToken);
         if (result.StandardError.Contains("DVA_NO_FILE", StringComparison.Ordinal))
             return (null, $"{path} does not exist on {server.Name}; edit_config changes existing files only.");
+        if (Symlink().Match(result.StandardError) is { Success: true } link)
+        {
+            // The resolved path comes from the server: it is only repeated when it is a plain, permitted path.
+            var resolved = link.Groups[1].Value;
+            var hint = ConfigEditPolicy.Check(resolved, ["/**"]) is null ? $" (it resolves to {resolved})" : string.Empty;
+            return (null, $"{path} is a symbolic link or lies behind one{hint}; edit_config changes real files only, so give the real path.");
+        }
+
         if (result.ExitCode != 0) return (null, $"{path} could not be read on {server.Name} (exit {result.ExitCode?.ToString(CultureInfo.InvariantCulture) ?? "unknown"}).");
         if (Encoding.UTF8.GetByteCount(result.StandardOutput) > options.MaxContentBytes)
             return (null, $"{path} is larger than {options.MaxContentBytes} bytes.");
@@ -72,7 +81,9 @@ public sealed partial class ConfigEditService(
 
     /// <summary>Read-only; sent with sudo only when the SSH user cannot read the file.</summary>
     public static string ReadCommand(string path, int maxBytes) =>
-        $"test -f {Quote(path)} || {{ printf '%s\\n' 'DVA_NO_FILE' >&2; exit 3; }}; head -c {maxBytes.ToString(CultureInfo.InvariantCulture)} -- {Quote(path)}";
+        $"test -f {Quote(path)} || {{ printf '%s\\n' 'DVA_NO_FILE' >&2; exit 3; }}; "
+        + $"[ \"$(readlink -f -- {Quote(path)})\" = {Quote(path)} ] || {{ printf 'DVA_SYMLINK=%s\\n' \"$(readlink -f -- {Quote(path)})\" >&2; exit 4; }}; "
+        + $"head -c {maxBytes.ToString(CultureInfo.InvariantCulture)} -- {Quote(path)}";
 
     public static string Sha256(string text) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
 
@@ -91,6 +102,9 @@ public sealed partial class ConfigEditService(
             + "; else printf '%s\\n' 'DVA_RESTORE_FAILED'; fi";
         return "set -u; p=" + Quote(path) + "; s=" + Quote(stagedFile) + "; b=\"$p.bak-" + timestamp.ToString(CultureInfo.InvariantCulture) + "\"; "
             + "if [ ! -f \"$p\" ]; then printf '%s\\n' 'DVA_EDIT_FAILED=missing'; exit 3; fi; "
+            // The allowlist and the deny list judge the text of the path. A link in it (the file or a directory) could lead
+            // anywhere, and the final rename would replace a link with a regular file.
+            + "if [ \"$(readlink -f -- \"$p\")\" != \"$p\" ]; then printf '%s\\n' 'DVA_EDIT_FAILED=symlink'; exit 12; fi; "
             + "if [ \"$(sha256sum < \"$p\" | cut -d ' ' -f 1)\" != " + baseSha256 + " ]; then printf '%s\\n' 'DVA_EDIT_FAILED=changed'; exit 4; fi; "
             + "if ! cp -p -- \"$p\" \"$b\"; then printf '%s\\n' 'DVA_EDIT_FAILED=backup'; exit 5; fi; printf 'DVA_BACKUP=%s\\n' \"$b\"; "
             + "t=$(mktemp -- \"$p.dva-XXXXXX\") || { printf '%s\\n' 'DVA_EDIT_FAILED=write'; exit 6; }; "
@@ -154,6 +168,7 @@ public sealed partial class ConfigEditService(
                     "changed" => "the file changed since the edit was proposed",
                     "backup" => "the backup could not be written",
                     "write" => "the new content could not be written",
+                    "symlink" => "the path is a symbolic link or lies behind one",
                     "validate" => $"validation ({rule?.Validate}) failed",
                     "reload" => $"the reload ({rule?.Service}) failed",
                     _ => step
@@ -250,6 +265,9 @@ public sealed partial class ConfigEditService(
 
     [GeneratedRegex(@"DVA_EDIT_FAILED=(\w+)", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex Marker();
+
+    [GeneratedRegex(@"^DVA_SYMLINK=(\S*)\s*$", RegexOptions.Multiline | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Symlink();
 
     [GeneratedRegex(@"^DVA_HEALTH (\S+) (\d{3})\s*$", RegexOptions.Multiline | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex HealthLine();

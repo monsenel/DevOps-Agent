@@ -146,7 +146,7 @@ public sealed class ConfigEditTests
     [InlineData("true", "false", 8, "DVA_EDIT_FAILED=reload", false)]
     public void ApplyScript_BacksUpWritesAtomicallyAndRestoresOnFailure_InARealShell(string validate, string reload, int expectedExit, string marker, bool keepsNew)
     {
-        var directory = Directory.CreateTempSubdirectory("dva-edit-script-").FullName;
+        var directory = RealTempDirectory();
         try
         {
             var target = Path.Combine(directory, "demo.conf");
@@ -186,7 +186,7 @@ public sealed class ConfigEditTests
     [Fact]
     public void ApplyScript_ReportsARestoreThatFailed_NeverAsRestored_AndReloadsNothingFromIt()
     {
-        var directory = Directory.CreateTempSubdirectory("dva-edit-script-").FullName;
+        var directory = RealTempDirectory();
         try
         {
             var target = Path.Combine(directory, "demo.conf");
@@ -208,6 +208,79 @@ public sealed class ConfigEditTests
         {
             Directory.Delete(directory, recursive: true);
         }
+    }
+
+    [Fact]
+    public void Scripts_RefuseALinkInThePath_TheFileItselfOrADirectory_InARealShell()
+    {
+        var directory = RealTempDirectory();
+        try
+        {
+            var real = Path.Combine(directory, "real");
+            Directory.CreateDirectory(real);
+            var secret = Path.Combine(real, "secret.conf");
+            File.WriteAllText(secret, Demo);
+            var fileLink = Path.Combine(directory, "file-link.conf");
+            var directoryLink = Path.Combine(directory, "dir-link");
+            File.CreateSymbolicLink(fileLink, secret);
+            Directory.CreateSymbolicLink(directoryLink, real);
+            var staged = Path.Combine(directory, "staged");
+            File.WriteAllText(staged, "new content\n");
+
+            var (readExit, readOutput) = Shell(ConfigEditService.ReadCommand(secret, 1000));
+            Assert.Equal(0, readExit);
+            Assert.Equal(Demo, readOutput);
+            foreach (var path in new[] { fileLink, Path.Combine(directoryLink, "secret.conf") })
+            {
+                var (exit, output) = Shell(ConfigEditService.ReadCommand(path, 1000));
+                Assert.Equal(4, exit);
+                Assert.Equal($"DVA_SYMLINK={secret}\n", output); // nothing of the file is printed
+
+                var rule = new ConfigServiceRule("/**", "test", "true", "true");
+                var (applyExit, applyOutput) = Shell(ConfigEditService.ApplyCommand(path, staged, 1763164800, ConfigEditService.Sha256(Demo), rule));
+                Assert.Equal(12, applyExit);
+                Assert.Contains("DVA_EDIT_FAILED=symlink", applyOutput);
+                Assert.DoesNotContain("DVA_BACKUP", applyOutput);
+            }
+
+            Assert.Equal(Demo, File.ReadAllText(secret));
+            Assert.NotNull(new FileInfo(fileLink).LinkTarget); // still a link
+            Assert.Equal(new[] { "file-link.conf", "dir-link", "real", "staged" }.Order(), Directory.GetFileSystemEntries(directory).Select(Path.GetFileName).Order());
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task APathBehindALink_IsRefusedWhenTheEditIsProposed_WithoutAnotherReadAsRoot()
+    {
+        await using var lab = await Lab.CreateAsync();
+        var runner = new StderrRunner(4, "DVA_SYMLINK=/etc/nginx/conf.d/real.conf\n");
+        var service = new ConfigEditService(runner, new ServerRepository(lab.Context), new SnapshotRepository(lab.Context), new GraphRepository(lab.Context),
+            new HealthCheckRepository(lab.Context), new NoProbe(), new ConfigEditOptions());
+
+        var (arguments, error) = await service.PrepareAsync(new EditConfigArgs("/etc/nginx/conf.d/demo.conf", "x\n", null, null, [lab.Edge.Id]), default);
+
+        Assert.Null(arguments);
+        Assert.Contains("symbolic link or lies behind one (it resolves to /etc/nginx/conf.d/real.conf)", error);
+        Assert.Equal(1, runner.Calls); // a sudo read would follow the link just the same
+
+        // What the server prints is only repeated when it is a plain permitted path.
+        runner = new StderrRunner(4, "DVA_SYMLINK=/etc/shadow\n");
+        service = new ConfigEditService(runner, new ServerRepository(lab.Context), new SnapshotRepository(lab.Context), new GraphRepository(lab.Context),
+            new HealthCheckRepository(lab.Context), new NoProbe(), new ConfigEditOptions());
+        (_, error) = await service.PrepareAsync(new EditConfigArgs("/etc/nginx/conf.d/demo.conf", "x\n", null, null, [lab.Edge.Id]), default);
+        Assert.DoesNotContain("shadow", error);
+    }
+
+    // Resolved, because the scripts refuse a path that lies behind a link (a temporary directory may do).
+    private static string RealTempDirectory()
+    {
+        var created = Directory.CreateTempSubdirectory("dva-edit-script-").FullName;
+        var (_, resolved) = Shell($"readlink -f -- '{created}'");
+        return resolved.Trim();
     }
 
     private static (int Exit, string Output) Shell(string script)
@@ -322,6 +395,18 @@ public sealed class ConfigEditTests
             Calls.Add((command, options.UseSudo));
             var (output, exit) = answer(command);
             return Task.FromResult(new RemoteCommandResult(exit, output, string.Empty, TimeSpan.FromMilliseconds(3)));
+        }
+    }
+
+    // Fails every call with the given exit code and standard error.
+    private sealed class StderrRunner(int exit, string standardError) : ISshRunner
+    {
+        public int Calls { get; private set; }
+
+        public Task<RemoteCommandResult> RunAsync(Guid serverId, string command, SshRunOptions options, CancellationToken cancellationToken)
+        {
+            Calls++;
+            return Task.FromResult(new RemoteCommandResult(exit, string.Empty, standardError, TimeSpan.FromMilliseconds(3)));
         }
     }
 
