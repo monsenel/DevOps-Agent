@@ -14,7 +14,7 @@
 
 - **Task:** T7.R25 and T7.R26 done (owner order 2026-11-16); T8.1–T8.9 next. T7.R4 and T7.R16 still held by the owner.
 - **Status:** T8.1–T8.9 done; v0.2.0 tagged locally (not pushed)
-- **Last updated:** 2026-11-16 by ZCode
+- **Last updated:** 2026-11-16 by ZCode (review-r4 of T7.R25–T8.9: fixes committed, T7.R27–T7.R30 filed)
 
 ## WIP notes
 
@@ -40,6 +40,10 @@ The 2026-11-15 review fixed small issues in `fix(review): …` commits (build 0 
 | T7.R21 | medium | Deadline/timeout semantics: budget-cut commands count as hung, short deadlines back hosts off, long commands vs short timeouts, wording, notification phase unbounded |
 | T7.R22 | low | Shutdown/lease hardening: shutdown during an action or update scan, serial client disposal, reuse re-check, grace and docs |
 | T7.R23 | low | Auth-failed follow-ups: topology badge cause, jump hint, decrypt-error wording, flap policy, generation re-checks |
+| T7.R27 | medium | Sudo password follow-ups from review-r4: write after an abandoned attempt, lockout wording, rejection lost on a failed save, NOPASSWD counted as confirmed, edit_config of a file holding a password, overlapping secrets, exception text |
+| T7.R28 | medium | edit_config hardening: no-rule paths, unverified health = healthy, root step does not check the staged hash, unknown outcome after a lost connection, temp/backup files in included directories, CRLF |
+| T7.R29 | medium | known_hosts follow-ups: `@revoked`, missing owner file = TOFU, fsync, server-side accept token, sibling alerts, jump-host hint, second key type |
+| T7.R30 | medium | Chat attachments, redaction and impact accuracy: images vs cloud redaction (owner decision), redactor gaps, attachment replay cap, package-name rules, block_ip impact, stale flags, search details |
 | T7.R12 | low | Test gaps (chat send loop, discovery parallelism, unix sockets, dnf, no-sudo path) |
 
 ### Live acceptance run (2026-11-15, single agent; replaces earlier overlapping results)
@@ -372,3 +376,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T6.6 checkpoint · J2 parser mismatch fixed for live four-column `ss` output; build clean, 111/111 tests pass; next restart isolated app and verify unknown/observed graph edges
 - 2026-11-14 · Codex / GPT-6 · T6.6 checkpoint · fixed GraphBuilder to retain outbound connections to unregistered peers as observed Unknown nodes; build clean, 112/112 tests pass; next confirm J2 live on the lab
 - 2026-11-14 · Codex / GPT-6 · resumed T6.6 · J2/J3/J5/J7 confirmed on disposable staging; J7 changes restored; fixed IPv4-mapped endpoints, duplicate unreachable-alert keys and 390px overflow; README setup added; build clean, 113/113 tests; Graphify refreshed to 2,376 nodes / 6,623 edges / 155 communities; next complete restored-lab review-app discovery, then finish provider-dependent J4/J7 when configured
+- 2026-11-16 · ZCode · review-r4 · independent review of 0cec7bf..HEAD (T7.R25, T7.R26, T8.1–T8.9): three read-only code-review passes plus live runs on the lab (isolated /tmp DB, published Release build on :5199, stand-in LLM on 127.0.0.1:18089; prod, ./data and src/DevOpsAgent.Web/data untouched). 15 `fix(review-r4)` commits (build 0 warnings, 701 tests, 3 full runs green); larger findings filed as T7.R27–T7.R30; D-040 am. 6 and review-r4 notes in D-041–D-044
