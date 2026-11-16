@@ -103,7 +103,7 @@ public sealed class ChatService(
             // Text attachments get the same redaction as tool output before they are stored (T8.5), and therefore before
             // they are sent to any provider; images are stored as they are.
             foreach (var file in files)
-                userMessage.AddAttachment(file.FileName, file.ContentType, file.Kind, file.SizeBytes, file.Kind == ChatAttachmentKind.Text
+                userMessage.AddAttachment(KnownSecretRedaction.Redact(file.FileName, secrets), file.ContentType, file.Kind, file.SizeBytes, file.Kind == ChatAttachmentKind.Text
                     ? KnownSecretRedaction.Redact(ChatContentRedactor.Redact(file.Text), secrets)
                     : Convert.ToBase64String(file.ImageBytes!));
             await conversations.SaveMessageAsync(userMessage, cancellationToken);
