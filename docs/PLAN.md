@@ -438,6 +438,11 @@ Owner order 2026-11-16: T8.1–T8.9 in order, one commit each, AGENTS.md §2, DE
 - **Done when:** Unit tests for the limit (setting, effort, cap), the summary call (tools disabled), Continue and the loop guard; checked in a browser in both themes.
 - **Depends on:** T8.5
 
+### T8.11 Servers map view (owner request, 2026-11-16)
+- **Do:** A third Topology view, **Servers**, shown by default, drawn like the owner's reference picture: each server is one card with a coloured border by role (reverse proxy, application, data, Git/CI), a header with a role icon and the server name, a caption above it ("role • IP • OS"), and its services and containers as a stacked list of rows inside. Domains are grouped in one dashed "Internet / Clients" card. Connections are drawn between cards, one dashed arrow per pair of servers labelled with all its ports ("5432, 6379"); selecting it lists the underlying service connections and their evidence. Selection, search, trace, filters, alerts and stale markers keep working; Service and Network views are unchanged.
+- **Done when:** Checked on the lab in a browser in both themes; build 0 warnings, tests green.
+- **Depends on:** T2.x graph, T8.2
+
 ---
 
 ## v2 backlog (do not start without being told)

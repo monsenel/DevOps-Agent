@@ -12,7 +12,7 @@
 
 ## Current
 
-- **Task:** T8.10 done. T7.R4 and T7.R16 still held by the owner; open review tasks below.
+- **Task:** T8.11 Servers map view (owner request). T7.R4 and T7.R16 still held by the owner; open review tasks below.
 - **Status:** T8.1–T8.10 done; v0.2.0 tagged locally (before T8.10 and the review-r4 fixes)
 - **Last updated:** 2026-11-16 by ZCode (review-r4 of T7.R25–T8.9: fixes committed, T7.R27–T7.R30 filed)
 
@@ -161,6 +161,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T8.7 | Impact preview on proposed actions | done | `feat(T8.7): impact section on every approval card from the latest graph` |
 | T8.8 | edit_config tool | done | `feat(T8.8): edit_config with backup, validation, reload, health check and automatic rollback` |
 | T8.9 | Dependency awareness for updates | done | `feat(T8.9): update cards name the services each package restarts and warn for Docker and nginx` |
+| T8.11 | Servers map view | in-progress | |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
 
@@ -379,3 +380,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-16 · ZCode · review-r4 · independent review of 0cec7bf..HEAD (T7.R25, T7.R26, T8.1–T8.9): three read-only code-review passes plus live runs on the lab (isolated /tmp DB, published Release build on :5199, stand-in LLM on 127.0.0.1:18089; prod, ./data and src/DevOpsAgent.Web/data untouched). 15 `fix(review-r4)` commits (build 0 warnings, 701 tests, 3 full runs green); larger findings filed as T7.R27–T7.R30; D-040 am. 6 and review-r4 notes in D-041–D-044
 - 2026-11-16 · ZCode · T8.10 · started
 - 2026-11-16 · ZCode · T8.10 · tool calls per message (setting 15/50, effort Low 8 / Medium 15 / High 30), tool-free summary call, Continue, loop guard, collapsible tool list; 23 new tests, build 0 warnings, 725 tests; checked live in both themes (D-045)
+- 2026-11-16 · ZCode · T8.11 · started
