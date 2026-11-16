@@ -448,6 +448,11 @@ Owner order 2026-11-16: T8.1–T8.9 in order, one commit each, AGENTS.md §2, DE
 - **Do:** In the Servers view, all Unknown endpoints with the same address are one dashed card (a VM not in the inventory, usually with several containers/services): caption "Not in inventory • <address>", header "Unknown host" with the address, one row per port (":8080", or "no port"); duplicates of the same address and port from different observers are one row. Edges to it are merged per server pair like other cards. Selecting the card offers "Add this server" and lists all its connections; selecting a row shows that endpoint as today.
 - **Done when:** Checked in a browser on a graph with several ports per unknown address; build 0 warnings, tests green.
 - **Depends on:** T8.11
+
+### T8.13 Names and ports on the Servers view cards (owner request, 2026-11-16)
+- **Do:** Rows of a server card show the ports the service or container answers on next to its name ("api · :8080", at most three, then "+N"), from its listeners, published host ports and the connections it receives. The card caption adds the machine's real hostname (from host discovery) when it differs from the inventory name. An Unknown host card whose address belongs to a server in the inventory is named after that server: merged into its card when the server is on the map, otherwise titled with the server name and captioned "In inventory, not discovered yet • <address>".
+- **Done when:** GraphBuilder test for the hostname attribute; checked in a browser on the lab and on a copy of the owner's graph; build 0 warnings, tests green.
+- **Depends on:** T8.12
 ---
 
 ## v2 backlog (do not start without being told)
