@@ -65,6 +65,8 @@ public sealed class ConfigEditTests
         var stale = Assert.Throws<ArgumentException>(() => UnifiedDiff.Apply(Demo.Replace("keepalive 8", "keepalive 16", StringComparison.Ordinal), diff));
         Assert.Contains("does not match the current file", stale.Message);
         Assert.Throws<ArgumentException>(() => UnifiedDiff.Apply(Demo, "not a diff"));
+        // A hunk position no int holds is a refused diff, not an exception out of the chat turn.
+        Assert.Contains("hunk position", Assert.Throws<ArgumentException>(() => UnifiedDiff.Apply(Demo, "@@ -99999999999,1 +1,1 @@\n-x\n+y\n")).Message);
     }
 
     [Fact]

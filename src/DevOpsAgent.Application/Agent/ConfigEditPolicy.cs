@@ -86,7 +86,8 @@ public static partial class UnifiedDiff
             var header = HunkHeader().Match(lines[index]);
             if (!header.Success) continue;
             hunks++;
-            var start = int.Parse(header.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+            if (!int.TryParse(header.Groups[1].Value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var start))
+                throw new ArgumentException("The diff does not fit the current file (hunk position).");
             var oldStart = Math.Max(start - 1, 0);
             if (oldStart < position || oldStart > source.Count) throw new ArgumentException("The diff does not fit the current file (hunk position).");
             result.AddRange(source.Skip(position).Take(oldStart - position));
