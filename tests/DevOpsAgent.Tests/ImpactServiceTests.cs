@@ -174,6 +174,12 @@ public sealed class ImpactServiceTests : IAsyncLifetime
         Assert.Equal(["api.test.local", "app.test.local"], nginx.Services);
         Assert.Contains(edge.Warnings, item => item.Contains("nginx-common restarts nginx on srv-edge: api.test.local, app.test.local are briefly unavailable", StringComparison.Ordinal));
 
+        // The same package on a server the graph shows no nginx on restarts nothing there.
+        var appNginx = await service.ForAsync("apply_updates", """{"packages":["nginx-common"]}""", _app.Id, default);
+        Assert.Equal("no nginx in the graph", appNginx.Packages!.Single().Effect);
+        Assert.False(appNginx.Packages!.Single().RestartsDockerOrNginx);
+        Assert.Empty(appNginx.Warnings);
+
         Assert.Equal(["postgres"], db.Packages!.Single().Services);
         Assert.Equal("restarts postgres", db.Packages!.Single().Effect);
         Assert.DoesNotContain(db.Warnings, item => item.Contains("restarts", StringComparison.Ordinal));

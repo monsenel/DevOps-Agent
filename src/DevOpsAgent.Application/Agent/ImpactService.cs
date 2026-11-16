@@ -147,6 +147,7 @@ public sealed class ImpactService(IServerRepository servers, ISnapshotRepository
     {
         var containers = serverNodes.Where(node => node.Kind == GraphNodeKind.Container).Select(node => node.Name).Order(StringComparer.Ordinal).ToArray();
         var nginxBlocks = serverNodes.Where(IsNginxConfig).Select(node => node.Id).ToHashSet();
+        var hasNginx = nginxBlocks.Count > 0 || serverNodes.Any(node => node.Kind == GraphNodeKind.Service && node.Name == "nginx");
         var domainNames = graph.Nodes.Where(node => node.Kind == GraphNodeKind.Domain).ToDictionary(node => node.Id, node => node.Name);
         var nginxDomains = graph.Edges.Where(edge => nginxBlocks.Contains(edge.TargetNodeId) && domainNames.ContainsKey(edge.SourceNodeId))
             .Select(edge => domainNames[edge.SourceNodeId]).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
@@ -161,7 +162,9 @@ public sealed class ImpactService(IServerRepository servers, ISnapshotRepository
             else if (name.StartsWith("docker", StringComparison.Ordinal))
                 result.Add(new PackageImpact(package, "Docker tooling, no daemon restart", [], false));
             else if (name == "nginx" || name.StartsWith("nginx-", StringComparison.Ordinal) || name.StartsWith("libnginx-mod-", StringComparison.Ordinal))
-                result.Add(new PackageImpact(package, "nginx", nginxDomains, RestartsDockerOrNginx: true));
+                // A server the graph shows no nginx on has nothing for the update to restart.
+                result.Add(hasNginx ? new PackageImpact(package, "nginx", nginxDomains, RestartsDockerOrNginx: true)
+                    : new PackageImpact(package, "no nginx in the graph", [], false));
             else if (services.FirstOrDefault(service => ServiceMatches(name, service)) is { } service)
                 result.Add(new PackageImpact(package, $"restarts {service}", [service], false));
             else
