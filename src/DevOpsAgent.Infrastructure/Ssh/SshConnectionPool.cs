@@ -410,6 +410,9 @@ public sealed class SshConnectionPool(
                     : exception;
                 // A login failure is its own state (T7.R19); only the fixed wording of its reason is kept.
                 var loginFailure = SshFailureClassifier.AsAuthFailure(failure);
+                // The sentence shown to the owner is fixed; the exception's type name (never its message) is what tells
+                // "cannot be read" from "wrong passphrase" or a blocked socket when it does not make sense.
+                logger.LogDebug("{ServerName}: the connection attempt failed with {ErrorType}", server.Name, exception.GetType().Name);
                 var state = reachability.RecordFailure(server.Id, loginFailure ?? failure, SshFailureClassifier.DescribeCause(failure));
                 outcomeRecorded = true;
                 if (loginFailure is null)

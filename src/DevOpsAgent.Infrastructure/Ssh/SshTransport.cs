@@ -1,5 +1,6 @@
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Domain.Servers;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Renci.SshNet;
 using Renci.SshNet.Common;
@@ -41,7 +42,8 @@ public sealed class SshNetTransportFactory(
     ISecretProtector secretProtector,
     IServerKeyStore keyStore,
     IOptions<SshConnectionOptions> options,
-    ManagedKnownHosts hostKeys) : ISshTransportFactory
+    ManagedKnownHosts hostKeys,
+    ILogger<SshNetTransportFactory>? logger = null) : ISshTransportFactory
 {
     private readonly SshConnectionOptions _options = options.Value;
 
@@ -189,6 +191,9 @@ public sealed class SshNetTransportFactory(
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
+            // The owner sees a fixed sentence; what actually failed (a type name, never a message, a path or a passphrase) is
+            // logged so "cannot be read" can be told from "wrong passphrase" when the key will not load.
+            logger?.LogWarning("{ServerName}: the identity key could not be loaded ({ErrorType})", server.Name, exception.GetType().Name);
             throw SshFailureClassifier.AsAuthFailure(exception)
                 ?? new SshAuthFailedException(exception is IOException
                     ? SshAuthFailure.KeyFileUnreadable
