@@ -5,26 +5,61 @@ namespace DevOpsAgent.Infrastructure.Collectors;
 
 public static class ConnectionCollectorParser
 {
+    private const int DefaultSshPort = 22;
+
+    /// <summary>Distinct (source address, server port) groups kept per server; the rest is summarised in a note.</summary>
+    public const int MaxSshSources = 50;
+
     public static ConnectionDiscoveryResult Parse(
         string hostOutput,
         IReadOnlyDictionary<string, string>? containerOutputs = null,
         IReadOnlyList<string>? notes = null,
         DateTimeOffset? collectedAtUtc = null,
-        string? agentSshClient = null)
+        string? agentSshClient = null,
+        IReadOnlyCollection<int>? sshdPorts = null)
     {
-        var connections = ParseOutput(hostOutput, "host", null).ToList();
+        var hostConnections = ParseOutput(hostOutput, "host", null).ToList();
         var resultNotes = notes is null ? new List<string>() : [.. notes];
-        if (TryParseSshClient(agentSshClient, out var clientAddress, out var serverPort))
+
+        // SSH ports: 22, the port of the agent's own session and the ports sshd listens on. Only inbound connections
+        // (local port is an SSH port) of the host namespace are sessions; outbound connections to :22 stay ordinary.
+        var hasAgentClient = TryParseSshClient(agentSshClient, out var agentAddress, out var agentPort);
+        var sshPorts = new HashSet<int> { DefaultSshPort };
+        if (hasAgentClient) sshPorts.Add(agentPort);
+        if (sshdPorts is not null) sshPorts.UnionWith(sshdPorts);
+
+        var sessionGroups = new Dictionary<(string Address, int Port), int>();
+        var connections = new List<EstablishedConnectionInfo>(hostConnections.Count);
+        foreach (var connection in hostConnections)
         {
-            // Only host-namespace connections can be the agent's session. The remote port is deliberately not compared:
-            // another SSH connection of the agent (pool, a second run) comes from the same address to the same port.
-            var removed = connections.RemoveAll(connection => connection.LocalPort == serverPort
-                && IPAddress.TryParse(connection.PeerAddress, out var peer) && Normalize(peer).Equals(clientAddress));
-            if (removed > 0)
+            if (!sshPorts.Contains(connection.LocalPort))
             {
-                resultNotes.Add($"SSH sessions of DevOps Agent from {clientAddress} to port {serverPort} are not drawn.");
+                connections.Add(connection);
+                continue;
             }
+
+            var key = (NormalizeAddress(connection.PeerAddress), connection.LocalPort);
+            sessionGroups[key] = sessionGroups.GetValueOrDefault(key) + 1;
         }
+
+        // The remote port is deliberately not compared with $SSH_CLIENT: another SSH connection of the agent (pool, a second
+        // run) comes from the same address to the same server port.
+        var sessions = sessionGroups
+            .Select(group => new SshSessionInfo(group.Key.Address, group.Key.Port, group.Value,
+                hasAgentClient && group.Key.Port == agentPort && group.Key.Address == agentAddress))
+            .OrderBy(session => session.IsAgent ? 0 : 1)
+            .ThenByDescending(session => session.Count)
+            .ThenBy(session => session.SourceAddress, StringComparer.Ordinal)
+            .ThenBy(session => session.ServerPort)
+            .ToList();
+        if (sessions.Count > MaxSshSources)
+        {
+            var dropped = sessions.Skip(MaxSshSources).ToArray();
+            sessions = sessions.Take(MaxSshSources).ToList();
+            resultNotes.Add($"{dropped.Length} more SSH sources with {dropped.Sum(session => session.Count)} sessions are not listed.");
+        }
+
+        sessions = [.. sessions.OrderBy(session => session.SourceAddress, StringComparer.Ordinal).ThenBy(session => session.ServerPort)];
 
         if (containerOutputs is not null)
         {
@@ -34,18 +69,22 @@ public static class ConnectionCollectorParser
             }
         }
 
-        return new ConnectionDiscoveryResult(connections, resultNotes, collectedAtUtc);
+        return new ConnectionDiscoveryResult(connections, resultNotes, collectedAtUtc, sessions);
     }
 
+    /// <summary>Mapped IPv6 turned into IPv4 and lowercase; text that is not an address is only lowercased.</summary>
+    private static string NormalizeAddress(string address) =>
+        IPAddress.TryParse(address, out var parsed) ? Normalize(parsed).ToString().ToLowerInvariant() : address.ToLowerInvariant();
+
     /// <summary>Parses <c>$SSH_CLIENT</c> ("client-ip client-port server-port"); the server port defaults to 22.</summary>
-    private static bool TryParseSshClient(string? value, out IPAddress address, out int serverPort)
+    private static bool TryParseSshClient(string? value, out string address, out int serverPort)
     {
-        address = IPAddress.None;
-        serverPort = 22;
+        address = string.Empty;
+        serverPort = DefaultSshPort;
         var fields = value?.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         if (fields is not { Length: > 0 } || !IPAddress.TryParse(fields[0], out var parsed)) return false;
 
-        address = Normalize(parsed);
+        address = Normalize(parsed).ToString().ToLowerInvariant();
         if (fields.Length >= 3 && int.TryParse(fields[2], out var port) && port is > 0 and <= 65535)
         {
             serverPort = port;

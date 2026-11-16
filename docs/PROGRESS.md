@@ -12,8 +12,8 @@
 
 ## Current
 
-- **Task:** T8.18 SSH sessions and allowed sources (owner request). T7.R4 and T7.R16 still held by the owner; open review tasks below.
-- **Status:** T8.1–T8.17 done; v0.2.0 tagged locally (before T8.10 and the review-r4 fixes)
+- **Task:** T8.18 done. T7.R4 and T7.R16 still held by the owner; open review tasks below.
+- **Status:** T8.1–T8.18 done; v0.2.0 tagged locally (before T8.10 and the review-r4 fixes)
 - **Last updated:** 2026-11-16 by ZCode (review-r4 of T7.R25–T8.9: fixes committed, T7.R27–T7.R30 filed)
 
 ## WIP notes
@@ -168,7 +168,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T8.15 | BusyBox hosts: addresses and listeners | done | `feat(T8.15): BusyBox hosts get addresses, routes, listeners and connections from ip/netstat text output` |
 | T8.16 | External clients are not a hop on the Servers view | done | `feat(T8.16): an address that only connects to servers is one External client card with one row, in the first layer` |
 | T8.17 | The agent's own SSH session is not on the map | done | `feat(T8.17): the connection collector leaves out the agent's own SSH session ($SSH_CLIENT)` |
-| T8.18 | SSH sessions, allowed sources and warning on the map | in-progress | |
+| T8.18 | SSH sessions, allowed sources and warning on the map | done | `feat(T8.18): SSH sessions listed per server, allowed source addresses per server, warning on the map` |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
 
@@ -401,3 +401,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-16 · ZCode · T8.17 · started (owner: the External client with SSH 22 to the map server is wrong; it is the agent's own SSH session)
 - 2026-11-16 · ZCode · T8.17 · agent's own SSH session ($SSH_CLIENT) left out of the connection graph; lab discovery: Unknown 10.88.10.1 gone; build 0 warnings, 764 tests (D-052)
 - 2026-11-16 · ZCode · T8.18 · started
+- 2026-11-16 · ZCode · T8.18 · SSH sessions as host data (not edges), allowed SSH sources per server (modal on Servers), notice/warning on the map and a sessions list in the details; checked on the lab with real sessions; build 0 warnings, 900 tests (D-054)

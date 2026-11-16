@@ -1795,6 +1795,29 @@ p {
     overflow-wrap: anywhere;
 }
 
+/* SSH sessions of a host in the details panel (T8.18): status line, one row per source address, link to the allowed list. */
+.topology-ssh-status {
+    margin: 0 0 8px;
+}
+
+.topology-ssh-source {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.topology-ssh-meta {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.topology-details .topology-ssh-link {
+    margin-top: 10px;
+}
+
 @media (max-width: 620px) {
     .topology-toolbar-row .ui-button {
         flex: 1 0 100%;
@@ -3019,7 +3042,33 @@ p {
     width: min(1040px, 100%);
 }
 
-.ssh-config-field textarea {
+.ssh-sources-dialog {
+    width: min(620px, 100%);
+}
+
+.ssh-sources-dialog > .muted {
+    margin: 0 0 16px;
+}
+
+.ssh-sources-errors {
+    margin: 0;
+    padding-inline-start: 18px;
+}
+
+.ssh-sources-errors li {
+    overflow-wrap: anywhere;
+}
+
+.sources-saved-message {
+    margin: 12px 0;
+}
+
+.servers-table .table-actions {
+    flex-wrap: wrap;
+}
+
+.ssh-config-field textarea,
+.ssh-sources-field textarea {
     width: 100%;
     min-height: 180px;
     padding: 12px;

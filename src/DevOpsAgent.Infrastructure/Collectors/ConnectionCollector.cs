@@ -85,13 +85,22 @@ public sealed class ConnectionCollector : ICollector
             }
         }
 
-        var raw = JsonSerializer.Serialize(new ConnectionCollectorRawOutput(host.StandardOutput, containerOutputs, notes, collectedAtUtc, agentSshClient));
+        // Ports sshd listens on (needs process names, so BusyBox hosts only get 22 and the SSH_CLIENT port).
+        var sshdPorts = context.TryGetPreviousResult<ListenerDiscoveryResult>("listeners", out var listeners) && listeners is not null
+            ? listeners.Listeners
+                .Where(listener => listener.ProcessName?.StartsWith("sshd", StringComparison.OrdinalIgnoreCase) == true
+                    && listener.Port is > 0 and <= 65535)
+                .Select(listener => listener.Port).Distinct().Order().ToArray()
+            : [];
+
+        var raw = JsonSerializer.Serialize(new ConnectionCollectorRawOutput(host.StandardOutput, containerOutputs, notes, collectedAtUtc,
+            agentSshClient, sshdPorts));
         return new CollectorOutput(raw, host.StandardError, host.ExitCode, duration);
     }
 
     /// <summary>
     /// Reads <c>$SSH_CLIENT</c> ("client-ip client-port server-port") of the agent's own SSH session. Best effort: any failure or
-    /// empty value means "do not filter" and never fails the collector.
+    /// empty value means "no session is flagged as the agent's" and never fails the collector.
     /// </summary>
     private static async Task<string?> ReadAgentSshClientAsync(ServerContext context, CancellationToken cancellationToken)
     {
@@ -117,7 +126,7 @@ public sealed class ConnectionCollector : ICollector
             if (raw is null) return new CollectorResult(Error: "Connection collector output is empty.");
 
             var result = ConnectionCollectorParser.Parse(raw.HostOutput, raw.ContainerOutputs, raw.Notes, raw.CollectedAtUtc,
-                raw.AgentSshClient);
+                raw.AgentSshClient, raw.SshdPorts);
             return new CollectorResult(JsonSerializer.SerializeToElement(result));
         }
         catch (JsonException exception)
@@ -131,5 +140,6 @@ public sealed class ConnectionCollector : ICollector
         IReadOnlyDictionary<string, string> ContainerOutputs,
         IReadOnlyList<string> Notes,
         DateTimeOffset CollectedAtUtc,
-        string? AgentSshClient = null);
+        string? AgentSshClient = null,
+        IReadOnlyList<int>? SshdPorts = null);
 }

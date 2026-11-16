@@ -98,6 +98,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(server => server.ProtectedSudoPassword).HasMaxLength(4096);
             entity.Property(server => server.Group).HasMaxLength(80).IsRequired();
             entity.Property(server => server.TagsJson).IsRequired();
+            entity.Property(server => server.AllowedSshSourcesJson).IsRequired();
             entity.Property(server => server.OsInfo).HasMaxLength(500);
             entity.HasIndex(server => server.Name).IsUnique();
             entity.HasOne<Server>()

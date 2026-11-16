@@ -21,6 +21,7 @@ public sealed class GraphBuilder
         {
             var server = data.Server;
             var hostKey = $"host:{server.Id:N}";
+            IReadOnlyList<SshSessionInfo> sshSessions = data.Connections?.SshSessions ?? [];
             var hostAddresses = data.Host is { Interfaces: not null } hostResult
                 ? hostResult.Interfaces.SelectMany(iface => iface.Addresses).ToArray()
                 : [];
@@ -34,11 +35,26 @@ public sealed class GraphBuilder
                     // The machine's own name from host discovery (the Servers view shows it next to the inventory name); null when the host collector did not run.
                     Hostname = data.Host?.Hostname,
                     Tags = ParseTags(server.TagsJson),
-                    Addresses = hostAddresses.Select(address => address.Address).Distinct(StringComparer.Ordinal).ToArray()
+                    Addresses = hostAddresses.Select(address => address.Address).Distinct(StringComparer.Ordinal).ToArray(),
+                    // Inbound SSH sessions are host data, not edges or Unknown nodes (T8.18).
+                    SshSessions = sshSessions.Select(session => new
+                    {
+                        Address = session.SourceAddress,
+                        Port = session.ServerPort,
+                        session.Count,
+                        session.IsAgent
+                    }).ToArray()
                 });
             if (data.Host is not null)
             {
                 evidence.Add(new GraphEvidence(snapshotId, host.Id, null, "host", "Host identity and interface inventory."));
+            }
+
+            if (sshSessions.Count > 0)
+            {
+                evidence.Add(new GraphEvidence(snapshotId, host.Id, null, "connections",
+                    "SSH sessions: " + string.Join("; ", sshSessions.Select(session =>
+                        $"{session.Count} from {session.SourceAddress} ({(session.IsAgent ? "DevOps Agent" : $"port {session.ServerPort}")})"))));
             }
 
             foreach (var address in hostAddresses)

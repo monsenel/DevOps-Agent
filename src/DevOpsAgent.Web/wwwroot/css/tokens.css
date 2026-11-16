@@ -27,6 +27,7 @@
     --dva-role-ci: #7e22ce;
     --dva-role-clients: #a16207;
     --dva-graph-port: #0369a1;
+    --dva-ssh: #be185d;
     --dva-page-pad: 20px;
     --dva-gap: 20px;
     --dva-card-pad: 22px;
@@ -68,6 +69,7 @@
     --dva-role-ci: #c084fc;
     --dva-role-clients: #facc15;
     --dva-graph-port: #7dd3fc;
+    --dva-ssh: #f472b6;
     --dva-page-pad: 20px;
     --dva-gap: 20px;
     --dva-card-pad: 22px;

@@ -155,6 +155,113 @@ public sealed class ServerInventoryTests
             service.CreateAsync(Input("path", null) with { KeyFile = "../id_ed25519" }, CancellationToken.None));
     }
 
+    [Fact]
+    public async Task SetAllowedSshSources_SavesTheNormalisedListAndChangesNothingElse()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var pool = new RecordingSshConnectionPool();
+        var repository = new ServerRepository(database.Context);
+        var service = new ServerService(repository, new TestSecretProtector(), new TestKeyStore("id_ed25519"), pool);
+        var created = await service.CreateAsync(Input("edge", "secret phrase"), CancellationToken.None);
+        Assert.Empty(created.AllowedSshSources);
+        var before = await repository.GetAsync(created.Id, CancellationToken.None);
+        var (name, host, port, tags, passphrase) = (before!.Name, before.Host, before.Port, before.TagsJson, before.ProtectedKeyPassphrase);
+
+        var result = await service.SetAllowedSshSourcesAsync(
+            created.Id, "# office\n203.0.113.7\n192.168.20.5/24, 2001:DB8::/32\n203.0.113.7", CancellationToken.None);
+
+        Assert.True(result.Saved);
+        Assert.Empty(result.Errors);
+        Assert.Equal(["203.0.113.7", "192.168.20.0/24", "2001:db8::/32"], result.Sources);
+        var listed = Assert.Single(await service.ListAsync(CancellationToken.None));
+        Assert.Equal(result.Sources, listed.AllowedSshSources);
+        var after = await repository.GetAsync(created.Id, CancellationToken.None);
+        Assert.Equal((name, host, port, tags, passphrase), (after!.Name, after.Host, after.Port, after.TagsJson, after.ProtectedKeyPassphrase));
+        Assert.Empty(pool.Evicted);
+
+        // Editing the server afterwards keeps the list; clearing it empties it.
+        var updated = await service.UpdateAsync(created.Id, Input("edge", null) with { Group = "staging" }, CancellationToken.None);
+        Assert.Equal(result.Sources, updated!.AllowedSshSources);
+        var cleared = await service.SetAllowedSshSourcesAsync(created.Id, "  \n# nothing\n", CancellationToken.None);
+        Assert.True(cleared.Saved);
+        Assert.Empty(cleared.Sources);
+        Assert.Empty(Assert.Single(await service.ListAsync(CancellationToken.None)).AllowedSshSources);
+    }
+
+    [Fact]
+    public async Task SetAllowedSshSources_InvalidTextReturnsLineErrorsAndSavesNothing()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var service = new ServerService(new ServerRepository(database.Context), new TestSecretProtector(),
+            new TestKeyStore("id_ed25519"), new RecordingSshConnectionPool());
+        var created = await service.CreateAsync(Input("edge", null), CancellationToken.None);
+        _ = await service.SetAllowedSshSourcesAsync(created.Id, "203.0.113.7", CancellationToken.None);
+
+        var result = await service.SetAllowedSshSourcesAsync(created.Id, "10.0.0.1\n10.0.0.256\nbogus", CancellationToken.None);
+
+        Assert.False(result.Saved);
+        Assert.False(result.ServerNotFound);
+        Assert.Empty(result.Sources);
+        Assert.Equal(
+        [
+            "line 2: \"10.0.0.256\" is not an IP address or CIDR range",
+            "line 3: \"bogus\" is not an IP address or CIDR range"
+        ], result.Errors);
+        Assert.Equal(["203.0.113.7"], Assert.Single(await service.ListAsync(CancellationToken.None)).AllowedSshSources);
+    }
+
+    [Fact]
+    public async Task SetAllowedSshSources_UnknownServerIsReportedWithoutThrowing()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var service = new ServerService(new ServerRepository(database.Context), new TestSecretProtector(),
+            new TestKeyStore("id_ed25519"), new RecordingSshConnectionPool());
+
+        var result = await service.SetAllowedSshSourcesAsync(Guid.NewGuid(), "203.0.113.7", CancellationToken.None);
+
+        Assert.False(result.Saved);
+        Assert.True(result.ServerNotFound);
+        Assert.Empty(result.Sources);
+        Assert.Empty(result.Errors);
+    }
+
+    [Fact]
+    public async Task AllowedSshSourcesColumnRoundTripsThroughTheDatabase()
+    {
+        await using var connection = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection).Options;
+        Guid id;
+        await using (var writer = new AppDbContext(options))
+        {
+            await writer.Database.EnsureCreatedAsync();
+            var service = new ServerService(new ServerRepository(writer), new TestSecretProtector(), new TestKeyStore("id_ed25519"),
+                new RecordingSshConnectionPool());
+            id = (await service.CreateAsync(Input("edge", null), CancellationToken.None)).Id;
+            _ = await service.SetAllowedSshSourcesAsync(id, "203.0.113.7\n2001:db8::/32", CancellationToken.None);
+        }
+
+        // A fresh context reads the stored JSON, not a tracked entity.
+        await using var reader = new AppDbContext(options);
+        var stored = await reader.Servers.AsNoTracking().SingleAsync(server => server.Id == id);
+        Assert.Equal("""["203.0.113.7","2001:db8::/32"]""", stored.AllowedSshSourcesJson);
+        var summary = Assert.Single(await new ServerService(new ServerRepository(reader), new TestSecretProtector(),
+            new TestKeyStore("id_ed25519"), new RecordingSshConnectionPool()).ListAsync(CancellationToken.None));
+        Assert.Equal(["203.0.113.7", "2001:db8::/32"], summary.AllowedSshSources);
+    }
+
+    [Fact]
+    public void NewServerStartsWithAnEmptyAllowedSshSourcesJsonArray()
+    {
+        var server = new DevOpsAgent.Domain.Servers.Server("edge", "edge.example.internal", 22, "deploy", "id_ed25519", "prod");
+
+        Assert.Equal("[]", server.AllowedSshSourcesJson);
+        Assert.Throws<ArgumentException>(() => server.SetAllowedSshSources(["10.0.0.1", " "]));
+        Assert.Equal("[]", server.AllowedSshSourcesJson);
+        server.SetAllowedSshSources(["10.0.0.1"]);
+        Assert.Equal("""["10.0.0.1"]""", server.AllowedSshSourcesJson);
+    }
+
     private static ServerInput Input(string name, string? passphrase) => new(
         name, "edge.example.internal", 22, "deploy", "id_ed25519", passphrase, null, "prod", ["web", "public"]);
 

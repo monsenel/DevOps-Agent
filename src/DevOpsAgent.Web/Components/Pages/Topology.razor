@@ -168,6 +168,41 @@
                     }
                 }
             </dl>
+            @if (SelectedSsh is { } ssh)
+            {
+                <h3>SSH sessions</h3>
+                @if (ssh.Rows.Count == 0)
+                {
+                    <p class="muted">No SSH sessions were open at the last discovery.</p>
+                }
+                else
+                {
+                    <p class="topology-ssh-status"><span class="ui-badge @SshLevelBadge(ssh.Status.Level)">@SshLevelText(ssh.Status)</span></p>
+                    <ul class="topology-detail-items topology-ssh-sessions">
+                        @foreach (var row in ssh.Rows)
+                        {
+                            <li @key="@($"{row.Address}|{row.Verdict}")">
+                                <span class="topology-ssh-source">
+                                    <span class="mono">@row.Address</span>
+                                    @if (row.ServerName is not null)
+                                    {
+                                        <span class="muted">@row.ServerName</span>
+                                    }
+                                </span>
+                                <span class="topology-ssh-meta">
+                                    <span class="muted">× @row.Count @(row.Count == 1 ? "session" : "sessions")</span>
+                                    <span class="ui-badge @SshVerdictBadge(row.Verdict)">@SshVerdictText(row.Verdict)</span>
+                                </span>
+                            </li>
+                        }
+                    </ul>
+                }
+                @if (ssh.AllowedSources.Count == 0)
+                {
+                    <p class="muted">Set the allowed SSH sources to be warned about other addresses.</p>
+                }
+                <a class="ui-button secondary topology-ssh-link" href="/servers?sshSources=@ssh.ServerId">Allowed SSH sources</a>
+            }
             @if (_selectedListeners.Count > 0)
             {
                 <h3>Listeners</h3>
@@ -411,6 +446,7 @@
     {
         _graph = await GraphRepository.GetAsync(snapshotId, CurrentGraphView, CancellationToken.None);
         _inventory = null;
+        _sshStatuses = null;
         _externalClientAddresses = null;
         _selected = null;
         _selectedId = null;
@@ -819,10 +855,112 @@
         return System.Net.IPAddress.IsLoopback(parsed.IsIPv4MappedToIPv6 ? parsed.MapToIPv4() : parsed);
     }
 
-    // Per server: the operating system and the primary address, for the caption above its card in the Servers view.
+    // Per server: the operating system and the primary address for the caption above its card in the Servers view, and its SSH
+    // session status (T8.18): the card colour, the warning badge and the caption text.
     private Dictionary<string, object> BuildServerInfo() => _servers.ToDictionary(server => server.Id.ToString("N"),
-        server => (object)new { os = server.OsInfo, address = CaptionAddress(server) },
+        server => (object)new
+        {
+            os = server.OsInfo,
+            address = CaptionAddress(server),
+            ssh = SshStatuses.TryGetValue(server.Id.ToString("N"), out var status)
+                ? new { level = status.Level.ToString().ToLowerInvariant(), summary = status.Summary }
+                : new { level = "none", summary = string.Empty }
+        },
         StringComparer.OrdinalIgnoreCase);
+
+    // The SSH session status of every server that has a Host node, judged against its allowed sources and its jump host. Built
+    // lazily from the loaded graph, so LoadGraphAsync resets it.
+    private IReadOnlyDictionary<string, SshSessionStatus>? _sshStatuses;
+
+    private IReadOnlyDictionary<string, SshSessionStatus> SshStatuses => _sshStatuses ??= BuildSshStatuses();
+
+    private IReadOnlyDictionary<string, SshSessionStatus> BuildSshStatuses()
+    {
+        var result = new Dictionary<string, SshSessionStatus>(StringComparer.OrdinalIgnoreCase);
+        foreach (var node in (_graph?.Nodes ?? []).Select(element => element.Data).Where(node => ReadString(node, "kind") == "Host"))
+        {
+            if (ReadString(node, "serverId") is { } serverId && ServerById(serverId) is { } server)
+            {
+                result[serverId] = AssessHost(node, server);
+            }
+        }
+
+        return result;
+    }
+
+    private ServerSummary? ServerById(string serverId) =>
+        _servers.FirstOrDefault(server => string.Equals(server.Id.ToString("N"), serverId, StringComparison.OrdinalIgnoreCase));
+
+    private SshSessionStatus AssessHost(JsonElement host, ServerSummary server) => SshSessionAssessor.Assess(
+        TryGetProperty(host, "attributes", out var attributes) ? SshSessionAttributes.Read(attributes) : [],
+        server.AllowedSshSources, JumpHostAddresses(server));
+
+    // The addresses a session from the server's jump host comes from: what the jump server was added with (when it is an IP) and
+    // the interface addresses of its Host node, loopback left out.
+    private IReadOnlyList<string> JumpHostAddresses(ServerSummary server)
+    {
+        if (server.JumpServerId is not { } jumpId || _servers.FirstOrDefault(candidate => candidate.Id == jumpId) is not { } jump) return [];
+
+        var addresses = new List<string>();
+        if (IsNonLoopbackIp(jump.Host)) addresses.Add(jump.Host.Trim());
+        var jumpKey = jumpId.ToString("N");
+        foreach (var node in (_graph?.Nodes ?? []).Select(element => element.Data)
+                     .Where(node => ReadString(node, "kind") == "Host" && string.Equals(ReadString(node, "serverId"), jumpKey, StringComparison.OrdinalIgnoreCase)))
+        {
+            if (!TryGetProperty(node, "attributes", out var attributes)) continue;
+            addresses.AddRange(ReadStringList(attributes, "Addresses").Where(IsNonLoopbackIp));
+        }
+
+        return addresses;
+    }
+
+    private static bool IsNonLoopbackIp(string text) => !text.Contains('/') && SshSourceList.TryNormalize(text, out var normalized)
+        && !System.Net.IPAddress.IsLoopback(System.Net.IPAddress.Parse(normalized));
+
+    // The SSH sessions of the selected Host: one row per source address and verdict, not allowed first (the policy sorts them).
+    private SshPanel? SelectedSsh
+    {
+        get
+        {
+            if (_selected is not JsonElement selected || IsEdge(selected) || ReadString(selected, "kind") != "Host"
+                || ReadString(selected, "serverId") is not { } serverId || ServerById(serverId) is not { } server) return null;
+
+            var status = SshStatuses.TryGetValue(serverId, out var known) ? known : AssessHost(selected, server);
+            var rows = status.Sessions
+                .GroupBy(item => (Address: item.Session.SourceAddress, item.Verdict))
+                .Select(group => new SshRow(group.Key.Address,
+                    Inventory.TryGetValue(NormalizeAddress(group.Key.Address), out var owner) ? owner.Name : null,
+                    group.Sum(item => item.Session.Count), group.Key.Verdict))
+                .ToArray();
+            return new SshPanel(status, rows, server.AllowedSshSources, server.Id.ToString("N"));
+        }
+    }
+
+    private static string SshLevelBadge(SshSessionLevel level) => level switch
+    {
+        SshSessionLevel.Warning => "danger",
+        SshSessionLevel.Notice => "warn",
+        _ => "neutral"
+    };
+
+    private static string SshLevelText(SshSessionStatus status) =>
+        status.Level == SshSessionLevel.None ? "No other SSH sources" : status.Summary;
+
+    private static string SshVerdictBadge(SshSessionVerdict verdict) => verdict switch
+    {
+        SshSessionVerdict.Allowed => "soft",
+        SshSessionVerdict.NotAllowed => "danger",
+        _ => "neutral"
+    };
+
+    private static string SshVerdictText(SshSessionVerdict verdict) => verdict switch
+    {
+        SshSessionVerdict.Agent => "DevOps Agent",
+        SshSessionVerdict.AllowedImplicitly => "Jump server",
+        SshSessionVerdict.Allowed => "Allowed",
+        SshSessionVerdict.NotAllowed => "Not allowed",
+        _ => "No list set"
+    };
 
     // The address the server is added with when it is one of its interfaces (a host name or a tunnelled 127.0.0.1 is not),
     // otherwise its first reachable interface address, otherwise what it was added with.
@@ -919,6 +1057,11 @@
 
     // An inventory server (id in "N" format) as the Servers view needs it.
     private sealed record InventoryServer(string ServerId, string Name);
+
+    // The SSH section of the details panel: one row per source address and verdict, the server's allowed list and its id (N format).
+    private sealed record SshPanel(SshSessionStatus Status, IReadOnlyList<SshRow> Rows, IReadOnlyList<string> AllowedSources, string ServerId);
+
+    private sealed record SshRow(string Address, string? ServerName, int Count, SshSessionVerdict Verdict);
 
     private string? FindNodeName(string id) => _graph?.Nodes
         .Select(element => element.Data)

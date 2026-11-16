@@ -28,6 +28,11 @@
             <div class="alert-message error" role="alert">@_pageError</div>
         }
 
+        @if (!string.IsNullOrWhiteSpace(_sourcesMessage))
+        {
+            <div class="settings-message success sources-saved-message" role="status">@_sourcesMessage</div>
+        }
+
         @if (_servers.Count == 0)
         {
             <div class="servers-empty">
@@ -104,6 +109,15 @@
                                             <button class="ui-button primary compact" type="button" disabled aria-describedby="sudo-retry-blocked-@server.Id.ToString("N")">Retry now</button>
                                         }
                                         <button class="ui-button secondary" type="button" @onclick="() => TestConnectionAsync(server.Id)" disabled="@(_testingId == server.Id)">Test connection</button>
+                                        @* The addresses allowed to log in over SSH; the map warns about any other (T8.18). *@
+                                        <button class="ui-button secondary" type="button" @onclick="() => OpenSshSources(server.Id)"
+                                                aria-label="@(server.AllowedSshSources.Count > 0 ? $"SSH sources, {server.AllowedSshSources.Count} allowed" : "SSH sources")">
+                                            SSH sources
+                                            @if (server.AllowedSshSources.Count > 0)
+                                            {
+                                                <span class="ui-badge soft" aria-hidden="true">@server.AllowedSshSources.Count</span>
+                                            }
+                                        </button>
                                         <button class="ui-button secondary compact" type="button" @onclick="() => OpenEdit(server.Id)">Edit</button>
                                         <button class="ui-button ghost-danger compact" type="button" @onclick="() => AskDelete(server.Id)">Remove</button>
                                     </div>
@@ -246,6 +260,51 @@
                     }
                 </div>
             </EditForm>
+        </section>
+    </div>
+}
+
+@if (_sourcesServerId.HasValue)
+{
+    @* Esc closes it. Clicking the backdrop does not, so typed text is not lost by accident (like the other dialogs). *@
+    <div class="dialog-backdrop">
+        <section class="ui-card inventory-dialog ssh-sources-dialog" role="dialog" aria-modal="true" aria-labelledby="ssh-sources-title"
+                 @onkeydown="OnSourcesKeyDown">
+            <div class="servers-heading">
+                <div>
+                    <p class="eyebrow">SSH access</p>
+                    <h2 id="ssh-sources-title">Allowed SSH sources · @_sourcesServerName</h2>
+                </div>
+                <button class="ui-button secondary compact" type="button" @onclick="CloseSshSources">Close</button>
+            </div>
+            <p class="muted" id="ssh-sources-help">
+                DevOps Agent warns on the map when someone logs in over SSH from an address that is not listed. One IP address or
+                range (CIDR) per line, for example <span class="mono">203.0.113.7</span> or <span class="mono">192.168.20.0/24</span>.
+                Leave empty to turn the warning off. The agent's own connection and the jump server are always allowed.
+            </p>
+            <div class="field ssh-sources-field">
+                <label for="ssh-sources-text">Allowed addresses</label>
+                <textarea id="ssh-sources-text" class="mono" @ref="_sourcesTextArea" @bind="_sourcesText" @bind:event="oninput" rows="8"
+                          spellcheck="false" autocomplete="off" autocapitalize="off" maxlength="@SshSourceList.MaxTextLength"
+                          aria-describedby="ssh-sources-help@(_sourcesErrors.Count > 0 ? " ssh-sources-errors" : null)"
+                          aria-invalid="@(_sourcesErrors.Count > 0 ? "true" : null)"
+                          placeholder="203.0.113.7&#10;192.168.20.0/24"></textarea>
+            </div>
+            @if (_sourcesErrors.Count > 0)
+            {
+                <div class="alert-message error" role="alert" id="ssh-sources-errors">
+                    <ul class="ssh-sources-errors">
+                        @foreach (var error in _sourcesErrors)
+                        {
+                            <li>@error</li>
+                        }
+                    </ul>
+                </div>
+            }
+            <div class="dialog-actions">
+                <button class="ui-button secondary" type="button" @onclick="CloseSshSources">Cancel</button>
+                <button class="ui-button primary" type="button" @onclick="SaveSshSourcesAsync" disabled="@_sourcesSaving">@(_sourcesSaving ? "Saving…" : "Save")</button>
+            </div>
         </section>
     </div>
 }
@@ -406,6 +465,18 @@
     private string? _formError;
     private string? _unknownHostSuggestion;
     private string? _suggestedJumpName;
+    private Guid? _sourcesServerId;
+    private string _sourcesServerName = string.Empty;
+    private string _sourcesText = string.Empty;
+    private IReadOnlyList<string> _sourcesErrors = [];
+    private bool _sourcesSaving;
+    private string? _sourcesMessage;
+    private bool _focusSourcesText;
+    private ElementReference _sourcesTextArea;
+
+    /// <summary>A server id (N format): opens that server's allowed SSH sources dialog on load (linked from the map, T8.18).</summary>
+    [SupplyParameterFromQuery(Name = "sshSources")]
+    public Guid? SshSources { get; set; }
 
     [SupplyParameterFromQuery(Name = "unknownHost")]
     public string? UnknownHost { get; set; }
@@ -418,6 +489,7 @@
         // A rejection, an unknown outcome or a confirmation recorded in the background shows up without a reload (T7.R26).
         StateEvents.Changed += OnServerStateChanged;
         await LoadAsync();
+        if (SshSources is Guid sourcesServerId) OpenSshSources(sourcesServerId);
         if (string.IsNullOrWhiteSpace(UnknownHost)) return;
 
         OpenCreate();
@@ -435,6 +507,81 @@
     {
         _servers = await ServersService.ListAsync(CancellationToken.None);
         _keyFiles = ServersService.ListKeyFiles();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_focusSourcesText) return;
+        _focusSourcesText = false;
+        try
+        {
+            await _sourcesTextArea.FocusAsync();
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or JSDisconnectedException)
+        {
+            // The dialog closed again, or the circuit went away, before the focus call ran.
+        }
+    }
+
+    private void OpenSshSources(Guid id)
+    {
+        var server = _servers.FirstOrDefault(item => item.Id == id);
+        if (server is null) return;
+
+        _sourcesServerId = id;
+        _sourcesServerName = server.Name;
+        _sourcesText = SshSourceList.Format(server.AllowedSshSources);
+        _sourcesErrors = [];
+        _sourcesMessage = null;
+        _focusSourcesText = true;
+    }
+
+    private void CloseSshSources()
+    {
+        _sourcesServerId = null;
+        _sourcesErrors = [];
+    }
+
+    private void OnSourcesKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape") CloseSshSources();
+    }
+
+    private async Task SaveSshSourcesAsync()
+    {
+        if (_sourcesServerId is not Guid id || _sourcesSaving) return;
+
+        _sourcesSaving = true;
+        try
+        {
+            var result = await ServersService.SetAllowedSshSourcesAsync(id, _sourcesText, CancellationToken.None);
+            if (result.ServerNotFound)
+            {
+                _sourcesServerId = null;
+                _pageError = "That server no longer exists.";
+                await LoadAsync();
+                return;
+            }
+
+            if (!result.Saved)
+            {
+                _sourcesErrors = result.Errors;
+                _focusSourcesText = true;
+                return;
+            }
+
+            _sourcesServerId = null;
+            _sourcesErrors = [];
+            _pageError = null;
+            _sourcesMessage = result.Sources.Count == 0
+                ? $"Allowed SSH sources cleared for {_sourcesServerName}. The SSH source warning is off for this server."
+                : $"Saved {result.Sources.Count} allowed SSH {(result.Sources.Count == 1 ? "source" : "sources")} for {_sourcesServerName}.";
+            await LoadAsync();
+        }
+        finally
+        {
+            _sourcesSaving = false;
+        }
     }
 
     private void OnServerStateChanged(Guid serverId) => _ = InvokeAsync(async () =>

@@ -16,7 +16,7 @@ function tokens() {
         line: read("line"), edge: read("edge"), accent: read("accent"), warn: read("warn"),
         warnSoft: read("warn-soft"), onWarn: read("on-warn"), danger: read("danger"),
         roleProxy: read("role-proxy"), roleApp: read("role-app"), roleData: read("role-data"),
-        roleCi: read("role-ci"), roleClients: read("role-clients"), graphPort: read("graph-port"),
+        roleCi: read("role-ci"), roleClients: read("role-clients"), graphPort: read("graph-port"), ssh: read("ssh"),
         font: '"Plus Jakarta Sans", system-ui, sans-serif', mono: '"JetBrains Mono", monospace'
     };
 }
@@ -24,10 +24,13 @@ function tokens() {
 // ---- Servers view: roles, icons, sizes ----
 
 // Layout constants of a server card, in graph pixels (the card is a compound node; its size comes from its children).
-const CARD = { pad: 14, gap: 8, rowH: 34, rowMinW: 180, rowPadX: 32, headerH: 30, icon: 20, iconGap: 8, captionH: 26, unknownPadX: 28 };
+const CARD = { pad: 14, gap: 8, rowH: 34, rowMinW: 180, rowPadX: 32, headerH: 30, icon: 20, iconGap: 8, captionH: 26, unknownPadX: 28,
+    // The SSH warning badge at the right end of the header row of a host card (T8.18).
+    badge: 20, badgeGap: 10 };
 const CLIENTS_ID = "servers-view:clients";
 const UNKNOWN_HOST_PREFIX = "servers-view:unknown:";
 const headerId = boxId => `servers-view:header:${boxId}`;
+const badgeId = boxId => `servers-view:ssh-badge:${boxId}`;
 
 // Names are matched at their start, after a leading path, and end at a separator or the end: "redis-server", "postgresql@15-main.service"
 // and "nginx" count, "worker-redis" and "docker-proxy" do not.
@@ -57,7 +60,9 @@ const ICONS = {
     server: '<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01"/>',
     database: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
     code: '<path d="m8 7-5 5 5 5"/><path d="m16 7 5 5-5 5"/><path d="m14 4-4 16"/>',
-    users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>'
+    users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    // Warning triangle: the SSH badge of a host card.
+    alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>'
 };
 
 // Cytoscape cannot use currentColor or CSS variables inside an image, so the icon is built with the colour value of the token.
@@ -197,6 +202,15 @@ function serversStyles(c) {
             "background-width": `${CARD.icon}px`, "background-height": `${CARD.icon}px`,
             "background-fit": "none", "background-clip": "none"
         } },
+        // The SSH warning badge: a triangle icon in the header row, at the right inner edge of the card. Its image comes from the
+        // level rules below (the colour is a token value).
+        { selector: 'node[kind = "HostBadge"]', style: {
+            "shape": "rectangle", "background-opacity": 0, "border-width": 0, "padding": 0,
+            "width": "data(w)", "height": "data(h)", "label": "",
+            "background-position-x": "50%", "background-position-y": "50%",
+            "background-width": `${CARD.badge}px`, "background-height": `${CARD.badge}px`,
+            "background-fit": "none", "background-clip": "none"
+        } },
         // An unknown endpoint without an address stands alone; an unknown row (below) is styled by the row rules.
         { selector: 'node[kind = "Unknown"][!unknownHost]', style: { "padding": 0, "width": "data(w)", "height": "data(h)", "text-wrap": "wrap", "text-max-width": 400 } },
         // A service or container row (and a domain or unknown-port row in the clients and unknown cards), one pill under the header.
@@ -215,10 +229,19 @@ function serversStyles(c) {
             style: { "border-color": color, "outline-color": color } });
         rules.push({ selector: `node[kind = "HostHeader"][role = "${role}"]`, style: { "background-image": iconUri(definition.icon, color) } });
     }
+    // SSH sessions (T8.18): "notice" has its own colour, "warning" (a source that is not allowed) is danger. They come after the
+    // Medium alert, so they win over it, and before High / Critical, whose border colour wins over them. The caption always says it
+    // in text and the badge shows on every card with a level, whatever the border colour is.
+    const sshColors = { notice: c.ssh, warning: c.danger };
+    rules.push({ selector: 'node[kind = "Host"][alertSeverity = "Medium"]', style: { "border-width": 2.5, "border-color": c.warn, "outline-color": c.warn } });
+    for (const [level, color] of Object.entries(sshColors)) {
+        rules.push({ selector: `node[kind = "Host"][sshLevel = "${level}"]`,
+            style: { "border-width": level === "warning" ? 3 : 2.5, "border-color": color, "outline-color": color } });
+        rules.push({ selector: `node[kind = "HostBadge"][sshLevel = "${level}"]`, style: { "background-image": iconUri("alert", color) } });
+    }
     rules.push(
         { selector: 'node[kind = "Host"][alertSeverity = "Critical"]', style: { "border-width": 3, "border-color": c.danger, "outline-color": c.danger } },
         { selector: 'node[kind = "Host"][alertSeverity = "High"]', style: { "border-width": 2.5, "border-color": c.danger, "outline-color": c.danger } },
-        { selector: 'node[kind = "Host"][alertSeverity = "Medium"]', style: { "border-width": 2.5, "border-color": c.warn, "outline-color": c.warn } },
         { selector: 'node[stale = "stale"]', style: { "opacity": 0.55, "border-style": "dashed" } },
         // One dashed arrow per pair of servers; the colour keeps the legend: observed only is warn, declared only is faded.
         { selector: "edge", style: {
@@ -283,8 +306,8 @@ export function init(container, dotNetReference) {
         dotNet?.invokeMethodAsync("OnGraphSelection", JSON.stringify(event.target.data()));
     });
     graph.on("unselect", "node, edge", () => dotNet?.invokeMethodAsync("OnGraphSelection", null));
-    // The header of a server card is not selectable; a tap on it selects the server card instead.
-    graph.on("tap", 'node[kind = "HostHeader"]', event => {
+    // The header and the SSH badge of a server card are not selectable; a tap on one selects the server card instead.
+    graph.on("tap", 'node[kind = "HostHeader"], node[kind = "HostBadge"]', event => {
         const card = graph.getElementById(event.target.data("hostId"));
         graph.elements(":selected").unselect();
         card.select();
@@ -616,6 +639,10 @@ function buildServers(elements, alertStatuses, serverInfo, c, listenerPorts, inv
                     fromClients: fromClients.has(box.id), dataPorts: (incomingPorts.get(box.id) || []).some(port => DATA_PORTS.has(port))
                 });
             box.name = box.node.label || "";
+            // SSH sessions to look at (T8.18): the page judged them already; "none" (or anything else) draws nothing.
+            const ssh = box.kind === "host" ? info.ssh : undefined;
+            box.sshLevel = ssh?.level === "notice" || ssh?.level === "warning" ? ssh.level : "";
+            box.sshSummary = box.sshLevel ? (typeof ssh.summary === "string" && ssh.summary.trim()) || "SSH sessions to review" : "";
             const address = info.address || (Array.isArray(attributes.Addresses) ? attributes.Addresses[0] : "");
             // The machine's own name is worth a word only when it is not the name the server was added with.
             const hostname = typeof attributes.Hostname === "string" ? attributes.Hostname.trim() : "";
@@ -624,8 +651,10 @@ function buildServers(elements, alertStatuses, serverInfo, c, listenerPorts, inv
                 : box.kind === "unknownHost" ? [box.inventory ? "In inventory, not discovered yet" : "Not in inventory", box.address] : [];
             if (alert) parts.push(`${alert} alert`);
             if (stale) parts.push(staleText(attributes.LastSeenUtc));
+            // The colour and the badge are backed by text: "SSH from 2 sources", "SSH from a source that is not allowed".
+            if (box.sshSummary) parts.push(box.sshSummary);
             box.caption = parts.filter(Boolean).join(" • ");
-            box.ownSearch += ` ${JSON.stringify(info)}`.toLocaleLowerCase();
+            box.ownSearch += ` ${JSON.stringify({ os: info.os, address: info.address })} ${box.sshSummary}`.toLocaleLowerCase();
             // All rows of a card share one width: the longest label plus padding, at least the minimum, at least the header.
             if (box.kind === "host") {
                 box.rowLabels = new Map(box.rows.map(row => {
@@ -639,7 +668,9 @@ function buildServers(elements, alertStatuses, serverInfo, c, listenerPorts, inv
             const rowFont = row => box.kind === "host" && !mergedRows.has(row.id) ? font.row : font.domain;
             const labelWidth = Math.max(0, ...box.rows.map(row => textWidth(rowLabel(box, row), rowFont(row))));
             box.headerW = CARD.icon + CARD.iconGap + textWidth(box.name, font.header);
-            box.inner = box.rows.length === 0 ? box.headerW : Math.max(box.headerW, CARD.rowMinW, labelWidth + CARD.rowPadX);
+            // The badge sits at the right end of the header row, so the card must hold the header, a gap and the badge.
+            const headerRowW = box.headerW + (box.sshLevel ? CARD.badgeGap + CARD.badge : 0);
+            box.inner = box.rows.length === 0 ? headerRowW : Math.max(headerRowW, CARD.rowMinW, labelWidth + CARD.rowPadX);
             box.w = box.inner + 2 * CARD.pad;
             box.h = 2 * CARD.pad + CARD.headerH + box.rows.length * (CARD.gap + CARD.rowH);
             box.captionW = box.caption ? textWidth(box.caption, font.caption) : 0;
@@ -739,13 +770,22 @@ function serversElements(built, layout) {
         const top = origin.y + (box.caption ? CARD.captionH : 0);
         result.push({ data: {
             ...box.node, parent: null, role: box.role, displayLabel: box.caption, alertSeverity: box.alert, stale,
-            captionDx: (box.captionW - box.w) / 2 + 4, unknownHost: box.kind === "unknownHost" ? true : undefined
+            captionDx: (box.captionW - box.w) / 2 + 4, unknownHost: box.kind === "unknownHost" ? true : undefined,
+            sshLevel: box.sshLevel || ""
         } });
         result.push({ data: {
             id: headerId(box.id), kind: "HostHeader", hostId: box.id, role: box.role, parent: box.id, label: box.name,
             displayLabel: box.name, w: box.headerW, h: CARD.headerH, stale
         }, position: { x: origin.x + CARD.pad + box.headerW / 2, y: top + CARD.pad + CARD.headerH / 2 },
         selectable: false, grabbable: false });
+        if (box.sshLevel) {
+            // At the right inner edge of the card, vertically centred in the header row. A tap selects the host (see init).
+            result.push({ data: {
+                id: badgeId(box.id), kind: "HostBadge", hostId: box.id, sshLevel: box.sshLevel, parent: box.id,
+                w: CARD.badge, h: CARD.badge, stale
+            }, position: { x: origin.x + CARD.pad + box.inner - CARD.badge / 2, y: top + CARD.pad + CARD.headerH / 2 },
+            selectable: false, grabbable: false });
+        }
         box.rows.forEach((row, index) => {
             result.push({ data: {
                 ...row, parent: box.id, row: true, displayLabel: rowLabel(box, row), w: box.inner, h: CARD.rowH,
@@ -813,7 +853,7 @@ export function focus(id) {
 // A card with its header (but not its rows).
 function cardFrame(boxId) {
     const card = graph.getElementById(boxId);
-    return card.union(card.children('[kind = "HostHeader"]'));
+    return card.union(card.children('[kind = "HostHeader"], [kind = "HostBadge"]'));
 }
 
 export function highlightTrace(nodeIds, edgeIds) {

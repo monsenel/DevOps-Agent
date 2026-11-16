@@ -36,10 +36,27 @@ public sealed record ServerSummary(
     string? OsInfo,
     bool HasSudoPassword = false,
     DateTimeOffset? SudoPasswordRejectedAtUtc = null,
-    DateTimeOffset? SudoPasswordOutcomeUnknownAtUtc = null)
+    DateTimeOffset? SudoPasswordOutcomeUnknownAtUtc = null,
+    IReadOnlyList<string>? AllowedSshSources = null)
 {
+    /// <summary>The allowed SSH source addresses and ranges, normalised (T8.18); empty when none are configured.</summary>
+    public IReadOnlyList<string> AllowedSshSources { get; init; } = AllowedSshSources ?? [];
+
     public ServerSudoStatus Sudo =>
         ServerSudoStatus.Describe(SudoCapable, HasSudoPassword, SudoPasswordRejectedAtUtc, SudoPasswordOutcomeUnknownAtUtc);
+}
+
+/// <summary>The outcome of saving a server's allowed SSH source list (T8.18).</summary>
+/// <param name="Saved">The list was saved; <paramref name="Sources"/> holds it, normalised.</param>
+/// <param name="Sources">The saved list; empty when nothing was saved.</param>
+/// <param name="Errors">Per-line problems of the text (<c>line 3: "10.0.0.256" is not an IP address or CIDR range</c>); nothing was saved.</param>
+/// <param name="ServerNotFound">No inventory server has that id.</param>
+public sealed record SetAllowedSshSourcesResult(
+    bool Saved, IReadOnlyList<string> Sources, IReadOnlyList<string> Errors, bool ServerNotFound = false)
+{
+    public static SetAllowedSshSourcesResult Success(IReadOnlyList<string> sources) => new(true, sources, []);
+    public static SetAllowedSshSourcesResult Invalid(IReadOnlyList<string> errors) => new(false, [], errors);
+    public static SetAllowedSshSourcesResult NotFound() => new(false, [], [], true);
 }
 
 /// <summary>How a server uses sudo, as the Servers page shows it (T7.R24).</summary>

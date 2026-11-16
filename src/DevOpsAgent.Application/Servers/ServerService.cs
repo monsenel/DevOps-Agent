@@ -67,6 +67,23 @@ public sealed class ServerService(
         return ToSummary(server, servers);
     }
 
+    /// <summary>
+    /// Replaces the server's allowed SSH source list from the editor text (T8.18). Bad input is reported in the result and
+    /// nothing is saved; only this one field changes, so the pooled SSH connection and the rest of the server stay as they are.
+    /// </summary>
+    public async Task<SetAllowedSshSourcesResult> SetAllowedSshSourcesAsync(Guid serverId, string? text, CancellationToken cancellationToken)
+    {
+        var server = await repository.GetAsync(serverId, cancellationToken);
+        if (server is null) return SetAllowedSshSourcesResult.NotFound();
+
+        var parsed = SshSourceList.Parse(text);
+        if (!parsed.IsValid) return SetAllowedSshSourcesResult.Invalid(parsed.Errors);
+
+        server.SetAllowedSshSources(parsed.Entries);
+        await repository.SaveAsync(server, cancellationToken);
+        return SetAllowedSshSourcesResult.Success(parsed.Entries);
+    }
+
     /// <summary>Every server whose jump-server route passes through <paramref name="jumpId"/> (directly or through further jumps).</summary>
     private static IReadOnlyList<Guid> DependentsOf(Guid jumpId, IReadOnlyCollection<Server> servers)
     {
@@ -232,5 +249,6 @@ public sealed class ServerService(
         server.OsInfo,
         server.HasSudoPassword,
         server.SudoPasswordRejectedAtUtc,
-        server.SudoPasswordOutcomeUnknownAtUtc);
+        server.SudoPasswordOutcomeUnknownAtUtc,
+        SshSourceList.FromJson(server.AllowedSshSourcesJson));
 }

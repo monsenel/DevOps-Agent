@@ -16,6 +16,7 @@ public sealed class Server
         KeyFile = keyFile;
         Group = group;
         TagsJson = "[]";
+        AllowedSshSourcesJson = "[]";
         CreatedAtUtc = DateTimeOffset.UtcNow;
     }
 
@@ -30,6 +31,12 @@ public sealed class Server
     public string Group { get; private set; } = string.Empty;
     public string TagsJson { get; private set; } = "[]";
     public bool? SudoCapable { get; private set; }
+
+    /// <summary>
+    /// The addresses (IPs and CIDR ranges, already validated and normalised) that may log in to this server over SSH, as a JSON
+    /// array of strings (T8.18). Empty: the SSH-source warning is off for this server.
+    /// </summary>
+    public string AllowedSshSourcesJson { get; private set; } = "[]";
 
     /// <summary>
     /// The sudo password for hosts where NOPASSWD sudo is not possible, protected with Data Protection. When set, sudo runs as
@@ -98,6 +105,17 @@ public sealed class Server
         {
             ProtectedKeyPassphrase = protectedKeyPassphrase;
         }
+    }
+
+    /// <summary>
+    /// Replaces the allowed SSH source list. The entries must already be validated and normalised (the Application layer's
+    /// <c>SshSourceList.Parse</c> does that); this only stores them.
+    /// </summary>
+    public void SetAllowedSshSources(IReadOnlyList<string> sources)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+        if (sources.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("An allowed SSH source cannot be empty.", nameof(sources));
+        AllowedSshSourcesJson = System.Text.Json.JsonSerializer.Serialize(sources);
     }
 
     /// <summary>Replaces the stored sudo password (a new value also ends a rejection: it has not been tried yet).</summary>

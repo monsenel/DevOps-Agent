@@ -63,13 +63,15 @@ public sealed class ConnectionCollectorTests
     }
 
     [Fact]
-    public async Task CollectAsync_DropsTheAgentsOwnSshSessionAndKeepsOtherConnections()
+    public async Task CollectAsync_ListsInboundSshSessionsAndKeepsTheAgentsOwnAsAgent()
     {
         var ss = string.Join('\n',
             "ESTAB 0 0 10.88.10.5:22 10.88.10.1:57980",
             "ESTAB 0 0 10.88.10.5:22 10.88.10.1:57990", // a second agent connection from the same address
-            "ESTAB 0 0 10.88.10.5:22 203.0.113.50:40000", // another client's SSH stays
-            "ESTAB 0 0 10.88.10.5:443 10.88.10.1:41000", // same address, another port stays
+            "ESTAB 0 0 10.88.10.5:22 203.0.113.50:40000", // another client's SSH
+            "ESTAB 0 0 10.88.10.5:22 203.0.113.50:40001",
+            "ESTAB 0 0 10.88.10.5:22 203.0.113.51:40002",
+            "ESTAB 0 0 10.88.10.5:443 10.88.10.1:41000", // same address, another port stays an edge
             "ESTAB 0 0 [::ffff:10.88.10.5]:22 [::ffff:10.88.10.1]:57995") + "\n"; // IPv4-mapped form of the agent
         var runner = new RecordingSshRunner(ss, "10.88.10.1 57980 22");
         var collector = new ConnectionCollector();
@@ -80,16 +82,19 @@ public sealed class ConnectionCollectorTests
 
         Assert.True(parsed.IsSuccess, parsed.Error);
         var result = parsed.Data!.Value.Deserialize<ConnectionDiscoveryResult>()!;
-        Assert.Equal(2, result.Connections.Count);
-        Assert.Contains(result.Connections, item => item.LocalPort == 22 && item.PeerAddress == "203.0.113.50");
-        Assert.Contains(result.Connections, item => item.LocalPort == 443 && item.PeerAddress == "10.88.10.1");
-        Assert.Equal("SSH sessions of DevOps Agent from 10.88.10.1 to port 22 are not drawn.", Assert.Single(result.Notes));
+        var remaining = Assert.Single(result.Connections);
+        Assert.Equal(443, remaining.LocalPort);
+        Assert.Equal(
+            [new SshSessionInfo("10.88.10.1", 22, 3, true), new SshSessionInfo("203.0.113.50", 22, 2, false),
+                new SshSessionInfo("203.0.113.51", 22, 1, false)],
+            result.SshSessions);
+        Assert.Empty(result.Notes);
     }
 
     [Theory]
     [InlineData("")]
     [InlineData("not-an-address 1 22")]
-    public async Task CollectAsync_WithoutUsableSshClientDropsNothing(string sshClient)
+    public async Task CollectAsync_WithoutUsableSshClientListsSessionsButFlagsNoAgent(string sshClient)
     {
         var runner = new RecordingSshRunner("ESTAB 0 0 10.88.10.5:22 10.88.10.1:57980\n", sshClient);
         var collector = new ConnectionCollector();
@@ -100,7 +105,8 @@ public sealed class ConnectionCollectorTests
 
         Assert.True(parsed.IsSuccess, parsed.Error);
         var result = parsed.Data!.Value.Deserialize<ConnectionDiscoveryResult>()!;
-        Assert.Single(result.Connections);
+        Assert.Empty(result.Connections);
+        Assert.Equal([new SshSessionInfo("10.88.10.1", 22, 1, false)], result.SshSessions);
         Assert.Empty(result.Notes);
     }
 
@@ -116,39 +122,82 @@ public sealed class ConnectionCollectorTests
 
         Assert.Equal(0, output.ExitCode);
         Assert.True(parsed.IsSuccess, parsed.Error);
-        Assert.Single(parsed.Data!.Value.Deserialize<ConnectionDiscoveryResult>()!.Connections);
+        Assert.Equal([new SshSessionInfo("10.88.10.1", 22, 1, false)],
+            parsed.Data!.Value.Deserialize<ConnectionDiscoveryResult>()!.SshSessions);
     }
 
     [Fact]
-    public void Parse_DefaultsServerPortTo22AndNormalisesIpv4MappedAddresses()
+    public void Parse_NormalisesIpv4MappedAndUppercaseIpv6SourcesAndSplitsByServerPort()
     {
         var result = ConnectionCollectorParser.Parse(
-            "ESTAB 0 0 [::ffff:10.88.10.5]:22 [::ffff:10.88.10.1]:57980\nESTAB 0 0 10.88.10.5:2222 10.88.10.1:57981\n",
-            agentSshClient: "::ffff:10.88.10.1 57980");
+            string.Join('\n',
+                "ESTAB 0 0 [::ffff:10.88.10.5]:22 [::ffff:10.88.10.1]:57980",
+                "ESTAB 0 0 10.88.10.5:22 10.88.10.1:57981",
+                "ESTAB 0 0 [2001:DB8::A]:22 [2001:DB8::FF]:57982",
+                "ESTAB 0 0 10.88.10.5:2222 10.88.10.1:57983") + "\n",
+            agentSshClient: "::ffff:10.88.10.1 57980",
+            sshdPorts: [2222]);
 
-        var remaining = Assert.Single(result.Connections);
-        Assert.Equal(2222, remaining.LocalPort);
-        Assert.Equal("SSH sessions of DevOps Agent from 10.88.10.1 to port 22 are not drawn.", Assert.Single(result.Notes));
+        Assert.Empty(result.Connections);
+        Assert.Equal(
+            [new SshSessionInfo("10.88.10.1", 22, 2, true), new SshSessionInfo("10.88.10.1", 2222, 1, false),
+                new SshSessionInfo("2001:db8::ff", 22, 1, false)],
+            result.SshSessions);
+        Assert.Empty(result.Notes);
     }
 
     [Fact]
-    public void Parse_UsesTheServerPortFromSshClientAndLeavesContainerConnectionsAlone()
+    public void Parse_TreatsSshdListenerPortsAndTheAgentServerPortAsSshAndLeavesContainersAlone()
     {
         var result = ConnectionCollectorParser.Parse(
-            "ESTAB 0 0 10.88.10.5:2222 [2001:db8::1]:57980\nESTAB 0 0 10.88.10.5:22 [2001:db8::1]:57981\n",
-            new Dictionary<string, string> { ["bastion"] = "ESTAB 0 0 172.20.0.2:2222 [2001:db8::1]:40000\n" },
-            agentSshClient: "2001:db8::1 57980 2222");
+            string.Join('\n',
+                "ESTAB 0 0 10.88.10.5:2222 203.0.113.9:50000", // sshd listens on 2222
+                "ESTAB 0 0 10.88.10.5:2200 [2001:db8::1]:57980", // the agent's server port
+                "ESTAB 0 0 10.88.10.5:8080 203.0.113.9:50001") + "\n", // not an SSH port
+            new Dictionary<string, string> { ["bastion"] = "ESTAB 0 0 172.20.0.2:22 203.0.113.9:40000\n" },
+            agentSshClient: "2001:db8::1 57980 2200",
+            sshdPorts: [2222]);
 
         Assert.Equal(2, result.Connections.Count);
-        Assert.Contains(result.Connections, item => item.Namespace == "host" && item.LocalPort == 22);
-        Assert.Contains(result.Connections, item => item.Namespace == "container" && item.ContainerName == "bastion");
-        Assert.Contains("SSH sessions of DevOps Agent from 2001:db8::1 to port 2222 are not drawn.", result.Notes);
+        Assert.Contains(result.Connections, item => item.Namespace == "host" && item.LocalPort == 8080);
+        Assert.Contains(result.Connections, item => item.Namespace == "container" && item.ContainerName == "bastion"
+            && item.LocalPort == 22);
+        Assert.Equal(
+            [new SshSessionInfo("2001:db8::1", 2200, 1, true), new SshSessionInfo("203.0.113.9", 2222, 1, false)],
+            result.SshSessions);
     }
 
     [Fact]
-    public async Task CollectAsync_NetstatFallbackAlsoDropsTheAgentsSession()
+    public void Parse_OutboundConnectionsToPort22StayOrdinaryConnections()
     {
-        var runner = new NoSsRunner(sshClient: "192.168.20.9 51234 80");
+        var result = ConnectionCollectorParser.Parse("ESTAB 0 0 10.88.10.5:51000 10.88.10.9:22\n");
+
+        var connection = Assert.Single(result.Connections);
+        Assert.Equal(22, connection.PeerPort);
+        Assert.Empty(result.SshSessions);
+    }
+
+    [Fact]
+    public void Parse_CapsSshSourcesAndSumsTheRestIntoANote()
+    {
+        var lines = Enumerable.Range(1, 55)
+            .Select(index => $"ESTAB 0 0 10.88.10.5:22 203.0.113.{index}:40000");
+        var agentLine = "ESTAB 0 0 10.88.10.5:22 198.51.100.1:40000";
+        var extra = "ESTAB 0 0 10.88.10.5:22 203.0.113.1:40001"; // 203.0.113.1 has two sessions and survives the cap
+        var result = ConnectionCollectorParser.Parse(string.Join('\n', lines.Append(agentLine).Append(extra)) + "\n",
+            agentSshClient: "198.51.100.1 40000 22");
+
+        Assert.Equal(ConnectionCollectorParser.MaxSshSources, result.SshSessions.Count);
+        Assert.Contains(result.SshSessions, session => session.IsAgent && session.SourceAddress == "198.51.100.1");
+        Assert.Contains(result.SshSessions, session => session.SourceAddress == "203.0.113.1" && session.Count == 2);
+        // 56 groups, 6 dropped (all with one session)
+        Assert.Equal("6 more SSH sources with 6 sessions are not listed.", Assert.Single(result.Notes));
+    }
+
+    [Fact]
+    public async Task CollectAsync_NetstatFallbackListsSshSessionsOfTheAgent()
+    {
+        var runner = new NoSsRunner(sshClient: "192.168.20.77 60412 22");
         var collector = new ConnectionCollector();
         var context = new ServerContext(new Server("alpine", "alpine.test", 22, "deploy", "key", "staging"), runner);
 
@@ -157,9 +206,26 @@ public sealed class ConnectionCollectorTests
 
         Assert.True(parsed.IsSuccess, parsed.Error);
         var result = parsed.Data!.Value.Deserialize<ConnectionDiscoveryResult>()!;
-        Assert.Equal(2, result.Connections.Count);
-        Assert.DoesNotContain(result.Connections, item => item.PeerAddress == "192.168.20.9");
-        Assert.Equal("SSH sessions of DevOps Agent from 192.168.20.9 to port 80 are not drawn.", Assert.Single(result.Notes));
+        Assert.Equal(3, result.Connections.Count);
+        Assert.Equal([new SshSessionInfo("192.168.20.77", 22, 1, true)], result.SshSessions);
+    }
+
+    [Fact]
+    public void ResultStoredBeforeSshSessionsDeserializesWithAnEmptyList()
+    {
+        var json = "{\"Connections\":[{\"Namespace\":\"host\",\"ContainerName\":null,\"Protocol\":\"tcp\",\"State\":\"ESTAB\","
+            + "\"LocalAddress\":\"10.0.0.1\",\"LocalPort\":22,\"PeerAddress\":\"10.0.0.2\",\"PeerPort\":5000}],"
+            + "\"Notes\":[],\"CollectedAtUtc\":\"2026-11-14T08:00:00+00:00\"}";
+
+        var result = JsonSerializer.Deserialize<ConnectionDiscoveryResult>(json)!;
+        var withNull = JsonSerializer.Deserialize<ConnectionDiscoveryResult>(json.Replace("\"Notes\":[]", "\"Notes\":[],\"SshSessions\":null"))!;
+        var roundTrip = JsonSerializer.Deserialize<ConnectionDiscoveryResult>(JsonSerializer.Serialize(
+            new ConnectionDiscoveryResult([], [], null, [new SshSessionInfo("10.0.0.2", 22, 3, true)])))!;
+
+        Assert.Single(result.Connections);
+        Assert.Empty(result.SshSessions);
+        Assert.Empty(withNull.SshSessions);
+        Assert.Equal(new SshSessionInfo("10.0.0.2", 22, 3, true), Assert.Single(roundTrip.SshSessions));
     }
 
     [Fact]
@@ -171,7 +237,9 @@ public sealed class ConnectionCollectorTests
         var parsed = new ConnectionCollector().Parse(new CollectorOutput(raw, string.Empty, 0, TimeSpan.Zero));
 
         Assert.True(parsed.IsSuccess, parsed.Error);
-        Assert.Equal(1, parsed.Data!.Value.GetProperty("Connections").GetArrayLength());
+        Assert.Equal(0, parsed.Data!.Value.GetProperty("Connections").GetArrayLength());
+        var session = Assert.Single(parsed.Data!.Value.Deserialize<ConnectionDiscoveryResult>()!.SshSessions);
+        Assert.Equal(new SshSessionInfo("10.0.0.2", 22, 1, false), session);
     }
 
     [Fact]
@@ -180,7 +248,9 @@ public sealed class ConnectionCollectorTests
         var result = ConnectionCollectorParser.Parse(
             File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "busybox-netstat-tn.txt")));
 
-        Assert.Equal(4, result.Connections.Count);
+        Assert.Equal(3, result.Connections.Count);
+        var session = Assert.Single(result.SshSessions);
+        Assert.Equal(new SshSessionInfo("192.168.20.77", 22, 1, false), session);
         Assert.All(result.Connections, item => Assert.Equal("ESTAB", item.State));
         Assert.Contains(result.Connections, item => item.Namespace == "host" && item.Protocol == "tcp"
             && item.LocalAddress == "192.168.20.5" && item.LocalPort == 80
@@ -209,7 +279,8 @@ public sealed class ConnectionCollectorTests
             runner.Commands);
         Assert.Equal(0, output.ExitCode);
         Assert.True(parsed.IsSuccess, parsed.Error);
-        Assert.Equal(4, parsed.Data!.Value.GetProperty("Connections").GetArrayLength());
+        Assert.Equal(3, parsed.Data!.Value.GetProperty("Connections").GetArrayLength());
+        Assert.Equal(1, parsed.Data!.Value.GetProperty("SshSessions").GetArrayLength());
     }
 
     [Fact]
