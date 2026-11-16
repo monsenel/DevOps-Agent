@@ -433,6 +433,11 @@ Owner order 2026-11-16: T8.1–T8.9 in order, one commit each, AGENTS.md §2, DE
 - **Done when:** Tests on a fixture graph; card checked in a browser.
 - **Depends on:** T8.7
 
+### T8.10 Agent tool-call limit
+- **Do:** The limit today is `MaxToolRounds = 5` model rounds of up to 8 calls each (`ChatService`), and hitting it ends the turn with a fixed sentence. Replace it with a limit on **tool calls per message**, configurable in Settings › LLM connection (default 15, max 50). The chat effort may lower it (Low 8, Medium 15, High 30), never above the setting. When it is reached the agent makes one final model call with tools disabled, asking for what it found, what is still unknown and what it would do next; "Tool limit reached (N/N)" is shown above that summary, with a **Continue** button below it that resumes the task with a fresh budget. Loop guard: the same tool with identical arguments requested 3 times in one turn stops the turn early; the summary explains it and it is not a normal limit (no Continue). The tool calls of each turn are listed in a collapsible "Ran N tools on M servers".
+- **Done when:** Unit tests for the limit (setting, effort, cap), the summary call (tools disabled), Continue and the loop guard; checked in a browser in both themes.
+- **Depends on:** T8.5
+
 ---
 
 ## v2 backlog (do not start without being told)
