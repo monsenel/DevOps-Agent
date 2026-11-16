@@ -125,6 +125,25 @@ public sealed class ConfigEditTests
     }
 
     [Theory]
+    [InlineData(typeof(TimeoutException))]
+    [InlineData(typeof(OperationCanceledException))]
+    [InlineData(typeof(IOException))]
+    public async Task AHealthCheckThatCannotBeCompleted_CountsAsFailed_AndTheBackupIsRestoredEvenAfterACancellation(Type failure)
+    {
+        await using var lab = await Lab.CreateAsync(healthFailure: (Exception)Activator.CreateInstance(failure)!);
+        var (action, plan) = await lab.ProposeAsync(Demo.Replace("5000", "5999", StringComparison.Ordinal));
+        using var cancellation = new CancellationTokenSource();
+
+        var result = await lab.Service.ExecuteAsync(action, plan, lab.Edge, cancellation.Token);
+
+        Assert.Contains($"Health check failed after the reload (the health check could not be completed ({failure.Name})); the backup was restored and nginx reloaded.", result.Error);
+        var rollback = lab.Runner.Calls.FindIndex(call => call.UseSudo && call.Command.Contains("DVA_ROLLBACK_FAILED=restore", StringComparison.Ordinal));
+        Assert.True(rollback >= 0);
+        Assert.False(lab.Runner.Tokens[rollback].CanBeCanceled); // the owner closing the page cannot stop the rollback
+        Assert.StartsWith("rm -rf -- ", lab.Runner.Calls[^1].Command);
+    }
+
+    [Theory]
     [InlineData("DVA_EDIT_FAILED=validate\nDVA_RESTORED\nDVA_RELOADED_AFTER_RESTORE", 7, "validation (nginx -t) failed. The backup was restored and the service reloaded.")]
     [InlineData("DVA_EDIT_FAILED=changed", 4, "the file changed since the edit was proposed")]
     [InlineData("DVA_EDIT_FAILED=validate\nDVA_RESTORE_FAILED", 7, "The backup could NOT be restored: restore /etc/nginx/conf.d/demo.conf from its .bak-")]
@@ -314,7 +333,7 @@ public sealed class ConfigEditTests
         public ConfigEditService Service { get; }
         public ExecutionModeService Modes { get; }
 
-        public static async Task<Lab> CreateAsync(string healthCode = "200", (string Output, int Exit)? applyOutput = null)
+        public static async Task<Lab> CreateAsync(string healthCode = "200", (string Output, int Exit)? applyOutput = null, Exception? healthFailure = null)
         {
             var connection = new SqliteConnection("Data Source=:memory:");
             await connection.OpenAsync();
@@ -337,7 +356,7 @@ public sealed class ConfigEditTests
                 command.StartsWith("test -f ", StringComparison.Ordinal) ? (Demo, 0)
                 : command.StartsWith("umask 077", StringComparison.Ordinal) ? (StagedHash(command), 0)
                 : command.Contains("DVA_EDIT_FAILED=missing", StringComparison.Ordinal) ? applyOutput ?? ("DVA_BACKUP=x\nDVA_WRITTEN\nDVA_VALIDATED\nDVA_RELOADED\n", 0)
-                : command.StartsWith("sleep 1; command -v curl", StringComparison.Ordinal) ? ($"DVA_HEALTH api.test.local:80 {healthCode}\n", 0)
+                : command.StartsWith("sleep 1; command -v curl", StringComparison.Ordinal) ? healthFailure is not null ? throw healthFailure : ($"DVA_HEALTH api.test.local:80 {healthCode}\n", 0)
                 : command.Contains("DVA_ROLLBACK_FAILED=restore", StringComparison.Ordinal) ? ("DVA_RESTORED\nDVA_RELOADED\n", 0)
                 : (string.Empty, 0));
             var registry = new ToolRegistry();
@@ -367,6 +386,7 @@ public sealed class ConfigEditTests
             }), null, default);
             Assert.True(proposed.NeedsApproval, proposed.Summary);
             Runner.Calls.Clear();
+            Runner.Tokens.Clear();
             var action = await Context.ActionRecords.SingleAsync(item => item.Id == proposed.ActionId);
             return (action, new ToolCommandBuilder(new ToolRegistry(), new ConfigEditOptions()).Build(action));
         }
@@ -389,10 +409,12 @@ public sealed class ConfigEditTests
     internal sealed class ScriptedRunner(Func<string, (string Output, int Exit)> answer) : ISshRunner
     {
         public List<(string Command, bool UseSudo)> Calls { get; } = [];
+        public List<CancellationToken> Tokens { get; } = [];
 
         public Task<RemoteCommandResult> RunAsync(Guid serverId, string command, SshRunOptions options, CancellationToken cancellationToken)
         {
             Calls.Add((command, options.UseSudo));
+            Tokens.Add(cancellationToken);
             var (output, exit) = answer(command);
             return Task.FromResult(new RemoteCommandResult(exit, output, string.Empty, TimeSpan.FromMilliseconds(3)));
         }

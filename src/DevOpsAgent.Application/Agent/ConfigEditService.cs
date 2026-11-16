@@ -179,13 +179,34 @@ public sealed partial class ConfigEditService(
                 return Done(applied.ExitCode, $"Edit failed: {reason}.{restored}");
             }
 
-            // 3. Health check; 4. roll back when it fails.
-            var health = await CheckHealthAsync(server, args.Path, cancellationToken);
+            // 3. Health check; 4. roll back when it fails. A check that could not be completed (timeout, lost connection,
+            // cancellation) counts as failed: the new file is live and nobody has seen it work.
+            (bool Healthy, string Report, string? Failure) health;
+            try
+            {
+                health = await CheckHealthAsync(server, args.Path, cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                health = (false, $"Health check could not be completed ({exception.GetType().Name}).", $"the health check could not be completed ({exception.GetType().Name})");
+            }
+
             log.AppendLine(health.Report);
             if (health.Healthy) return Done(0, null);
 
-            var rollback = await sshRunner.RunAsync(server.Id, RollbackCommand(args.Path, timestamp, rule),
-                new SshRunOptions(TimeSpan.FromMinutes(2), UseSudo: true), cancellationToken);
+            RemoteCommandResult rollback;
+            try
+            {
+                // Not cancellable: the new file is live, and the rollback is what makes the server safe again (its own timeout bounds it).
+                rollback = await sshRunner.RunAsync(server.Id, RollbackCommand(args.Path, timestamp, rule),
+                    new SshRunOptions(TimeSpan.FromMinutes(2), UseSudo: true), CancellationToken.None);
+            }
+            catch (Exception exception)
+            {
+                log.AppendLine($"The rollback could not be run ({exception.GetType().Name}).");
+                return Done(null, $"Health check failed after the reload ({health.Failure}) and the rollback could not be run; restore {args.Path} from its .bak-{timestamp} copy by hand.");
+            }
+
             log.AppendLine("Rolled back:").AppendLine(Clip(rollback.StandardOutput + rollback.StandardError));
             return Done(rollback.ExitCode == 0 ? 1 : rollback.ExitCode,
                 rollback.ExitCode == 0
