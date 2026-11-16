@@ -1,0 +1,11 @@
+{
+  "name": "devops-agent-docs",
+  "private": true,
+  "description": "Documentation screenshot tooling for DevOps Agent",
+  "scripts": {
+    "docs:screenshots": "node scripts/capture-readme-screenshots.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.65.1"
+  }
+}
