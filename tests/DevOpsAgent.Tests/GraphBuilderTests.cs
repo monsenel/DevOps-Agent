@@ -66,6 +66,28 @@ public sealed class GraphBuilderTests
     }
 
     [Fact]
+    public void Build_HostNodeCarriesTheMachineHostnameFromHostDiscovery()
+    {
+        var data = ThreeServerFixtures()[0];
+
+        var graph = new GraphBuilder().Build(Guid.NewGuid(), [data]);
+
+        using var discovered = System.Text.Json.JsonDocument.Parse(graph.Nodes.Single(node => node.Kind == GraphNodeKind.Host).AttributesJson);
+        Assert.Equal("edge-a", discovered.RootElement.GetProperty("Hostname").GetString());
+    }
+
+    [Fact]
+    public void Build_HostnameIsNullWhenHostDiscoveryDidNotRun()
+    {
+        var data = ThreeServerFixtures()[0] with { Host = null };
+
+        var graph = new GraphBuilder().Build(Guid.NewGuid(), [data]);
+
+        using var attributes = System.Text.Json.JsonDocument.Parse(graph.Nodes.Single(node => node.Kind == GraphNodeKind.Host).AttributesJson);
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, attributes.RootElement.GetProperty("Hostname").ValueKind);
+    }
+
+    [Fact]
     public void IpIndexNormalizesAddressesAndPreservesMultipleOwners()
     {
         var index = new IpIndex();

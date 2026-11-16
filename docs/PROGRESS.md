@@ -12,8 +12,8 @@
 
 ## Current
 
-- **Task:** T8.13 names and ports on cards (owner request). T7.R4 and T7.R16 still held by the owner; open review tasks below.
-- **Status:** T8.1–T8.12 done; v0.2.0 tagged locally (before T8.10 and the review-r4 fixes)
+- **Task:** T8.13 done. T7.R4 and T7.R16 still held by the owner; open review tasks below.
+- **Status:** T8.1–T8.13 done; v0.2.0 tagged locally (before T8.10 and the review-r4 fixes)
 - **Last updated:** 2026-11-16 by ZCode (review-r4 of T7.R25–T8.9: fixes committed, T7.R27–T7.R30 filed)
 
 ## WIP notes
@@ -163,7 +163,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T8.9 | Dependency awareness for updates | done | `feat(T8.9): update cards name the services each package restarts and warn for Docker and nginx` |
 | T8.11 | Servers map view | done | `feat(T8.11): Servers map view: one card per server with its services, coloured by role, one labelled arrow per pair of servers` |
 | T8.12 | One box per unknown machine | done | `feat(T8.12): the Servers view draws all unknown endpoints of one address as one card with a row per port` |
-| T8.13 | Names and ports on the Servers view cards | in-progress | |
+| T8.13 | Names and ports on the Servers view cards | done | `feat(T8.13): Servers view rows show their ports, cards their hostname, and unknown addresses of inventory servers carry the server's name` |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
 
@@ -387,3 +387,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-16 · ZCode · T8.12 · started
 - 2026-11-16 · ZCode · T8.12 · unknown endpoints grouped by address into one "Unknown host" card with a row per port; on a copy of the owner's graph 33 boxes → 19 cards; build 0 warnings, 725 tests (D-047)
 - 2026-11-16 · ZCode · T8.13 · started
+- 2026-11-16 · ZCode · T8.13 · rows `name · :ports`, hostname in the card caption, unknown addresses of inventory servers named after the server; checked on the lab and a copy of the owner's graph; build 0 warnings, 727 tests (D-048)

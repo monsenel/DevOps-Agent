@@ -205,7 +205,9 @@ function serversStyles(c) {
             "padding": 0, "width": "data(w)", "height": "data(h)", "label": "data(displayLabel)", "text-wrap": "none",
             "text-halign": "center", "text-valign": "center", "font-family": c.font, "font-size": 13, "font-weight": 500, "color": c.ink
         } },
-        { selector: 'node[?row][kind = "Domain"], node[?row][kind = "Unknown"]', style: { "font-family": c.mono, "font-size": 12 } }
+        { selector: 'node[?row][kind = "Domain"], node[?row][kind = "Unknown"]', style: { "font-family": c.mono, "font-size": 12 } },
+        // An unknown port on an address of this server: nothing it runs answers there, so the row is dashed like an unknown host.
+        { selector: "node[?row][?unmatched]", style: { "border-color": c.warn, "border-style": "dashed" } }
     ];
     for (const [role, definition] of Object.entries(ROLES)) {
         const color = c[definition.token];
@@ -292,15 +294,17 @@ export function init(container, dotNetReference) {
     applyStyles();
 }
 
-// `serverInfo` maps a server id to { os, address } (Servers view captions). Returns a promise: the Servers view measures its
-// cards and runs ELK before drawing, and the caller awaits it.
-export async function setData(elements, view, alertStatuses = {}, serverInfo = {}) {
+// `serverInfo` maps a server id to { os, address } (Servers view captions). `listenerPorts` maps a node id to the tcp ports it
+// listens on beyond loopback, and `inventory` an address (normalised like the Unknown grouping) to the { serverId, name } of the
+// inventory server that owns it. Returns a promise: the Servers view measures its cards and runs ELK before drawing, and the
+// caller awaits it.
+export async function setData(elements, view, alertStatuses = {}, serverInfo = {}, listenerPorts = {}, inventory = {}) {
     if (!graph) return;
     const generation = ++dataGeneration;
     if (view === "servers") {
         const c = tokens();
         await loadFonts(c);
-        const built = buildServers(elements, alertStatuses || {}, serverInfo || {}, c);
+        const built = buildServers(elements, alertStatuses || {}, serverInfo || {}, c, listenerPorts || {}, inventory || {});
         const layout = built.boxes.size === 0 ? { origins: new Map(), bends: new Map() } : await layoutServers(built);
         if (!graph || generation !== dataGeneration) return;
         graph.elements().remove();
@@ -384,9 +388,28 @@ function placeInTree(node, byId, hostByServer) {
 }
 
 // The address an unknown endpoint is grouped by: trimmed, lowercase, without IPv6 brackets. Empty when it has none.
-function unknownAddress(node) {
+const unknownAddress = node => {
     const address = node.attributes?.Address;
     return typeof address === "string" ? address.trim().toLocaleLowerCase().replace(/^\[|\]$/g, "") : "";
+};
+
+// The port of an unknown endpoint as text, "" when it has none.
+const unknownPort = node => {
+    const port = node.attributes?.Port;
+    return Number.isFinite(Number(port)) && port !== null && port !== "" ? String(Number(port)) : "";
+};
+
+// A real port number, or 0 for anything else (edges and attributes may carry text, null or nothing).
+const portNumber = value => {
+    const port = Number(value);
+    return value !== null && value !== "" && Number.isInteger(port) && port > 0 && port <= 65535 ? port : 0;
+};
+
+// At most three ports, ascending, then how many more: ":80, :443, :8080 +2".
+function portsText(ports) {
+    const sorted = [...ports].sort((a, b) => a - b);
+    const shown = sorted.slice(0, 3).map(port => `:${port}`).join(", ");
+    return sorted.length > 3 ? `${shown} +${sorted.length - 3}` : shown;
 }
 
 // Unknown endpoints with the same address are one machine: one card, one row per port. Nodes with the same address and port
@@ -400,7 +423,7 @@ function groupUnknownHosts(nodes) {
             group = { id: `${UNKNOWN_HOST_PREFIX}${address}`, address, members: [], ports: new Map() };
             groups.set(address, group);
         }
-        const port = Number.isFinite(Number(node.attributes?.Port)) && node.attributes?.Port !== null && node.attributes?.Port !== "" ? String(Number(node.attributes.Port)) : "";
+        const port = unknownPort(node);
         if (!group.ports.has(port)) group.ports.set(port, { row: node, nodes: [] });
         group.ports.get(port).nodes.push(node);
         group.members.push(node);
@@ -408,7 +431,8 @@ function groupUnknownHosts(nodes) {
     return groups;
 }
 
-function buildServers(elements, alertStatuses, serverInfo, c) {
+function buildServers(elements, alertStatuses, serverInfo, c, listenerPorts, inventory) {
+    const inventoryByAddress = new Map(Object.entries(inventory));
     const nodes = [];
     const edges = [];
     for (const data of elements) (data.source && data.target ? edges : nodes).push(data);
@@ -422,10 +446,18 @@ function buildServers(elements, alertStatuses, serverInfo, c) {
     }
     const alias = new Map(nodes.map(node => [node.id, place(node, byId, hostByServer, proxyRowByHost)]));
     const unknownHosts = groupUnknownHosts(nodes);
+    // The unknown rows that are drawn inside the card of the inventory server that owns their address (row id -> row data): ports
+    // that nothing on that server answers on.
+    const mergedRows = new Map();
     for (const group of unknownHosts.values()) {
-        for (const { row, nodes: sameRow } of group.ports.values()) {
-            for (const node of sameRow) alias.set(node.id, { box: group.id, row: row.id });
+        group.inventory = inventoryByAddress.get(group.address);
+        // Only a server with a host card in this view takes the rows; otherwise the unknown card stays, named after the server.
+        const hostId = group.inventory ? hostByServer.get(group.inventory.serverId) : undefined;
+        for (const [port, { row, nodes: sameRow }] of group.ports) {
+            for (const node of sameRow) alias.set(node.id, { box: hostId ?? group.id, row: row.id });
+            if (hostId) mergedRows.set(row.id, { port, row: { ...row, memberNodeIds: sameRow.map(node => node.id), unmatched: true } });
         }
+        if (hostId) group.mergedInto = hostId;
     }
 
     // Boxes: servers, unknown endpoints, nodes without a host, and one clients card for all domains.
@@ -440,6 +472,7 @@ function buildServers(elements, alertStatuses, serverInfo, c) {
         boxes.set(CLIENTS_ID, { id: CLIENTS_ID, kind: "clients", node: { id: CLIENTS_ID, kind: "Clients", label: "Internet / Clients" }, rows: [] });
     }
     for (const group of unknownHosts.values()) {
+        if (group.mergedInto) continue;
         // The card answers the details panel like an unknown node: its address and the observer for "Add this server".
         const first = group.members.find(node => node.serverId) || group.members[0];
         const rowLabels = new Map();
@@ -449,9 +482,11 @@ function buildServers(elements, alertStatuses, serverInfo, c) {
             return { ...entry.row, memberNodeIds: entry.nodes.map(node => node.id) };
         });
         boxes.set(group.id, {
-            id: group.id, kind: "unknownHost", rows, rowLabels, address: first.attributes.Address,
-            node: { id: group.id, kind: "Unknown", label: "Unknown host", serverId: first.serverId, attributes: { Address: first.attributes.Address },
-                memberNodeIds: group.members.map(node => node.id) },
+            id: group.id, kind: "unknownHost", rows, rowLabels, address: first.attributes.Address, inventory: group.inventory,
+            // An address of an inventory server that is not on the map yet: the card is named after that server.
+            node: { id: group.id, kind: "Unknown", label: group.inventory?.name || "Unknown host", serverId: first.serverId,
+                attributes: { Address: first.attributes.Address }, memberNodeIds: group.members.map(node => node.id),
+                inventoryServerId: group.inventory?.serverId },
             allStale: group.members.every(node => node.attributes?.Stale === true)
         });
     }
@@ -466,10 +501,40 @@ function buildServers(elements, alertStatuses, serverInfo, c) {
             if (placed.box !== node.id) cardSearch.set(placed.box, `${cardSearch.get(placed.box) || ""}\n${json}`);
             continue;
         }
-        if (placed.row === node.id && boxes.get(placed.box)?.kind !== "unknownHost") boxes.get(placed.box)?.rows.push(node);
+        if (placed.row === node.id && boxes.get(placed.box)?.kind !== "unknownHost") boxes.get(placed.box)?.rows.push(mergedRows.get(node.id)?.row ?? node);
         rowNames.set(placed.row, [...(rowNames.get(placed.row) || []), ...namesOf(node)]);
         rowSearch.set(placed.row, `${rowSearch.get(placed.row) || ""}\n${json}`);
     }
+    // Unmatched unknown ports go below the real rows, by port ("no port" last).
+    for (const box of boxes.values()) {
+        const portOf = row => mergedRows.get(row.id)?.port;
+        box.rows = [...box.rows.filter(row => portOf(row) === undefined),
+            ...box.rows.filter(row => portOf(row) !== undefined).sort((a, b) => (portOf(a) === "") - (portOf(b) === "") || Number(portOf(a)) - Number(portOf(b)))];
+    }
+
+    // The ports a service or container answers on: what it listens on (not only on loopback), what its container publishes on
+    // the host, and the ports of the connections it receives, over the row and everything aliased to it.
+    const rowPorts = new Map();
+    const addRowPort = (rowId, value) => {
+        const port = portNumber(value);
+        if (!port || mergedRows.has(rowId)) return;
+        if (!rowPorts.has(rowId)) rowPorts.set(rowId, new Set());
+        rowPorts.get(rowId).add(port);
+    };
+    for (const node of nodes) {
+        const rowId = alias.get(node.id)?.row;
+        if (!rowId) continue;
+        for (const port of listenerPorts[node.id] ?? []) addRowPort(rowId, port);
+        for (const published of Array.isArray(node.attributes?.PublishedPorts) ? node.attributes.PublishedPorts : []) {
+            if (String(published?.Protocol ?? "tcp").toLocaleLowerCase() === "tcp") addRowPort(rowId, published?.HostPort);
+        }
+    }
+    for (const edge of edges) {
+        const rowId = alias.get(edge.target)?.row;
+        if (rowId) addRowPort(rowId, edge.port);
+    }
+    // Searching a port finds the rows that answer on it, whichever of the three sources it came from.
+    for (const [rowId, ports] of rowPorts) rowSearch.set(rowId, `${rowSearch.get(rowId) || ""}\n${[...ports].map(port => `:${port}`).join(" ")}`);
 
     // Edges between the same two boxes become one edge; edges inside a box are not drawn.
     const groups = new Map();
@@ -521,20 +586,32 @@ function buildServers(elements, alertStatuses, serverInfo, c) {
             // The observer's server info does not describe an unknown host.
             const info = box.kind === "unknownHost" ? {} : serverInfo[box.node.serverId] || {};
             box.role = box.kind === "clients" ? "clients" : box.kind === "unknownHost" ? "unknownHost"
-                : detectRole(box.rows.map(row => rowNames.get(row.id) || []), {
+                : detectRole(box.rows.filter(row => !mergedRows.has(row.id)).map(row => rowNames.get(row.id) || []), {
                     fromClients: fromClients.has(box.id), dataPorts: (incomingPorts.get(box.id) || []).some(port => DATA_PORTS.has(port))
                 });
             box.name = box.node.label || "";
             const address = info.address || (Array.isArray(attributes.Addresses) ? attributes.Addresses[0] : "");
-            const parts = box.kind === "host" ? [ROLES[box.role].title, address, info.os]
-                : box.kind === "unknownHost" ? ["Not in inventory", box.address] : [];
+            // The machine's own name is worth a word only when it is not the name the server was added with.
+            const hostname = typeof attributes.Hostname === "string" ? attributes.Hostname.trim() : "";
+            const knownAs = hostname && hostname.toLocaleLowerCase() !== box.name.toLocaleLowerCase() ? hostname : "";
+            const parts = box.kind === "host" ? [ROLES[box.role].title, knownAs, address, info.os]
+                : box.kind === "unknownHost" ? [box.inventory ? "In inventory, not discovered yet" : "Not in inventory", box.address] : [];
             if (alert) parts.push(`${alert} alert`);
             if (stale) parts.push(staleText(attributes.LastSeenUtc));
             box.caption = parts.filter(Boolean).join(" • ");
             box.ownSearch += ` ${JSON.stringify(info)}`.toLocaleLowerCase();
             // All rows of a card share one width: the longest label plus padding, at least the minimum, at least the header.
-            const rowFont = box.kind === "host" ? font.row : font.domain;
-            const labelWidth = Math.max(0, ...box.rows.map(row => textWidth(rowLabel(box, row), rowFont)));
+            if (box.kind === "host") {
+                box.rowLabels = new Map(box.rows.map(row => {
+                    const merged = mergedRows.get(row.id);
+                    if (merged) return [row.id, `${merged.port ? `:${merged.port}` : "no port"} · no listener matched`];
+                    const ports = rowPorts.get(row.id);
+                    return [row.id, ports ? `${row.label ?? ""} · ${portsText(ports)}` : row.label ?? ""];
+                }));
+            }
+            // Unmatched rows are Unknown rows: drawn in the mono font like the rows of an unknown host card.
+            const rowFont = row => box.kind === "host" && !mergedRows.has(row.id) ? font.row : font.domain;
+            const labelWidth = Math.max(0, ...box.rows.map(row => textWidth(rowLabel(box, row), rowFont(row))));
             box.headerW = CARD.icon + CARD.iconGap + textWidth(box.name, font.header);
             box.inner = box.rows.length === 0 ? box.headerW : Math.max(box.headerW, CARD.rowMinW, labelWidth + CARD.rowPadX);
             box.w = box.inner + 2 * CARD.pad;

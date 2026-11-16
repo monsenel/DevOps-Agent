@@ -210,7 +210,11 @@
                 {
                     <p class="muted">No connecting graph edges are recorded for this endpoint.</p>
                 }
-                @if (TryGetProperty(selected, "attributes", out var unknownAttributes)
+                @if (InventoryServerOf(selected) is not null)
+                {
+                    <p class="muted">This server is in the inventory; run discovery to map it.</p>
+                }
+                else if (TryGetProperty(selected, "attributes", out var unknownAttributes)
                     && ReadValue(unknownAttributes, "address") is not null
                     && ReadString(selected, "serverId") is not null)
                 {
@@ -318,7 +322,7 @@
     private string SelectedTitle => _selected is JsonElement selected && IsEdge(selected)
         ? $"{EndpointName(ReadString(selected, "source") ?? "") ?? "Source"} {(MemberEdgeIds(selected).Count > 0 ? "↔" : "→")} {EndpointName(ReadString(selected, "target") ?? "") ?? "Target"}"
         : _selected is JsonElement node && ReadString(node, "id") is string cardId && cardId.StartsWith(UnknownHostCardPrefix, StringComparison.Ordinal)
-            ? $"Unknown host · {UnknownHostAddress(node)}"
+            ? InventoryServerOf(node)?.Name ?? $"Unknown host · {UnknownHostAddress(node)}"
         : _selected is JsonElement other ? ReadString(other, "label") ?? ReadString(other, "kind") ?? "Selected node" : "Node or edge details";
     private int ProgressPercent => _servers.Count == 0 ? (_discovering ? 15 : 0) : _completedServers * 100 / _servers.Count;
     private string GraphSummary => _graph is null
@@ -406,6 +410,7 @@
     private async Task LoadGraphAsync(Guid snapshotId)
     {
         _graph = await GraphRepository.GetAsync(snapshotId, CurrentGraphView, CancellationToken.None);
+        _inventory = null;
         _selected = null;
         _selectedId = null;
         _traceMessage = null;
@@ -568,7 +573,8 @@
                 && ids.Contains(source) && ids.Contains(target)));
         }
 
-        await _graphModule.InvokeVoidAsync("setData", elements, CurrentView.ToString().ToLowerInvariant(), _serverAlertStatuses, BuildServerInfo());
+        await _graphModule.InvokeVoidAsync("setData", elements, CurrentView.ToString().ToLowerInvariant(), _serverAlertStatuses, BuildServerInfo(),
+            BuildListenerPorts(), Inventory);
         await _graphModule.InvokeVoidAsync("search", _search);
         await _graphModule.InvokeVoidAsync("setTheme");
     }
@@ -693,6 +699,92 @@
         ? address
         : (ReadString(card, "id") ?? string.Empty)[UnknownHostCardPrefix.Length..];
 
+    // Inventory servers by address, for the Servers view (an unknown host card whose address belongs to one is named after it) and
+    // the details panel. Built lazily from the loaded graph, so LoadGraphAsync resets it.
+    private IReadOnlyDictionary<string, InventoryServer>? _inventory;
+
+    private IReadOnlyDictionary<string, InventoryServer> Inventory => _inventory ??= BuildInventory();
+
+    // The address as the Servers view groups unknown endpoints by it (graph.js): trimmed, lowercase, without IPv6 brackets.
+    private static string NormalizeAddress(string address)
+    {
+        var text = address.Trim().ToLowerInvariant();
+        if (text.StartsWith('[')) text = text[1..];
+        if (text.EndsWith(']')) text = text[..^1];
+        return text;
+    }
+
+    private IReadOnlyDictionary<string, InventoryServer> BuildInventory()
+    {
+        var result = new Dictionary<string, InventoryServer>(StringComparer.Ordinal);
+
+        void Add(string text, InventoryServer server)
+        {
+            if (!System.Net.IPAddress.TryParse(text.Trim(), out var parsed) || System.Net.IPAddress.IsLoopback(parsed)) return;
+            // The text as written and its canonical form (the graph may spell an IPv6 address either way).
+            result.TryAdd(NormalizeAddress(text), server);
+            result.TryAdd(NormalizeAddress(parsed.ToString()), server);
+        }
+
+        // What the owner typed is the strongest claim on an address.
+        foreach (var server in _servers) Add(server.Host, new InventoryServer(server.Id.ToString("N"), server.Name));
+
+        // Interface addresses from discovery, unless two servers have the same one (the docker0 address 172.17.0.1 is on every Docker host).
+        var claimed = new Dictionary<string, (string Address, HashSet<string> ServerIds)>(StringComparer.Ordinal);
+        foreach (var node in (_graph?.Nodes ?? []).Select(element => element.Data).Where(node => ReadString(node, "kind") == "Host"))
+        {
+            if (ReadString(node, "serverId") is not { } serverId) continue;
+            foreach (var address in ReadStringList(TryGetProperty(node, "attributes", out var attributes) ? attributes : default, "Addresses"))
+            {
+                var key = NormalizeAddress(address);
+                if (!claimed.TryGetValue(key, out var claim)) claimed[key] = claim = (address, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                claim.ServerIds.Add(serverId);
+            }
+        }
+
+        foreach (var (_, claim) in claimed.Where(item => item.Value.ServerIds.Count == 1))
+        {
+            var serverId = claim.ServerIds.Single();
+            if (_servers.FirstOrDefault(server => string.Equals(server.Id.ToString("N"), serverId, StringComparison.OrdinalIgnoreCase)) is { } owner)
+            {
+                Add(claim.Address, new InventoryServer(serverId.ToLowerInvariant(), owner.Name));
+            }
+        }
+
+        return result;
+    }
+
+    // The inventory server an unknown card or endpoint stands for: named in the data of a card the Servers view drew for it, or found
+    // by its address.
+    private InventoryServer? InventoryServerOf(JsonElement unknown)
+    {
+        if (ReadString(unknown, "inventoryServerId") is { } serverId
+            && _servers.FirstOrDefault(server => string.Equals(server.Id.ToString("N"), serverId, StringComparison.OrdinalIgnoreCase)) is { } named)
+        {
+            return new InventoryServer(serverId, named.Name);
+        }
+
+        return TryGetProperty(unknown, "attributes", out var attributes) && ReadString(attributes, "address") is { } address
+            && Inventory.TryGetValue(NormalizeAddress(address), out var entry) ? entry : null;
+    }
+
+    // Per node: the tcp ports it listens on, for the port list on the rows of the Servers view. A listener bound only to loopback
+    // (127.0.0.0/8, which includes Docker's embedded DNS on 127.0.0.11, or ::1) is not reachable from another machine.
+    private Dictionary<string, int[]> BuildListenerPorts() => (_graph?.Listeners ?? [])
+        .Where(listener => string.Equals(listener.Protocol, "tcp", StringComparison.OrdinalIgnoreCase) && !IsLoopbackOnly(listener.Address))
+        .GroupBy(listener => listener.NodeId.ToString("N"), StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(group => group.Key, group => group.Select(listener => listener.Port).Distinct().Order().ToArray(), StringComparer.OrdinalIgnoreCase);
+
+    // "*", "0.0.0.0" and "::" are every interface; ss may print "127.0.0.53%lo" with the interface.
+    private static bool IsLoopbackOnly(string address)
+    {
+        var text = address.Trim().Trim('[', ']');
+        var scope = text.IndexOf('%');
+        if (scope >= 0) text = text[..scope];
+        if (!System.Net.IPAddress.TryParse(text, out var parsed)) return false;
+        return System.Net.IPAddress.IsLoopback(parsed.IsIPv4MappedToIPv6 ? parsed.MapToIPv4() : parsed);
+    }
+
     // Per server: the operating system and the primary address, for the caption above its card in the Servers view.
     private Dictionary<string, object> BuildServerInfo() => _servers.ToDictionary(server => server.Id.ToString("N"),
         server => (object)new { os = server.OsInfo, address = CaptionAddress(server) },
@@ -789,6 +881,9 @@
 
     private sealed record EdgeConnection(string Source, string Target, string? Port, string Kind);
 
+    // An inventory server (id in "N" format) as the Servers view needs it.
+    private sealed record InventoryServer(string ServerId, string Name);
+
     private string? FindNodeName(string id) => _graph?.Nodes
         .Select(element => element.Data)
         .FirstOrDefault(data => string.Equals(ReadString(data, "id"), id, StringComparison.OrdinalIgnoreCase)) is JsonElement node
@@ -799,7 +894,8 @@
     // address (every unknown node is labelled "Unknown").
     private string? EndpointName(string id) => id == ClientsCardId
         ? "Internet / Clients"
-        : id.StartsWith(UnknownHostCardPrefix, StringComparison.Ordinal) ? $"Unknown host · {id[UnknownHostCardPrefix.Length..]}"
+        : id.StartsWith(UnknownHostCardPrefix, StringComparison.Ordinal)
+            ? Inventory.TryGetValue(id[UnknownHostCardPrefix.Length..], out var inventoryServer) ? inventoryServer.Name : $"Unknown host · {id[UnknownHostCardPrefix.Length..]}"
         : _graph?.Nodes.Select(element => element.Data)
             .FirstOrDefault(data => string.Equals(ReadString(data, "id"), id, StringComparison.OrdinalIgnoreCase)) is JsonElement node
                 ? ReadString(node, "kind") == "Unknown" ? GraphNodeLabel.Describe(node) : ReadString(node, "label")

@@ -31,6 +31,8 @@ public sealed class GraphBuilder
                     server.Port,
                     server.User,
                     server.Group,
+                    // The machine's own name from host discovery (the Servers view shows it next to the inventory name); null when the host collector did not run.
+                    Hostname = data.Host?.Hostname,
                     Tags = ParseTags(server.TagsJson),
                     Addresses = hostAddresses.Select(address => address.Address).Distinct(StringComparer.Ordinal).ToArray()
                 });
