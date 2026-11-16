@@ -127,6 +127,7 @@ public sealed class ConfigEditTests
     [Theory]
     [InlineData("DVA_EDIT_FAILED=validate\nDVA_RESTORED\nDVA_RELOADED_AFTER_RESTORE", 7, "validation (nginx -t) failed. The backup was restored and the service reloaded.")]
     [InlineData("DVA_EDIT_FAILED=changed", 4, "the file changed since the edit was proposed")]
+    [InlineData("DVA_EDIT_FAILED=validate\nDVA_RESTORE_FAILED", 7, "The backup could NOT be restored: restore /etc/nginx/conf.d/demo.conf from its .bak-")]
     public async Task FailedApplySteps_AreReported_WithoutAHealthCheck(string output, int exit, string expected)
     {
         await using var lab = await Lab.CreateAsync(applyOutput: (output, exit));
@@ -175,6 +176,33 @@ public sealed class ConfigEditTests
             Assert.Equal(4, changedExit);
             Assert.Contains("DVA_EDIT_FAILED=changed", changedOutput);
             Assert.Equal("someone else's edit\n", File.ReadAllText(target));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ApplyScript_ReportsARestoreThatFailed_NeverAsRestored_AndReloadsNothingFromIt()
+    {
+        var directory = Directory.CreateTempSubdirectory("dva-edit-script-").FullName;
+        try
+        {
+            var target = Path.Combine(directory, "demo.conf");
+            var staged = Path.Combine(directory, "staged");
+            var reloaded = Path.Combine(directory, "reloaded");
+            File.WriteAllText(target, Demo);
+            File.WriteAllText(staged, "new content\n");
+            // The validation fails and, on its way out, takes the backup with it: the copy back cannot work (as root too).
+            var rule = new ConfigServiceRule("/**", "test", "rm -f -- \"$b\"; false", $"touch '{reloaded}'");
+            var (exit, output) = Shell(ConfigEditService.ApplyCommand(target, staged, 1763164800, ConfigEditService.Sha256(Demo), rule));
+
+            Assert.Equal(7, exit);
+            Assert.Contains("DVA_EDIT_FAILED=validate", output);
+            Assert.Contains("DVA_RESTORE_FAILED", output);
+            Assert.DoesNotContain("DVA_RESTORED", output);
+            Assert.False(File.Exists(reloaded)); // nothing is reloaded from a file that is not the original
         }
         finally
         {

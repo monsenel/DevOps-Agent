@@ -84,8 +84,11 @@ public sealed partial class ConfigEditService(
     /// <summary>The root step: check, back up, replace atomically, validate, reload; the backup is restored on any failure.</summary>
     public static string ApplyCommand(string path, string stagedFile, long timestamp, string baseSha256, ConfigServiceRule? rule)
     {
-        var restore = "cp -p -- \"$b\" \"$p\"; printf '%s\\n' 'DVA_RESTORED'" + (string.IsNullOrWhiteSpace(rule?.Reload) ? string.Empty
-            : "; if " + Group(rule!.Reload) + " >/dev/null 2>&1; then printf '%s\\n' 'DVA_RELOADED_AFTER_RESTORE'; fi");
+        // "Restored" is only printed when the copy worked; a failed copy says so, and nothing is reloaded from a file that is not
+        // the original.
+        var restore = "if cp -p -- \"$b\" \"$p\"; then printf '%s\\n' 'DVA_RESTORED'" + (string.IsNullOrWhiteSpace(rule?.Reload) ? string.Empty
+            : "; if " + Group(rule!.Reload) + " >/dev/null 2>&1; then printf '%s\\n' 'DVA_RELOADED_AFTER_RESTORE'; fi")
+            + "; else printf '%s\\n' 'DVA_RESTORE_FAILED'; fi";
         return "set -u; p=" + Quote(path) + "; s=" + Quote(stagedFile) + "; b=\"$p.bak-" + timestamp.ToString(CultureInfo.InvariantCulture) + "\"; "
             + "if [ ! -f \"$p\" ]; then printf '%s\\n' 'DVA_EDIT_FAILED=missing'; exit 3; fi; "
             + "if [ \"$(sha256sum < \"$p\" | cut -d ' ' -f 1)\" != " + baseSha256 + " ]; then printf '%s\\n' 'DVA_EDIT_FAILED=changed'; exit 4; fi; "
@@ -155,7 +158,9 @@ public sealed partial class ConfigEditService(
                     "reload" => $"the reload ({rule?.Service}) failed",
                     _ => step
                 };
-                var restored = output.Contains("DVA_RESTORED", StringComparison.Ordinal) ? " The backup was restored" + (output.Contains("DVA_RELOADED_AFTER_RESTORE", StringComparison.Ordinal) ? " and the service reloaded." : ".") : string.Empty;
+                var restored = output.Contains("DVA_RESTORED", StringComparison.Ordinal) ? " The backup was restored" + (output.Contains("DVA_RELOADED_AFTER_RESTORE", StringComparison.Ordinal) ? " and the service reloaded." : ".")
+                    : output.Contains("DVA_RESTORE_FAILED", StringComparison.Ordinal) ? $" The backup could NOT be restored: restore {args.Path} from its .bak-{timestamp} copy by hand."
+                    : string.Empty;
                 return Done(applied.ExitCode, $"Edit failed: {reason}.{restored}");
             }
 
