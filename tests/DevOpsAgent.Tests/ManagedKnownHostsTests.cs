@@ -42,6 +42,20 @@ public sealed class ManagedKnownHostsTests : IDisposable
     }
 
     [Fact]
+    public async Task AFileThatCannotBeWritten_DoesNotFailTheLogin_ButTheHostStaysUnpinned()
+    {
+        // A directory cannot be created below a regular file, as root too (a development run with the default /data).
+        var blocker = Path.Combine(_directory, "blocker");
+        File.WriteAllText(blocker, "x");
+        var store = new ManagedKnownHosts(Options.Create(new SshConnectionOptions { KnownHostsFile = Manual, ManagedKnownHostsFile = Path.Combine(blocker, "known_hosts") }),
+            TimeProvider.System, NullLogger<ManagedKnownHosts>.Instance);
+
+        await store.RecordFirstUseAsync("kartio.test", 22, "ssh-ed25519", KeyA, CancellationToken.None); // no exception
+
+        Assert.Equal(HostKeyDecision.FirstUse, store.Check("kartio.test", 22, "ssh-ed25519", KeyA)); // nothing was pinned
+    }
+
+    [Fact]
     public async Task ChangedKey_IsRefused_AndRememberedForTheServerPage()
     {
         var store = Store();

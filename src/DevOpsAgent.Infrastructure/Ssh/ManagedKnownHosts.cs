@@ -63,7 +63,19 @@ public sealed class ManagedKnownHosts(IOptions<SshConnectionOptions> options, Ti
             var lines = ReadManagedLines();
             if (KnownHostsLines.For(lines.Select(KnownHostsLines.Parse).OfType<KnownHostLine>().ToArray(), host, port).Count > 0) return;
             lines.Add(Line(host, port, keyType, key));
-            WriteManaged(lines);
+            try
+            {
+                WriteManaged(lines);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                // The login has already succeeded: a file the app cannot write must not turn it into a failed login (it was
+                // reported as "key file cannot be read"). The host stays unpinned and is trusted on first use again next time.
+                logger.LogError("The SSH host key of {Host}:{Port} could not be recorded in {File} ({ErrorType}); it is not pinned. Set Ssh:ManagedKnownHostsFile to a writable path",
+                    host, port, _options.ManagedKnownHostsFile, exception.GetType().Name);
+                return;
+            }
+
             logger.LogInformation("Recorded the SSH host key of {Host}:{Port} on first use ({Fingerprint})", host, port, Fingerprint(key));
         }
         finally
