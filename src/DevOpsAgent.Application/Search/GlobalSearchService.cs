@@ -65,7 +65,10 @@ public sealed class GlobalSearchService(
             candidates.Add((score.Value, new SearchResult(SearchResultKind.Server, server.Name, detail, $"/servers/{server.Id}")));
         }
 
-        foreach (var node in nodes.Where(node => node.Kind is GraphNodeKind.Container or GraphNodeKind.Service or GraphNodeKind.Domain or GraphNodeKind.Unknown))
+        // The latest graph still holds the nodes of a server removed since: they are no longer part of the inventory.
+        bool InInventory(GraphNode? node) => node?.ServerId is not { } owner || serverNames.ContainsKey(owner);
+        foreach (var node in nodes.Where(node => node.Kind is GraphNodeKind.Container or GraphNodeKind.Service or GraphNodeKind.Domain or GraphNodeKind.Unknown)
+                     .Where(InInventory))
         {
             var address = node.Kind == GraphNodeKind.Unknown ? ReadString(node.AttributesJson, "Address") : null;
             var title = address is null ? node.Name : $"Unknown · {address}";
@@ -84,6 +87,7 @@ public sealed class GlobalSearchService(
                          .DistinctBy(listener => (listener.NodeId, listener.Port, listener.Protocol)))
             {
                 byNode.TryGetValue(listener.NodeId, out var owner);
+                if (!InInventory(owner)) continue;
                 var server = owner?.ServerId is { } id && serverNames.TryGetValue(id, out var name) ? name : "unknown server";
                 // A listener without a process name hangs off its host node: then only the server is named.
                 var process = listener.ProcessName ?? (owner is { Kind: not GraphNodeKind.Host } ? owner.Name : null);

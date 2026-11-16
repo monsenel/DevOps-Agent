@@ -111,6 +111,22 @@ public sealed class GlobalSearchServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task NodesAndListenersOfARemovedServer_AreNotFound_WhileTheOthersAre()
+    {
+        _context.Servers.Remove(_db);
+        await _context.SaveChangesAsync();
+
+        foreach (var query in new[] { "postgres", "worker", "5432", "10.88.20.30" })
+        {
+            var groups = await _search.SearchAsync(query, default);
+            Assert.DoesNotContain(groups, group => group.Kind is SearchResultKind.Node or SearchResultKind.Listener or SearchResultKind.Server);
+        }
+
+        Assert.Equal($"/topology?node={_domain.Id:N}", Single(await _search.SearchAsync("api.test", default), SearchResultKind.Node).Url);
+        Assert.Equal("srv-edge", Single(await _search.SearchAsync("srv-edge", default), SearchResultKind.Server).Title);
+    }
+
+    [Fact]
     public async Task GroupsByType_BestMatchesFirst_AtMostTwenty()
     {
         var groups = await _search.SearchAsync("postgres", default);
