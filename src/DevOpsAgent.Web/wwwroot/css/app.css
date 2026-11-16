@@ -2479,6 +2479,58 @@ p {
     white-space: pre-wrap;
 }
 
+/* T8.10: the tool calls of a turn in one collapsible list, and the banner of a turn stopped by its limit or a loop. */
+.chat-tool-list {
+    align-self: flex-start;
+    max-width: min(94%, 820px);
+    border: 1px solid var(--dva-line);
+    border-radius: var(--dva-radius-control);
+    color: var(--dva-muted);
+}
+
+.chat-tool-list > summary {
+    min-height: 36px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.chat-tool-list > summary:focus-visible {
+    outline: 2px solid var(--dva-accent);
+    outline-offset: 2px;
+}
+
+.chat-tool-list > ul {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0 8px 8px;
+    list-style: none;
+}
+
+.chat-tool-list .chat-tool-run {
+    max-width: none;
+    max-height: 160px;
+    overflow: auto;
+}
+
+.chat-limit-banner {
+    align-self: flex-start;
+    padding: 8px 12px;
+    border-radius: var(--dva-radius-control);
+    background: var(--dva-warn-soft);
+    color: var(--dva-on-warn);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.chat-limit-banner.loop {
+    background: var(--dva-danger-soft);
+    color: var(--dva-danger);
+}
+
 .chat-proposal {
     border: 1px solid var(--dva-accent);
 }

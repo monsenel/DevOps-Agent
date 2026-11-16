@@ -67,11 +67,32 @@
                     <span>Ask a question to begin. Replies are saved with this conversation.</span>
                 </div>
             }
+            @{ var layout = BuildToolLayout(); }
             @foreach (var message in _messages)
             {
-                @if (message.Role is "tool_run")
+                @if (layout.Hidden.Contains(message.Id))
+                {
+                    @* Part of a turn's tool list, or its closing "Ran N tools" line. *@
+                }
+                else if (layout.Groups.TryGetValue(message.Id, out var group))
+                {
+                    <details class="chat-tool-list">
+                        <summary>@group.Header</summary>
+                        <ul>
+                            @foreach (var call in group.Calls)
+                            {
+                                <li class="chat-tool-run">@call.Content</li>
+                            }
+                        </ul>
+                    </details>
+                }
+                else if (message.Role is "tool_run")
                 {
                     <div class="chat-tool-run">@message.Content</div>
+                }
+                else if (message.Role is "tool_limit" or "tool_loop")
+                {
+                    <div class="chat-limit-banner @(message.Role == "tool_loop" ? "loop" : null)" role="status">@message.Content</div>
                 }
                 else if (message.Role is "action_proposed")
                 {
@@ -105,6 +126,13 @@
                         else
                         {
                             <div class="chat-message-content">@message.Content</div>
+                        }
+                        @if (message.Id == layout.ContinueId && !_isSending)
+                        {
+                            <div class="chat-proposal-actions">
+                                <button type="button" class="ui-button secondary" @onclick="ContinueTaskAsync">Continue</button>
+                                <span class="muted">Resumes this task with a fresh tool-call budget.</span>
+                            </div>
                         }
                         @if (message.Attachments is { Count: > 0 } files)
                         {
@@ -270,12 +298,25 @@
         _pending.Clear();
         _attachError = null;
         _draft = string.Empty;
+        await RunTurnAsync(Chat.SendAsync(_selectedConversationId.Value, prompt, files));
+    }
+
+    // Continue (T8.10): the task that stopped at its tool-call limit resumes with a fresh budget.
+    private async Task ContinueTaskAsync()
+    {
+        if (_isSending || _selectedConversationId is null) return;
+        _messages.Add(new ChatMessageView(Guid.NewGuid(), "user", ChatService.ContinuePrompt, DateTimeOffset.UtcNow));
+        await RunTurnAsync(Chat.ContinueAsync(_selectedConversationId.Value));
+    }
+
+    private async Task RunTurnAsync(IAsyncEnumerable<ChatStreamEvent> updates)
+    {
         _error = null;
         _streamingText = string.Empty;
         _isSending = true;
         try
         {
-            await foreach (var update in Chat.SendAsync(_selectedConversationId.Value, prompt, files))
+            await foreach (var update in updates)
             {
                 if (update.Kind == "text") _streamingText += update.Content;
                 else _messages.Add(new ChatMessageView(Guid.NewGuid(), update.Kind,
@@ -286,7 +327,7 @@
             }
 
             await LoadConversationsAsync();
-            await SelectConversationAsync(_selectedConversationId.Value);
+            await SelectConversationAsync(_selectedConversationId!.Value);
         }
         catch (Exception exception)
         {
@@ -302,6 +343,39 @@
             _streamingText = string.Empty;
         }
     }
+
+    // The tool calls of each turn go into one collapsible list under its "Ran N tools on M servers" line (T8.10): the first
+    // call of the turn stands for the list, the other calls and the line itself are not drawn on their own. The button to
+    // continue belongs to the last message when it is the summary of a turn that stopped at its limit.
+    private ToolLayout BuildToolLayout()
+    {
+        var hidden = new HashSet<Guid>();
+        var groups = new Dictionary<Guid, ToolGroup>();
+        var pending = new List<ChatMessageView>();
+        foreach (var message in _messages)
+        {
+            if (message.Role == "user") pending.Clear();
+            else if (message.Role == "tool_run") pending.Add(message);
+            else if (message.Role == "tool_turn")
+            {
+                hidden.Add(message.Id);
+                if (pending.Count > 0)
+                {
+                    groups[pending[0].Id] = new ToolGroup(message.Content, pending.ToArray());
+                    foreach (var call in pending.Skip(1)) hidden.Add(call.Id);
+                }
+
+                pending.Clear();
+            }
+        }
+
+        var continueId = _messages.Count >= 2 && _messages[^1].Role == "assistant" && _messages[^2].Role == "tool_limit" ? _messages[^1].Id : (Guid?)null;
+        return new ToolLayout(hidden, groups, continueId);
+    }
+
+    private sealed record ToolGroup(string Header, IReadOnlyList<ChatMessageView> Calls);
+
+    private sealed record ToolLayout(HashSet<Guid> Hidden, Dictionary<Guid, ToolGroup> Groups, Guid? ContinueId);
 
     private async Task ReviewActionAsync(Guid id, bool approve)
     {

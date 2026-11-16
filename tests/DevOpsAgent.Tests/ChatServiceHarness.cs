@@ -21,8 +21,10 @@ internal sealed class ChatServiceHarness : IAsyncDisposable
 {
     private readonly SqliteConnection _connection;
 
-    private ChatServiceHarness(SqliteConnection connection, AppDbContext context, RecordingChatClient client, ChatService service, LlmProvider provider)
+    private ChatServiceHarness(SqliteConnection connection, AppDbContext context, RecordingChatClient client, ChatService service, LlmProvider provider,
+        ToolCallLimitService limits)
     {
+        Limits = limits;
         _connection = connection;
         Context = context;
         Client = client;
@@ -34,20 +36,21 @@ internal sealed class ChatServiceHarness : IAsyncDisposable
     public RecordingChatClient Client { get; }
     public ChatService Service { get; }
     public LlmProvider Provider { get; }
+    public ToolCallLimitService Limits { get; }
     public IReadOnlyList<IReadOnlyList<ChatMessage>> Requests => Client.Requests;
     public IReadOnlyList<ChatOptions?> Options => Client.OptionsSeen;
 
     /// <param name="baseUrl">A cloud URL by default; use a loopback one for a local provider.</param>
     public static async Task<ChatServiceHarness> CreateAsync(IKnownSecrets? secrets = null, string baseUrl = "https://openrouter.ai/api/v1",
         ProviderType type = ProviderType.OpenRouter, string model = "test/model", IEnumerable<Server>? servers = null, string reply = "done",
-        IModelCapabilities? capabilities = null)
+        IModelCapabilities? capabilities = null, Func<int, IReadOnlyList<ChatMessage>, ChatOptions?, ChatMessage>? script = null, bool native = false)
     {
         var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
         var context = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection).Options);
         await context.Database.EnsureCreatedAsync();
         var provider = new LlmProvider("test", type, baseUrl, model);
-        provider.Update("test", type, baseUrl, model, 0, 0.2, 60, nativeToolCallingEnabled: false, streamingEnabled: false,
+        provider.Update("test", type, baseUrl, model, 0, 0.2, 60, nativeToolCallingEnabled: native, streamingEnabled: false,
             redactSecretsBeforeSending: true, null);
         provider.SetDefault(true);
         context.LlmProviders.Add(provider);
@@ -69,16 +72,24 @@ internal sealed class ChatServiceHarness : IAsyncDisposable
         var dispatcher = new AgentToolDispatcher(registry, approvals, execution, commandBuilder, serverRepository, graphs, snapshots, discovery, runner);
         var contextBuilder = new AgentContextBuilder(serverRepository, snapshots, graphs, new AlertRepository(context),
             new MetricRepository(context), new DriftService(snapshots, graphs));
-        var client = new RecordingChatClient(reply);
+        var client = new RecordingChatClient(reply, script);
+        var limits = new ToolCallLimitService(new AppSettingRepository(context));
         var service = new ChatService(new ChatConversationRepository(context), new LlmProviderRepository(context), new Factory(client),
-            registry, contextBuilder, dispatcher, TimeProvider.System, secrets, capabilities);
-        return new ChatServiceHarness(connection, context, client, service, provider);
+            registry, contextBuilder, dispatcher, TimeProvider.System, secrets, capabilities, limits);
+        return new ChatServiceHarness(connection, context, client, service, provider, limits);
     }
 
     public async Task<IReadOnlyList<ChatStreamEvent>> SendAsync(Guid conversationId, string text, IReadOnlyList<ChatAttachmentInput>? attachments = null)
     {
         var events = new List<ChatStreamEvent>();
         await foreach (var item in Service.SendAsync(conversationId, text, attachments)) events.Add(item);
+        return events;
+    }
+
+    public async Task<IReadOnlyList<ChatStreamEvent>> ContinueAsync(Guid conversationId)
+    {
+        var events = new List<ChatStreamEvent>();
+        await foreach (var item in Service.ContinueAsync(conversationId)) events.Add(item);
         return events;
     }
 
@@ -96,16 +107,18 @@ internal sealed class ChatServiceHarness : IAsyncDisposable
         public IChatClient Create(LlmProvider provider) => client;
     }
 
-    internal sealed class RecordingChatClient(string reply) : IChatClient
+    internal sealed class RecordingChatClient(string reply, Func<int, IReadOnlyList<ChatMessage>, ChatOptions?, ChatMessage>? script = null) : IChatClient
     {
         public List<IReadOnlyList<ChatMessage>> Requests { get; } = [];
         public List<ChatOptions?> OptionsSeen { get; } = [];
 
         public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
         {
-            Requests.Add(messages.ToArray());
+            var sent = messages.ToArray();
+            Requests.Add(sent);
             OptionsSeen.Add(options);
-            return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, reply)));
+            // A script answers by the number of the call (0, 1, 2 ...): tool calls, then text.
+            return Task.FromResult(new ChatResponse(script is null ? new ChatMessage(ChatRole.Assistant, reply) : script(Requests.Count - 1, sent, options)));
         }
 
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null,

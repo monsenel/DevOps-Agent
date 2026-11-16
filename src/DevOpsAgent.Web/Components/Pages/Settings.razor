@@ -5,6 +5,7 @@
 @inject DiscoveryScheduleService DiscoverySchedule
 @inject ExecutionModeService ExecutionModes
 @inject NotificationService Notifications
+@inject ToolCallLimitService ToolLimits
 @inject IJSRuntime JavaScript
 
 <PageTitle>Settings · DevOps Agent</PageTitle>
@@ -313,6 +314,28 @@
                 <SwitchRow Title="Keep raw logs local" Helper="Available in v2" Value="false" Disabled="true" />
                 <SwitchRow Title="Fallback on failure" Helper="Available in v2" Value="false" Disabled="true" />
             </section>
+
+            <section class="ui-card tool-limit-card" aria-labelledby="tool-limit-heading">
+                <header class="ui-card-header"><h2 id="tool-limit-heading">Agent tool calls</h2></header>
+                <p class="muted">How many tool calls the agent may make for one message. A lower chat effort can reduce it (Low 8, Medium 15, High 30), but never above this setting.</p>
+                @if (!string.IsNullOrWhiteSpace(_toolLimitMessage))
+                {
+                    <div class="settings-message success" role="status">@_toolLimitMessage</div>
+                }
+                @if (!string.IsNullOrWhiteSpace(_toolLimitError))
+                {
+                    <div class="settings-message error" role="alert">@_toolLimitError</div>
+                }
+                <div class="field">
+                    <label for="tool-call-limit">Tool calls per message</label>
+                    <input id="tool-call-limit" class="mono" type="number" min="@ToolCallLimitService.MinimumLimit" max="@ToolCallLimitService.MaximumLimit"
+                           value="@_toolLimit" @oninput="UpdateToolLimit" />
+                    <span class="field-helper">Between @ToolCallLimitService.MinimumLimit and @ToolCallLimitService.MaximumLimit. The default is @ToolCallLimitService.DefaultLimit.</span>
+                </div>
+                <button class="ui-button primary" type="button" disabled="@_savingToolLimit" @onclick="SaveToolLimitAsync">
+                    @(_savingToolLimit ? "Saving…" : "Save limit")
+                </button>
+            </section>
         </div>
     }
 </div>
@@ -356,6 +379,10 @@
     private string? _notificationMessage;
     private string? _notificationError;
     private LlmProviderSummary? _selectedProvider => _editor.Selected;
+    private int _toolLimit = ToolCallLimitService.DefaultLimit;
+    private bool _savingToolLimit;
+    private string? _toolLimitMessage;
+    private string? _toolLimitError;
 
     private string ApiKeyPlaceholder => _editor.Form.Type switch
     {
@@ -383,7 +410,33 @@
         _ => "Last test"
     };
 
-    protected override Task OnInitializedAsync() => LoadProvidersAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        _toolLimit = await ToolLimits.GetAsync(CancellationToken.None);
+        await LoadProvidersAsync();
+    }
+
+    private void UpdateToolLimit(ChangeEventArgs args) => _toolLimit = int.TryParse(args.Value?.ToString(), out var limit) ? limit : 0;
+
+    private async Task SaveToolLimitAsync()
+    {
+        _savingToolLimit = true;
+        _toolLimitMessage = null;
+        _toolLimitError = null;
+        try
+        {
+            await ToolLimits.SaveAsync(_toolLimit, CancellationToken.None);
+            _toolLimitMessage = "Tool-call limit saved.";
+        }
+        catch (ArgumentOutOfRangeException exception)
+        {
+            _toolLimitError = exception.Message.Split(" (Parameter")[0];
+        }
+        finally
+        {
+            _savingToolLimit = false;
+        }
+    }
 
     // The list and the form change together (ProviderEditor): the form always shows the selected provider or is empty.
     private async Task LoadProvidersAsync(Guid? select = null)

@@ -12,8 +12,8 @@
 
 ## Current
 
-- **Task:** T8.10 in progress (agent tool-call limit). T7.R4 and T7.R16 still held by the owner.
-- **Status:** T8.1–T8.9 done; v0.2.0 tagged locally; T8.10 started
+- **Task:** T8.10 done. T7.R4 and T7.R16 still held by the owner; open review tasks below.
+- **Status:** T8.1–T8.10 done; v0.2.0 tagged locally (before T8.10 and the review-r4 fixes)
 - **Last updated:** 2026-11-16 by ZCode (review-r4 of T7.R25–T8.9: fixes committed, T7.R27–T7.R30 filed)
 
 ## WIP notes
@@ -378,3 +378,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · resumed T6.6 · J2/J3/J5/J7 confirmed on disposable staging; J7 changes restored; fixed IPv4-mapped endpoints, duplicate unreachable-alert keys and 390px overflow; README setup added; build clean, 113/113 tests; Graphify refreshed to 2,376 nodes / 6,623 edges / 155 communities; next complete restored-lab review-app discovery, then finish provider-dependent J4/J7 when configured
 - 2026-11-16 · ZCode · review-r4 · independent review of 0cec7bf..HEAD (T7.R25, T7.R26, T8.1–T8.9): three read-only code-review passes plus live runs on the lab (isolated /tmp DB, published Release build on :5199, stand-in LLM on 127.0.0.1:18089; prod, ./data and src/DevOpsAgent.Web/data untouched). 15 `fix(review-r4)` commits (build 0 warnings, 701 tests, 3 full runs green); larger findings filed as T7.R27–T7.R30; D-040 am. 6 and review-r4 notes in D-041–D-044
 - 2026-11-16 · ZCode · T8.10 · started
+- 2026-11-16 · ZCode · T8.10 · tool calls per message (setting 15/50, effort Low 8 / Medium 15 / High 30), tool-free summary call, Continue, loop guard, collapsible tool list; 23 new tests, build 0 warnings, 725 tests; checked live in both themes (D-045)
