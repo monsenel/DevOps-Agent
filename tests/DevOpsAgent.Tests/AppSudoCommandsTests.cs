@@ -36,6 +36,32 @@ public sealed class AppSudoCommandsTests
     }
 
     [Fact]
+    public void EditConfigCommandsAreExemptOnlyForAnNginxPathAndTheActionsOwnStagingFile()
+    {
+        var rule = ConfigServiceRule.Nginx;
+        var staged = ConfigEditService.StagingDirectory(Guid.NewGuid()) + "/content";
+        var hash = new string('a', 64);
+        string Apply(string path, string stagedFile) => ConfigEditService.ApplyCommand(path, stagedFile, 1763164800, hash, rule);
+        bool Exempt(string command) => AppSudoCommands.IsAppCommand(SudoLogged(command));
+
+        Assert.True(Exempt(Apply("/etc/nginx/conf.d/demo.conf", staged)));
+        Assert.True(Exempt(Apply("/etc/nginx/conf.d/a..b.conf", staged))); // ".." inside a name is not a segment
+        Assert.True(Exempt(ConfigEditService.ReadCommand("/etc/nginx/nginx.conf", 262145)));
+        Assert.True(Exempt(ConfigEditService.RollbackCommand("/etc/nginx/nginx.conf", 1763164800, rule)));
+
+        // Anything else the same script could be pointed at is a root write or read the owner has to hear about.
+        foreach (var path in new[] { "/etc/sudoers.d/x", "/etc/shadow", "/etc/nginx/../shadow", "/etc/nginx/conf.d/../../shadow", "/etc/nginx/..", "/etc/nginx/'x", "/etc/nginxfoo/x.conf" })
+        {
+            Assert.False(Exempt(Apply(path, staged)), path);
+            Assert.False(Exempt(ConfigEditService.ReadCommand(path, 262145)), path);
+            Assert.False(Exempt(ConfigEditService.RollbackCommand(path, 1763164800, rule)), path);
+        }
+
+        foreach (var stagedFile in new[] { "/etc/shadow", "/tmp/dva-edit-abc/content", "/tmp/other/content", staged + "x", staged.Replace("/content", "/../../etc/shadow", StringComparison.Ordinal) })
+            Assert.False(Exempt(Apply("/etc/nginx/conf.d/demo.conf", stagedFile)), stagedFile);
+    }
+
+    [Fact]
     public void ToolCommandsWithInjectedArgumentsAreNotOnTheList()
     {
         var builder = new ToolCommandBuilder(new ToolRegistry());

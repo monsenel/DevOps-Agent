@@ -24,9 +24,16 @@ public static class AppSudoCommands
     private const string SentinelIpv4 = "192.0.2.254";
     private const string SentinelIpv6 = "2001:db8::fe";
     private const string SentinelPath = "/dvasentinelpath";
+    // edit_config (T8.8) as root with the built-in nginx rule: the file is under /etc/nginx, the staged copy in the action's own
+    // directory. These holes are narrow on purpose: with SentinelPath's, a logged apply or read of any path would be "the app's".
+    private const string SentinelConfigPath = "/etc/nginx/dvasentinelcfg";
+    private const string SentinelStagedPath = "/tmp/dva-edit-00000000000000000000000000000000/content";
 
     private static readonly (string Sentinel, string Hole)[] Holes =
     [
+        // Characters of a plain config path; no segment is "..", whatever else the name holds.
+        ("'" + SentinelConfigPath + "'", @"'/etc/nginx/(?:(?!\.\.(?:/|'))[A-Za-z0-9._@+/-]){1,1000}'"),
+        ("'" + SentinelStagedPath + "'", "'/tmp/dva-edit-[0-9a-f]{32}/content'"),
         (SentinelNumber.ToString(System.Globalization.CultureInfo.InvariantCulture), @"\d{1,12}"),
         ("'" + SentinelUnit + "'", "'[A-Za-z0-9][A-Za-z0-9@_.:-]{0,199}'"),
         ("'" + SentinelPackage + "'", "'[A-Za-z0-9][A-Za-z0-9.+:@_-]{0,199}'(?: '[A-Za-z0-9][A-Za-z0-9.+:@_-]{0,199}'){0,99}"),
@@ -117,9 +124,9 @@ public static class AppSudoCommands
             Mutating("unblock_ip", new { address = SentinelIpv4 }),
             Mutating("unblock_ip", new { address = SentinelIpv6 }),
             // edit_config (T8.8) with the built-in nginx rule: the sudo read fallback, the apply step and the rollback.
-            ConfigEditService.ReadCommand(SentinelPath, SentinelNumber),
-            ConfigEditService.ApplyCommand(SentinelPath, SentinelPath, SentinelNumber, "dvasentinelids", ConfigServiceRule.Nginx),
-            ConfigEditService.RollbackCommand(SentinelPath, SentinelNumber, ConfigServiceRule.Nginx),
+            ConfigEditService.ReadCommand(SentinelConfigPath, SentinelNumber),
+            ConfigEditService.ApplyCommand(SentinelConfigPath, SentinelStagedPath, SentinelNumber, "dvasentinelids", ConfigServiceRule.Nginx),
+            ConfigEditService.RollbackCommand(SentinelConfigPath, SentinelNumber, ConfigServiceRule.Nginx),
         ];
     }
 
