@@ -102,6 +102,23 @@ public sealed class ImpactServiceTests : IAsyncLifetime
         Assert.Empty(restart.Dependents); // only domains point at nginx here
     }
 
+    [Theory]
+    [InlineData("docker")]
+    [InlineData("docker.service")]
+    [InlineData("containerd")]
+    public async Task RestartingTheDockerDaemon_TakesEveryContainerOfTheHostAlong(string unit)
+    {
+        var service = await LabAsync();
+
+        var impact = await service.ForAsync("restart_service", $$"""{"unit":"{{unit}}"}""", _app.Id, default);
+
+        Assert.True(impact.TargetFound); // the graph holds no docker unit node: the containers are the target
+        Assert.Equal(["api.test.local", "app.test.local"], impact.Domains);
+        Assert.Contains(impact.Dependents, item => item.Name == "upstream · api_backend");
+        Assert.Contains(impact.Warnings, warning => warning.Contains("restarts the Docker daemon on srv-app: 3 containers restart with it", StringComparison.Ordinal));
+        Assert.False((await service.ForAsync("restart_service", """{"unit":"dockerish"}""", _app.Id, default)).TargetFound); // no other unit is taken for it
+    }
+
     [Fact]
     public async Task WholeServerActions_CountOutsideDependents_AndUnknownClients()
     {

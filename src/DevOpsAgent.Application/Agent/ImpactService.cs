@@ -77,6 +77,9 @@ public sealed class ImpactService(IServerRepository servers, ISnapshotRepository
             return new ImpactPreview(description, [], [], [], [.. warnings, $"The target is not in the latest discovery graph of {serverName}; its dependents are unknown."],
                 latest.StartedAtUtc, false);
 
+        if (toolName == "restart_service" && ReadString(args, "unit") is { } restarted && IsDockerDaemonUnit(BareUnit(restarted)))
+            warnings.Add($"Restarting {restarted} restarts the Docker daemon on {serverName}: {Count(targets.Count(node => node.Kind == GraphNodeKind.Container), "container")} restart with it unless Docker's live-restore is on.");
+
         foreach (var stale in targets.Where(IsStale))
             warnings.Add($"{Label(stale)} is stale in the graph (last seen {ReadString(stale.AttributesJson, StaleCarryForward.LastSeenAttribute) ?? "unknown"}): the server was unreachable at the last discovery.");
 
@@ -190,10 +193,14 @@ public sealed class ImpactService(IServerRepository servers, ISnapshotRepository
         switch (tool)
         {
             case "restart_service" when ReadString(args, "unit") is { } unit:
-                var name = unit.EndsWith(".service", StringComparison.Ordinal) ? unit[..^".service".Length] : unit;
-                return ($"service {unit} on {serverName}", nodes => nodes.Where(node => node.Kind == GraphNodeKind.Service
-                        && (string.Equals(node.Name, name, StringComparison.Ordinal) || string.Equals(node.Name, unit, StringComparison.Ordinal)
-                            || (name == "nginx" && IsNginxConfig(node))))
+                var name = BareUnit(unit);
+                // The unit is accepted with or without ".service", the graph names it either way. The Docker daemon takes every
+                // container on the host along when it restarts: they are the target too.
+                return ($"service {unit} on {serverName}", nodes => nodes.Where(node =>
+                        (node.Kind == GraphNodeKind.Service
+                            && (string.Equals(node.Name, name, StringComparison.Ordinal) || string.Equals(node.Name, name + ".service", StringComparison.Ordinal)
+                                || string.Equals(node.Name, unit, StringComparison.Ordinal) || (name == "nginx" && IsNginxConfig(node))))
+                        || (IsDockerDaemonUnit(name) && node.Kind == GraphNodeKind.Container))
                     .ToArray());
             case "restart_container" when ReadString(args, "container") is { } container:
                 return ($"container {container} on {serverName}", nodes => nodes.Where(node => node.Kind == GraphNodeKind.Container
@@ -217,6 +224,10 @@ public sealed class ImpactService(IServerRepository servers, ISnapshotRepository
                 return ($"{serverName} ({tool})", WholeHost);
         }
     }
+
+    private static string BareUnit(string unit) => unit.EndsWith(".service", StringComparison.Ordinal) ? unit[..^".service".Length] : unit;
+
+    private static bool IsDockerDaemonUnit(string bareUnit) => bareUnit is "docker" or "containerd" or "containerd.io";
 
     public static bool IsNginxConfig(GraphNode node) =>
         node.Kind == GraphNodeKind.Service && (node.Key.Contains(":nginx-server:", StringComparison.Ordinal) || node.Key.Contains(":nginx-upstream:", StringComparison.Ordinal));
