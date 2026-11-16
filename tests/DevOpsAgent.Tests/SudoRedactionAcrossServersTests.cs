@@ -153,6 +153,21 @@ public sealed partial class SudoPasswordTests
     }
 
     [Fact]
+    public async Task AnEditThatLandsWhileTheListIsBeingRead_DoesNotLeaveTheOldListCached()
+    {
+        await using var lab = await SudoLab.CreateAsync(Password);
+        const string newPassword = "Replaced-Pw-31";
+        lab.Gate.Invalidate();
+        // The password is replaced after the list was read from the database and before it is stored.
+        lab.ListSwitch.AfterList = () => lab.EditAsync(lab.Input("db") with { SudoPassword = newPassword });
+
+        var raced = await lab.Gate.GetAsync(CancellationToken.None);
+
+        Assert.Equal([Password], raced); // read before the edit: used once ...
+        Assert.Equal([newPassword], await lab.Gate.GetAsync(CancellationToken.None)); // ... and not kept for a minute
+    }
+
+    [Fact]
     public async Task TheStoredMessage_AndTheConversationTitle_NeverHoldAStoredPassword()
     {
         await using var chat = await ChatServiceHarness.CreateAsync(new FixedSecrets(Password), baseUrl: "http://127.0.0.1:11434/v1",

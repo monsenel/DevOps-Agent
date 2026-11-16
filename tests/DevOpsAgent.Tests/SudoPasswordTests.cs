@@ -474,12 +474,20 @@ public sealed partial class SudoPasswordTests
     private sealed class ListSwitch
     {
         public volatile bool Fail;
+
+        /// <summary>Runs once, right after a listing was read and before it is returned: a change that lands mid-read.</summary>
+        public Func<Task>? AfterList;
     }
 
     private sealed class SwitchableServerRepository(IServerRepository inner, ListSwitch listSwitch) : IServerRepository
     {
-        public Task<IReadOnlyList<Server>> ListAsync(CancellationToken cancellationToken) =>
-            listSwitch.Fail ? throw new InvalidOperationException("the database is not available") : inner.ListAsync(cancellationToken);
+        public async Task<IReadOnlyList<Server>> ListAsync(CancellationToken cancellationToken)
+        {
+            if (listSwitch.Fail) throw new InvalidOperationException("the database is not available");
+            var servers = await inner.ListAsync(cancellationToken);
+            if (Interlocked.Exchange(ref listSwitch.AfterList, null) is { } hook) await hook();
+            return servers;
+        }
 
         public Task<Server?> GetAsync(Guid id, CancellationToken cancellationToken) => inner.GetAsync(id, cancellationToken);
         public Task AddAsync(Server server, CancellationToken cancellationToken) => inner.AddAsync(server, cancellationToken);

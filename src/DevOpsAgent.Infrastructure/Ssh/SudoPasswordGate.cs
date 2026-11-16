@@ -72,6 +72,7 @@ public sealed partial class SudoPasswordGate(
     private readonly ConcurrentDictionary<string, string> _plain = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _secretsLoad = new(1, 1);
     private volatile SecretsSnapshot? _secrets;
+    private int _version;
 
     private sealed record SecretsSnapshot(IReadOnlyList<string> Secrets, long LoadedAt);
 
@@ -82,6 +83,7 @@ public sealed partial class SudoPasswordGate(
         try
         {
             if (_secrets is { } loaded && timeProvider.GetElapsedTime(loaded.LoadedAt) < SecretsLifetime) return loaded.Secrets;
+            var version = Volatile.Read(ref _version);
             await using var scope = scopeFactory.CreateAsyncScope();
             var servers = await scope.ServiceProvider.GetRequiredService<IServerRepository>().ListAsync(cancellationToken);
             var secrets = new List<string>();
@@ -97,7 +99,9 @@ public sealed partial class SudoPasswordGate(
             }
 
             var ordered = secrets.Distinct(StringComparer.Ordinal).OrderByDescending(secret => secret.Length).ToArray();
-            _secrets = new SecretsSnapshot(ordered, timeProvider.GetTimestamp());
+            // A password saved or removed while this list was being read has invalidated it: what was read may be older than
+            // that change, so it is used once and not kept.
+            if (Volatile.Read(ref _version) == version) _secrets = new SecretsSnapshot(ordered, timeProvider.GetTimestamp());
             return ordered;
         }
         finally
@@ -106,7 +110,11 @@ public sealed partial class SudoPasswordGate(
         }
     }
 
-    public void Invalidate() => _secrets = null;
+    public void Invalidate()
+    {
+        Interlocked.Increment(ref _version);
+        _secrets = null;
+    }
 
     /// <summary>
     /// Every server's result passes through here: redacted with every stored sudo password of every server, and with the
