@@ -85,18 +85,18 @@ public sealed class NginxCollectorParserTests
 
         var tiles = Assert.Single(map.Proxies, proxy => proxy.Line == 11);
         Assert.Equal("proxy_pass", tiles.Directive);
-        Assert.Equal("http://192.168.20.14:8080", tiles.Target);
+        Assert.Equal("http://192.0.2.14:8080", tiles.Target);
         Assert.False(tiles.IsUnresolved);
         Assert.Equal("/etc/nginx/sites-enabled/map", tiles.FilePath);
         var from = Assert.IsType<NginxVariableResolution>(tiles.ResolvedFrom);
         Assert.Equal("$tiles_upstream", from.OriginalTarget);
         Assert.Equal("$tiles_upstream", from.Variable);
-        Assert.Equal("http://192.168.20.14:8080", from.Value);
+        Assert.Equal("http://192.0.2.14:8080", from.Value);
         Assert.Equal("/etc/nginx/sites-enabled/map", from.FilePath);
         Assert.Equal(5, from.Line);
 
         var mapApp = Assert.Single(map.Proxies, proxy => proxy.Line == 19);
-        Assert.Equal("http://192.168.20.14:3030", mapApp.Target);
+        Assert.Equal("http://192.0.2.14:3030", mapApp.Target);
         Assert.Equal(6, mapApp.ResolvedFrom!.Line);
         Assert.Equal("proxy_pass", mapApp.Directive);
     }
@@ -120,14 +120,14 @@ public sealed class NginxCollectorParserTests
 
         var nested = Assert.Single(map.Locations, location => location.Match == "/app/static/");
         var proxy = Assert.Single(nested.Proxies);
-        Assert.Equal("http://192.168.20.14:3030/static/", proxy.Target);
+        Assert.Equal("http://192.0.2.14:3030/static/", proxy.Target);
         Assert.Equal("${map_app_upstream}/static/", proxy.ResolvedFrom!.OriginalTarget);
         // The nested proxy is no longer attributed to its parent location.
         Assert.DoesNotContain(Assert.Single(map.Locations, location => location.Match == "/").Proxies,
             item => item.Target.EndsWith("/static/", StringComparison.Ordinal));
 
         var braced = Assert.Single(map.Proxies, item => item.ResolvedFrom?.OriginalTarget == "${tiles_upstream}");
-        Assert.Equal("http://192.168.20.14:8080", braced.Target);
+        Assert.Equal("http://192.0.2.14:8080", braced.Target);
     }
 
     [Fact]

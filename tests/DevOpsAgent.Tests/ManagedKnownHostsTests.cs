@@ -50,9 +50,9 @@ public sealed class ManagedKnownHostsTests : IDisposable
         var store = new ManagedKnownHosts(Options.Create(new SshConnectionOptions { KnownHostsFile = Manual, ManagedKnownHostsFile = Path.Combine(blocker, "known_hosts") }),
             TimeProvider.System, NullLogger<ManagedKnownHosts>.Instance);
 
-        await store.RecordFirstUseAsync("kartio.test", 22, "ssh-ed25519", KeyA, CancellationToken.None); // no exception
+        await store.RecordFirstUseAsync("demo.test", 22, "ssh-ed25519", KeyA, CancellationToken.None); // no exception
 
-        Assert.Equal(HostKeyDecision.FirstUse, store.Check("kartio.test", 22, "ssh-ed25519", KeyA)); // nothing was pinned
+        Assert.Equal(HostKeyDecision.FirstUse, store.Check("demo.test", 22, "ssh-ed25519", KeyA)); // nothing was pinned
     }
 
     [Fact]

@@ -15,9 +15,9 @@ server {
     listen 443 ssl;
     server_name map.example.test;
 
-    set $tiles_upstream http://192.168.20.14:8080;
-    set $map_app_upstream http://192.168.20.14:3030;
-    set $api_upstream http://192.168.20.14:4000;
+    set $tiles_upstream http://192.0.2.14:8080;
+    set $map_app_upstream http://192.0.2.14:3030;
+    set $api_upstream http://192.0.2.14:4000;
     set $named_upstream pool_backend;
 
     location /tiles/ {

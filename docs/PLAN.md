@@ -455,8 +455,8 @@ Owner order 2026-11-16: T8.1–T8.9 in order, one commit each, AGENTS.md §2, DE
 - **Depends on:** T8.12
 
 ### T8.14 nginx `set` variables in proxy targets (owner bug, 2026-11-16) — done (D-049)
-- **Do:** `proxy_pass $var;` (and the other proxy directives) whose variable is assigned with `set $var <value>;` in the enclosing location, server or http block resolve to that value, so the edge goes to the real backend (owner: `set $map_app_upstream http://192.168.20.14:3030;` left Kartio-nginx unconnected to the map server). Nearest scope wins; a variable set to different values in the same scope, set inside `if`, or built from other variables stays unresolved as today. The evidence names the `set` line.
-- **Done when:** Parser tests with fixtures (resolved, nested scope, conflicting values, unknown variable); the owner's map links Kartio-nginx to map after a discovery.
+- **Do:** `proxy_pass $var;` (and the other proxy directives) whose variable is assigned with `set $var <value>;` in the enclosing location, server or http block resolve to that value, so the edge goes to the real backend (owner: `set $map_app_upstream http://192.0.2.14:3030;` left proxy-1 unconnected to the map server). Nearest scope wins; a variable set to different values in the same scope, set inside `if`, or built from other variables stays unresolved as today. The evidence names the `set` line.
+- **Done when:** Parser tests with fixtures (resolved, nested scope, conflicting values, unknown variable); the owner's map links proxy-1 to map after a discovery.
 - **Depends on:** T2.x nginx collector
 
 ### T8.15 BusyBox hosts (Alpine): addresses and listeners (owner bug, 2026-11-16) — done (D-050)
@@ -466,7 +466,7 @@ Owner order 2026-11-16: T8.1–T8.9 in order, one commit each, AGENTS.md §2, DE
 
 ### T8.16 External clients are not a hop on the Servers view (owner report, 2026-11-16) — done (D-051)
 - **Do:** An Unknown address that only connects *to* inventory servers (observed inbound connections; the unknown node is the source of every edge) is an external client, not a backend: its card is titled "External client" (caption "Not in inventory • <address>"), shows ONE row "client · N connections" instead of one row per ephemeral source port, and is placed in the first layer (left) like Internet / Clients, so it no longer sits between two servers and looks like a hop. Unknown addresses that are connected to (nginx upstreams, observed outbound connections) keep their port rows. A mixed address keeps its target ports and gets the extra client row.
-- **Done when:** Checked in a browser on a copy of the owner's graph (93.118.144.130: SSH to both servers, 443, 21116); build 0 warnings, tests green.
+- **Done when:** Checked in a browser on a copy of the owner's graph (203.0.113.7: SSH to both servers, 443, 21116); build 0 warnings, tests green.
 - **Depends on:** T8.12
 
 ### T8.17 The agent's own SSH session is not a connection on the map (owner report, 2026-11-16) — done (D-052)

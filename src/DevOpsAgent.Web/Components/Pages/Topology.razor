@@ -736,7 +736,7 @@
         ? address
         : (ReadString(card, "id") ?? string.Empty)[UnknownHostCardPrefix.Length..];
 
-    // "Unknown host · 10.0.0.5", or "External client · 93.118.144.130" for an address that only connects to inventory servers.
+    // "Unknown host · 10.0.0.5", or "External client · 203.0.113.7" for an address that only connects to inventory servers.
     private static string UnknownHostTitle(string address, bool external) => $"{(external ? "External client" : "Unknown host")} · {address}";
 
     // The addresses (as the Servers view groups them) whose unknown endpoints are all client-side: each is the source of an edge and

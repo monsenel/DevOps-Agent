@@ -396,7 +396,7 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-16 · ZCode · T8.14 · started (owner: map shows only nginx; cause: `proxy_pass $var` with `set $var` unresolved, and Alpine/BusyBox host collector failure → T8.15)
 - 2026-11-16 · ZCode · T8.14 · `proxy_pass $var` resolved from the nearest `set`; nested-location proxies and `${name}` fixed; checked on the owner's stored nginx -T (D-049)
 - 2026-11-16 · ZCode · T8.15 · BusyBox fallbacks (ip -o addr, ip route, netstat -tulpn/-tuln, netstat -tn) checked on real BusyBox 1.37 output; lab discovery unchanged; build 0 warnings, 756 tests (D-050)
-- 2026-11-16 · ZCode · T8.16 · started (owner: the card between Kartio-nginx and map is an external client's ephemeral source ports, drawn as if it were a hop)
+- 2026-11-16 · ZCode · T8.16 · started (owner: the card between proxy-1 and map is an external client's ephemeral source ports, drawn as if it were a hop)
 - 2026-11-16 · ZCode · T8.16 · External client card (one `client · N connections` row, first layer); checked on a copy of the owner's graph; build 0 warnings, 756 tests (D-051)
 - 2026-11-16 · ZCode · T8.17 · started (owner: the External client with SSH 22 to the map server is wrong; it is the agent's own SSH session)
 - 2026-11-16 · ZCode · T8.17 · agent's own SSH session ($SSH_CLIENT) left out of the connection graph; lab discovery: Unknown 10.88.10.1 gone; build 0 warnings, 764 tests (D-052)
