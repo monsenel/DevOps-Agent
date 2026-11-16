@@ -13,3 +13,10 @@ keys/
 !.env.example
 graphify-out/
 dva-testlab*-data/
+/docs/ARCHITECTURE.md
+/docs/DECISIONS.md
+/docs/DESIGN.md
+/docs/PLAN.md
+/docs/PRD.md
+/docs/PROGRESS.md
+/docs/design/
