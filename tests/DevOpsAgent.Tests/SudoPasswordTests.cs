@@ -471,14 +471,31 @@ public sealed partial class SudoPasswordTests
         Assert.True(server.CanUseSudo);
     }
 
+    private sealed class ListSwitch
+    {
+        public volatile bool Fail;
+    }
+
+    private sealed class SwitchableServerRepository(IServerRepository inner, ListSwitch listSwitch) : IServerRepository
+    {
+        public Task<IReadOnlyList<Server>> ListAsync(CancellationToken cancellationToken) =>
+            listSwitch.Fail ? throw new InvalidOperationException("the database is not available") : inner.ListAsync(cancellationToken);
+
+        public Task<Server?> GetAsync(Guid id, CancellationToken cancellationToken) => inner.GetAsync(id, cancellationToken);
+        public Task AddAsync(Server server, CancellationToken cancellationToken) => inner.AddAsync(server, cancellationToken);
+        public Task SaveAsync(Server server, CancellationToken cancellationToken) => inner.SaveAsync(server, cancellationToken);
+        public Task DeleteAsync(Server server, CancellationToken cancellationToken) => inner.DeleteAsync(server, cancellationToken);
+    }
+
     private sealed class SudoLab : IAsyncDisposable
     {
         private readonly string _databasePath;
         private readonly ServiceProvider _services;
         private readonly AsyncServiceScope _scope;
 
-        private SudoLab(string databasePath, ServiceProvider services, TimeProvider clock, ServerStateEvents? events)
+        private SudoLab(string databasePath, ServiceProvider services, TimeProvider clock, ServerStateEvents? events, ListSwitch listSwitch)
         {
+            ListSwitch = listSwitch;
             _databasePath = databasePath;
             _services = services;
             _scope = services.CreateAsyncScope();
@@ -490,6 +507,9 @@ public sealed partial class SudoPasswordTests
         }
 
         public SudoPasswordGate Gate { get; }
+
+        /// <summary>While <see cref="ListSwitch.Fail"/> is set, listing the servers throws (a failing or busy database).</summary>
+        public ListSwitch ListSwitch { get; }
 
         public RecordingSession Session { get; } = new();
         public SessionPool Pool { get; }
@@ -503,14 +523,15 @@ public sealed partial class SudoPasswordTests
         public static async Task<SudoLab> CreateAsync(string? sudoPassword, TimeProvider? clock = null, ServerStateEvents? events = null)
         {
             var path = Path.Combine(Path.GetTempPath(), $"dva-sudo-{Guid.NewGuid():N}.db");
+            var listSwitch = new ListSwitch();
             var services = new ServiceCollection()
                 .AddDbContext<AppDbContext>(options => options.UseSqlite($"Data Source={path};Pooling=False"))
-                .AddScoped<IServerRepository, ServerRepository>()
+                .AddScoped<IServerRepository>(provider => new SwitchableServerRepository(new ServerRepository(provider.GetRequiredService<AppDbContext>()), listSwitch))
                 .BuildServiceProvider();
             await using (var setup = services.CreateAsyncScope())
                 await setup.ServiceProvider.GetRequiredService<AppDbContext>().Database.EnsureCreatedAsync();
 
-            var lab = new SudoLab(path, services, clock ?? TimeProvider.System, events);
+            var lab = new SudoLab(path, services, clock ?? TimeProvider.System, events, listSwitch);
             lab.Session.AcceptedPassword = Password;
             var created = await lab.Inventory.CreateAsync(lab.Input("db") with { SudoPassword = sudoPassword }, CancellationToken.None);
             lab.ServerId = created.Id;

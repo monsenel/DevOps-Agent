@@ -118,10 +118,11 @@ public sealed partial class SudoPasswordGate(
         try { secrets = await GetAsync(CancellationToken.None); }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            // The list cannot be read: keep only the server's own password out, and say so without any detail.
-            logger.LogWarning("The list of stored sudo passwords could not be read ({ErrorType}); output is redacted with this server's password only",
+            // The list cannot be read (the database is busy or failing): every password this process has decrypted so far still
+            // stays out, besides the server's own, and it says so without any detail.
+            logger.LogWarning("The list of stored sudo passwords could not be read ({ErrorType}); output is redacted with the passwords seen so far",
                 exception.GetType().Name);
-            secrets = [];
+            secrets = _plain.Values.Where(secret => secret.Length > 0).Distinct(StringComparer.Ordinal).OrderByDescending(secret => secret.Length).ToArray();
         }
 
         if (!string.IsNullOrEmpty(ownPassword) && !secrets.Contains(ownPassword, StringComparer.Ordinal))

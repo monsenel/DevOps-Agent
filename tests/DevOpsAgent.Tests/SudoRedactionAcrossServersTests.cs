@@ -138,6 +138,21 @@ public sealed partial class SudoPasswordTests
     }
 
     [Fact]
+    public async Task WhenTheListOfPasswordsCannotBeRead_OutputIsStillRedactedWithThePasswordsSeenSoFar()
+    {
+        await using var lab = await SudoLab.CreateAsync(Password);
+        var other = await lab.Inventory.CreateAsync(lab.Input("db-again") with { User = "dva" }, CancellationToken.None);
+        await lab.Runner.RunAsync(other.Id, "uptime -p", Plain, CancellationToken.None); // the passwords are known to the process now
+        lab.Gate.Invalidate();
+        lab.ListSwitch.Fail = true;
+
+        var result = await lab.Runner.RunAsync(other.Id, $"printf '%s' '{Password}'", Plain, CancellationToken.None);
+
+        Assert.DoesNotContain(Password, result.StandardOutput + result.StandardError);
+        Assert.Contains(SudoPasswordGate.Redacted, result.StandardOutput);
+    }
+
+    [Fact]
     public async Task TheStoredMessage_AndTheConversationTitle_NeverHoldAStoredPassword()
     {
         await using var chat = await ChatServiceHarness.CreateAsync(new FixedSecrets(Password), baseUrl: "http://127.0.0.1:11434/v1",
