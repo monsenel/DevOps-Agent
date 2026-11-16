@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using DevOpsAgent.Infrastructure.Ssh;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -95,5 +97,37 @@ public sealed class ManagedKnownHostsTests : IDisposable
             store.AcceptPresentedKeyAsync("edge.test", 22, mismatch.PresentedFingerprint, CancellationToken.None));
         await store.RecordFirstUseAsync("edge.test", 22, "ssh-ed25519", KeyB, CancellationToken.None);
         Assert.False(File.Exists(Managed)); // a manually listed host is never recorded
+    }
+
+    [Fact]
+    public async Task HashedNamesAndPatternsInTheOwnersFile_PinTheirHosts_SoNoneIsTrustedOnFirstUse()
+    {
+        static string Hashed(string name)
+        {
+            var salt = RandomNumberGenerator.GetBytes(20);
+            return $"|1|{Convert.ToBase64String(salt)}|{Convert.ToBase64String(HMACSHA1.HashData(salt, Encoding.UTF8.GetBytes(name)))}";
+        }
+
+        var a = Convert.ToBase64String(KeyA);
+        File.WriteAllText(Manual, string.Join('\n',
+            $"{Hashed("hashed.test")} ssh-ed25519 {a}",
+            $"{Hashed("[hashed.test]:2222")} ssh-ed25519 {a}",
+            $"*.corp.test,!open.corp.test ssh-ed25519 {a}",
+            $"db?.lab.test ssh-ed25519 {a}"));
+        var store = Store();
+
+        foreach (var (host, port) in new[] { ("hashed.test", 22), ("HASHED.test", 22), ("hashed.test", 2222), ("db.corp.test", 22), ("db1.lab.test", 22) })
+        {
+            Assert.Equal(HostKeyDecision.Trusted, store.Check(host, port, "ssh-ed25519", KeyA));
+            Assert.Equal(HostKeyDecision.Mismatch, store.Check(host, port, "ssh-ed25519", KeyB)); // pinned: no trust on first use
+            Assert.True(Assert.Single(store.GetKeys(host, port)).Manual);
+        }
+
+        // Not listed: another port, a negated name, a name the pattern does not cover.
+        foreach (var (host, port) in new[] { ("hashed.test", 2200), ("open.corp.test", 22), ("corp.test", 22), ("db12.lab.test", 22), ("other.test", 22) })
+            Assert.Equal(HostKeyDecision.FirstUse, store.Check(host, port, "ssh-ed25519", KeyA));
+
+        await store.RecordFirstUseAsync("hashed.test", 22, "ssh-ed25519", KeyB, CancellationToken.None);
+        Assert.False(File.Exists(Managed));
     }
 }

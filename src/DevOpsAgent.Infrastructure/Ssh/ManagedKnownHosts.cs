@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using DevOpsAgent.Application.Abstractions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -152,16 +153,63 @@ internal static class KnownHostsLines
     public static IReadOnlyList<KnownHostLine> For(IReadOnlyList<KnownHostLine> entries, string host, int port)
     {
         var names = Names(host, port);
-        return entries.Where(entry => entry.HostNames.Any(name => names.Contains(name, StringComparer.OrdinalIgnoreCase))).ToArray();
+        return entries.Where(entry => Matches(entry, names)).ToArray();
     }
 
-    // Hashed host names (|1|…), negations and @markers are not used by the app and are skipped, as before.
+    // OpenSSH's rules for the host field: a comma list of names, `*` and `?` patterns, `!` negations and hashed names
+    // (|1|salt|hash, what HashKnownHosts writes). A host the owner's file pins this way must be found there: if it were not,
+    // it would be trusted on first use and the pin ignored.
+    private static bool Matches(KnownHostLine entry, string[] names)
+    {
+        var matched = false;
+        foreach (var pattern in entry.HostNames)
+        {
+            var negated = pattern.StartsWith('!');
+            if (!PatternMatches(negated ? pattern[1..] : pattern, names)) continue;
+            if (negated) return false;
+            matched = true;
+        }
+
+        return matched;
+    }
+
+    private static bool PatternMatches(string pattern, string[] names)
+    {
+        if (pattern.StartsWith("|1|", StringComparison.Ordinal)) return HashedMatches(pattern, names);
+        if (pattern.IndexOfAny(['*', '?']) >= 0)
+        {
+            var glob = "^" + Regex.Escape(pattern).Replace("\\*", ".*", StringComparison.Ordinal).Replace("\\?", ".", StringComparison.Ordinal) + "$";
+            return names.Any(name => Regex.IsMatch(name, glob, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1)));
+        }
+
+        return names.Contains(pattern, StringComparer.OrdinalIgnoreCase);
+    }
+
+    // |1|base64(salt)|base64(HMAC-SHA1(salt, name)); OpenSSH hashes the name in lower case.
+    private static bool HashedMatches(string pattern, string[] names)
+    {
+        var parts = pattern.Split('|');
+        if (parts.Length != 4 || parts[1] != "1") return false;
+        try
+        {
+            var salt = Convert.FromBase64String(parts[2]);
+            var expected = Convert.FromBase64String(parts[3]);
+            return names.Any(name => CryptographicOperations.FixedTimeEquals(
+                HMACSHA1.HashData(salt, System.Text.Encoding.UTF8.GetBytes(name.ToLowerInvariant())), expected));
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
+    // @markers (@revoked, @cert-authority) are not used by the app and are skipped, as before.
     public static KnownHostLine? Parse(string line)
     {
         var trimmed = line.Trim();
         if (trimmed.Length == 0 || trimmed.StartsWith('#') || trimmed.StartsWith('@')) return null;
         var fields = trimmed.Split((char[]?)null, 4, StringSplitOptions.RemoveEmptyEntries);
-        if (fields.Length < 3 || fields[0].StartsWith('|') || fields[0].StartsWith('!')) return null;
+        if (fields.Length < 3) return null;
         try
         {
             return new KnownHostLine(fields[0].Split(',', StringSplitOptions.RemoveEmptyEntries), fields[1],
