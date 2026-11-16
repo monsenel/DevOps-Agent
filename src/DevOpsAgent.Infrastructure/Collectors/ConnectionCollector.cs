@@ -13,7 +13,11 @@ public sealed class ConnectionCollector : ICollector
     /// <summary>Fallback for hosts without <c>ss</c> (BusyBox/Alpine): established and other non-listening TCP sockets.</summary>
     public const string NetstatCommand = "netstat -tn";
 
+    /// <summary>Read-only; sshd sets <c>SSH_CLIENT</c> for every session. Not run with sudo.</summary>
+    public const string SshClientCommand = "printf '%s' \"$SSH_CLIENT\"";
+
     private const string HostCommand = "ss -tnH state established";
+    private const int MaxSshClientLength = 200;
     private const int CommandNotFound = 127;
 
     private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(30);
@@ -51,6 +55,7 @@ public sealed class ConnectionCollector : ICollector
         }
 
         var duration = host.Duration;
+        var agentSshClient = await ReadAgentSshClientAsync(context, cancellationToken);
         var containerOutputs = new Dictionary<string, string>(StringComparer.Ordinal);
         var notes = new List<string>();
         if (context.TryGetPreviousResult<DockerDiscoveryResult>("docker", out var docker) && docker is not null)
@@ -80,8 +85,28 @@ public sealed class ConnectionCollector : ICollector
             }
         }
 
-        var raw = JsonSerializer.Serialize(new ConnectionCollectorRawOutput(host.StandardOutput, containerOutputs, notes, collectedAtUtc));
+        var raw = JsonSerializer.Serialize(new ConnectionCollectorRawOutput(host.StandardOutput, containerOutputs, notes, collectedAtUtc, agentSshClient));
         return new CollectorOutput(raw, host.StandardError, host.ExitCode, duration);
+    }
+
+    /// <summary>
+    /// Reads <c>$SSH_CLIENT</c> ("client-ip client-port server-port") of the agent's own SSH session. Best effort: any failure or
+    /// empty value means "do not filter" and never fails the collector.
+    /// </summary>
+    private static async Task<string?> ReadAgentSshClientAsync(ServerContext context, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await context.SshRunner.RunAsync(context.Server.Id, SshClientCommand,
+                new SshRunOptions(CommandTimeout), cancellationToken);
+            if (result.ExitCode != 0) return null;
+            var value = result.StandardOutput.Trim();
+            return value.Length is > 0 and <= MaxSshClientLength ? value : null;
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            return null;
+        }
     }
 
     public CollectorResult Parse(CollectorOutput output)
@@ -91,7 +116,8 @@ public sealed class ConnectionCollector : ICollector
             var raw = JsonSerializer.Deserialize<ConnectionCollectorRawOutput>(output.StandardOutput);
             if (raw is null) return new CollectorResult(Error: "Connection collector output is empty.");
 
-            var result = ConnectionCollectorParser.Parse(raw.HostOutput, raw.ContainerOutputs, raw.Notes, raw.CollectedAtUtc);
+            var result = ConnectionCollectorParser.Parse(raw.HostOutput, raw.ContainerOutputs, raw.Notes, raw.CollectedAtUtc,
+                raw.AgentSshClient);
             return new CollectorResult(JsonSerializer.SerializeToElement(result));
         }
         catch (JsonException exception)
@@ -104,5 +130,6 @@ public sealed class ConnectionCollector : ICollector
         string HostOutput,
         IReadOnlyDictionary<string, string> ContainerOutputs,
         IReadOnlyList<string> Notes,
-        DateTimeOffset CollectedAtUtc);
+        DateTimeOffset CollectedAtUtc,
+        string? AgentSshClient = null);
 }

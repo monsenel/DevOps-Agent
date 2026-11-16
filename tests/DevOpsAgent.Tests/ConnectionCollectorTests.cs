@@ -1,3 +1,4 @@
+using System.Text.Json;
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Discovery;
 using DevOpsAgent.Domain.Servers;
@@ -55,10 +56,122 @@ public sealed class ConnectionCollectorTests
         var output = await collector.CollectAsync(context, CancellationToken.None);
         var parsed = collector.Parse(output);
 
-        Assert.Equal(["command -v ss >/dev/null 2>&1", "ss -tnH state established"], runner.Commands);
+        Assert.Equal(["command -v ss >/dev/null 2>&1", "ss -tnH state established", "printf '%s' \"$SSH_CLIENT\""], runner.Commands);
         Assert.All(runner.Calls, call => Assert.False(call.Options.UseSudo));
         Assert.True(parsed.IsSuccess, parsed.Error);
         Assert.Equal(2, parsed.Data!.Value.GetProperty("Connections").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task CollectAsync_DropsTheAgentsOwnSshSessionAndKeepsOtherConnections()
+    {
+        var ss = string.Join('\n',
+            "ESTAB 0 0 10.88.10.5:22 10.88.10.1:57980",
+            "ESTAB 0 0 10.88.10.5:22 10.88.10.1:57990", // a second agent connection from the same address
+            "ESTAB 0 0 10.88.10.5:22 203.0.113.50:40000", // another client's SSH stays
+            "ESTAB 0 0 10.88.10.5:443 10.88.10.1:41000", // same address, another port stays
+            "ESTAB 0 0 [::ffff:10.88.10.5]:22 [::ffff:10.88.10.1]:57995") + "\n"; // IPv4-mapped form of the agent
+        var runner = new RecordingSshRunner(ss, "10.88.10.1 57980 22");
+        var collector = new ConnectionCollector();
+        var context = new ServerContext(new Server("edge", "edge.test", 22, "deploy", "key", "lab"), runner);
+
+        var output = await collector.CollectAsync(context, CancellationToken.None);
+        var parsed = collector.Parse(output);
+
+        Assert.True(parsed.IsSuccess, parsed.Error);
+        var result = parsed.Data!.Value.Deserialize<ConnectionDiscoveryResult>()!;
+        Assert.Equal(2, result.Connections.Count);
+        Assert.Contains(result.Connections, item => item.LocalPort == 22 && item.PeerAddress == "203.0.113.50");
+        Assert.Contains(result.Connections, item => item.LocalPort == 443 && item.PeerAddress == "10.88.10.1");
+        Assert.Equal("SSH sessions of DevOps Agent from 10.88.10.1 to port 22 are not drawn.", Assert.Single(result.Notes));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("not-an-address 1 22")]
+    public async Task CollectAsync_WithoutUsableSshClientDropsNothing(string sshClient)
+    {
+        var runner = new RecordingSshRunner("ESTAB 0 0 10.88.10.5:22 10.88.10.1:57980\n", sshClient);
+        var collector = new ConnectionCollector();
+        var context = new ServerContext(new Server("edge", "edge.test", 22, "deploy", "key", "lab"), runner);
+
+        var output = await collector.CollectAsync(context, CancellationToken.None);
+        var parsed = collector.Parse(output);
+
+        Assert.True(parsed.IsSuccess, parsed.Error);
+        var result = parsed.Data!.Value.Deserialize<ConnectionDiscoveryResult>()!;
+        Assert.Single(result.Connections);
+        Assert.Empty(result.Notes);
+    }
+
+    [Fact]
+    public async Task CollectAsync_SshClientCommandFailureIsNotFatal()
+    {
+        var runner = new RecordingSshRunner("ESTAB 0 0 10.88.10.5:22 10.88.10.1:57980\n", "10.88.10.1 57980 22", failSshClient: true);
+        var collector = new ConnectionCollector();
+        var context = new ServerContext(new Server("edge", "edge.test", 22, "deploy", "key", "lab"), runner);
+
+        var output = await collector.CollectAsync(context, CancellationToken.None);
+        var parsed = collector.Parse(output);
+
+        Assert.Equal(0, output.ExitCode);
+        Assert.True(parsed.IsSuccess, parsed.Error);
+        Assert.Single(parsed.Data!.Value.Deserialize<ConnectionDiscoveryResult>()!.Connections);
+    }
+
+    [Fact]
+    public void Parse_DefaultsServerPortTo22AndNormalisesIpv4MappedAddresses()
+    {
+        var result = ConnectionCollectorParser.Parse(
+            "ESTAB 0 0 [::ffff:10.88.10.5]:22 [::ffff:10.88.10.1]:57980\nESTAB 0 0 10.88.10.5:2222 10.88.10.1:57981\n",
+            agentSshClient: "::ffff:10.88.10.1 57980");
+
+        var remaining = Assert.Single(result.Connections);
+        Assert.Equal(2222, remaining.LocalPort);
+        Assert.Equal("SSH sessions of DevOps Agent from 10.88.10.1 to port 22 are not drawn.", Assert.Single(result.Notes));
+    }
+
+    [Fact]
+    public void Parse_UsesTheServerPortFromSshClientAndLeavesContainerConnectionsAlone()
+    {
+        var result = ConnectionCollectorParser.Parse(
+            "ESTAB 0 0 10.88.10.5:2222 [2001:db8::1]:57980\nESTAB 0 0 10.88.10.5:22 [2001:db8::1]:57981\n",
+            new Dictionary<string, string> { ["bastion"] = "ESTAB 0 0 172.20.0.2:2222 [2001:db8::1]:40000\n" },
+            agentSshClient: "2001:db8::1 57980 2222");
+
+        Assert.Equal(2, result.Connections.Count);
+        Assert.Contains(result.Connections, item => item.Namespace == "host" && item.LocalPort == 22);
+        Assert.Contains(result.Connections, item => item.Namespace == "container" && item.ContainerName == "bastion");
+        Assert.Contains("SSH sessions of DevOps Agent from 2001:db8::1 to port 2222 are not drawn.", result.Notes);
+    }
+
+    [Fact]
+    public async Task CollectAsync_NetstatFallbackAlsoDropsTheAgentsSession()
+    {
+        var runner = new NoSsRunner(sshClient: "192.168.20.9 51234 80");
+        var collector = new ConnectionCollector();
+        var context = new ServerContext(new Server("alpine", "alpine.test", 22, "deploy", "key", "staging"), runner);
+
+        var output = await collector.CollectAsync(context, CancellationToken.None);
+        var parsed = collector.Parse(output);
+
+        Assert.True(parsed.IsSuccess, parsed.Error);
+        var result = parsed.Data!.Value.Deserialize<ConnectionDiscoveryResult>()!;
+        Assert.Equal(2, result.Connections.Count);
+        Assert.DoesNotContain(result.Connections, item => item.PeerAddress == "192.168.20.9");
+        Assert.Equal("SSH sessions of DevOps Agent from 192.168.20.9 to port 80 are not drawn.", Assert.Single(result.Notes));
+    }
+
+    [Fact]
+    public void RawOutputWithoutAgentSshClientStillParses()
+    {
+        var raw = "{\"HostOutput\":\"ESTAB 0 0 10.0.0.1:22 10.0.0.2:5000\\n\",\"ContainerOutputs\":{},\"Notes\":[],"
+            + "\"CollectedAtUtc\":\"2026-11-14T08:00:00+00:00\"}";
+
+        var parsed = new ConnectionCollector().Parse(new CollectorOutput(raw, string.Empty, 0, TimeSpan.Zero));
+
+        Assert.True(parsed.IsSuccess, parsed.Error);
+        Assert.Equal(1, parsed.Data!.Value.GetProperty("Connections").GetArrayLength());
     }
 
     [Fact]
@@ -91,7 +204,8 @@ public sealed class ConnectionCollectorTests
         var parsed = collector.Parse(output);
 
         Assert.Equal(
-            ["command -v ss >/dev/null 2>&1", "command -v netstat >/dev/null 2>&1", "ss -tnH state established", "netstat -tn"],
+            ["command -v ss >/dev/null 2>&1", "command -v netstat >/dev/null 2>&1", "ss -tnH state established", "netstat -tn",
+                "printf '%s' \"$SSH_CLIENT\""],
             runner.Commands);
         Assert.Equal(0, output.ExitCode);
         Assert.True(parsed.IsSuccess, parsed.Error);
@@ -116,7 +230,7 @@ public sealed class ConnectionCollectorTests
             "/usr/bin/sh -c 'nsenter -t 42 -n netstat -tn; id'"));
     }
 
-    private sealed class NoSsRunner(bool hasNetstat = true) : ISshRunner
+    private sealed class NoSsRunner(bool hasNetstat = true, string sshClient = "") : ISshRunner
     {
         public List<string> Commands { get; } = [];
 
@@ -130,6 +244,7 @@ public sealed class ConnectionCollectorTests
                 "command -v netstat >/dev/null 2>&1" => (hasNetstat ? 0 : 1, string.Empty, string.Empty),
                 "ss -tnH state established" => (127, string.Empty, "sh: ss: not found"),
                 "netstat -tn" => (0, File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "busybox-netstat-tn.txt")), string.Empty),
+                ConnectionCollector.SshClientCommand => (0, sshClient, string.Empty),
                 _ => (0, string.Empty, string.Empty)
             };
             return Task.FromResult(new RemoteCommandResult(exitCode, output, error, TimeSpan.FromMilliseconds(1)));
@@ -138,7 +253,7 @@ public sealed class ConnectionCollectorTests
 
     private static string Fixture() => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "ss-established.txt"));
 
-    private sealed class RecordingSshRunner : ISshRunner
+    private sealed class RecordingSshRunner(string? hostOutput = null, string sshClient = "", bool failSshClient = false) : ISshRunner
     {
         public List<(string Command, SshRunOptions Options)> Calls { get; } = [];
         public IReadOnlyList<string> Commands => Calls.Select(call => call.Command).ToArray();
@@ -147,7 +262,13 @@ public sealed class ConnectionCollectorTests
             CancellationToken cancellationToken)
         {
             Calls.Add((command, options));
-            var output = command == "ss -tnH state established" ? Fixture() : string.Empty;
+            if (command == ConnectionCollector.SshClientCommand)
+            {
+                if (failSshClient) throw new InvalidOperationException("channel closed");
+                return Task.FromResult(new RemoteCommandResult(0, sshClient, string.Empty, TimeSpan.FromMilliseconds(1)));
+            }
+
+            var output = command == "ss -tnH state established" ? hostOutput ?? Fixture() : string.Empty;
             return Task.FromResult(new RemoteCommandResult(0, output, string.Empty, TimeSpan.FromMilliseconds(1)));
         }
     }

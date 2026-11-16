@@ -9,9 +9,23 @@ public static class ConnectionCollectorParser
         string hostOutput,
         IReadOnlyDictionary<string, string>? containerOutputs = null,
         IReadOnlyList<string>? notes = null,
-        DateTimeOffset? collectedAtUtc = null)
+        DateTimeOffset? collectedAtUtc = null,
+        string? agentSshClient = null)
     {
         var connections = ParseOutput(hostOutput, "host", null).ToList();
+        var resultNotes = notes is null ? new List<string>() : [.. notes];
+        if (TryParseSshClient(agentSshClient, out var clientAddress, out var serverPort))
+        {
+            // Only host-namespace connections can be the agent's session. The remote port is deliberately not compared:
+            // another SSH connection of the agent (pool, a second run) comes from the same address to the same port.
+            var removed = connections.RemoveAll(connection => connection.LocalPort == serverPort
+                && IPAddress.TryParse(connection.PeerAddress, out var peer) && Normalize(peer).Equals(clientAddress));
+            if (removed > 0)
+            {
+                resultNotes.Add($"SSH sessions of DevOps Agent from {clientAddress} to port {serverPort} are not drawn.");
+            }
+        }
+
         if (containerOutputs is not null)
         {
             foreach (var (containerName, output) in containerOutputs.OrderBy(item => item.Key, StringComparer.Ordinal))
@@ -20,8 +34,27 @@ public static class ConnectionCollectorParser
             }
         }
 
-        return new ConnectionDiscoveryResult(connections, notes ?? [], collectedAtUtc);
+        return new ConnectionDiscoveryResult(connections, resultNotes, collectedAtUtc);
     }
+
+    /// <summary>Parses <c>$SSH_CLIENT</c> ("client-ip client-port server-port"); the server port defaults to 22.</summary>
+    private static bool TryParseSshClient(string? value, out IPAddress address, out int serverPort)
+    {
+        address = IPAddress.None;
+        serverPort = 22;
+        var fields = value?.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (fields is not { Length: > 0 } || !IPAddress.TryParse(fields[0], out var parsed)) return false;
+
+        address = Normalize(parsed);
+        if (fields.Length >= 3 && int.TryParse(fields[2], out var port) && port is > 0 and <= 65535)
+        {
+            serverPort = port;
+        }
+
+        return true;
+    }
+
+    private static IPAddress Normalize(IPAddress address) => address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address;
 
     private static IEnumerable<EstablishedConnectionInfo> ParseOutput(string output, string networkNamespace, string? containerName)
     {
