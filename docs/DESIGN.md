@@ -36,6 +36,12 @@ Defined once in `wwwroot/css/tokens.css` as CSS custom properties on `:root[data
 | `--dva-inv` | inv | `#14181b` | `#1e2429` | Inverted promo card in sidebar (Model card) |
 | `--dva-on-inv` | onInv | `#f3f5f7` | `#eef1f3` | Text on inverted card |
 | `--dva-on-inv-muted` | — | `#aab4bd` | `#aab4bd` | Secondary text on inverted card |
+| `--dva-role-proxy` | — | `#0369a1` | `#7cc4f0` | Servers view: reverse-proxy card border, glow and icon |
+| `--dva-role-app` | — | `#15803d` | `#4ade80` | Servers view: application-server card |
+| `--dva-role-data` | — | `#a16207` | `#facc15` | Servers view: data-server card |
+| `--dva-role-ci` | — | `#7e22ce` | `#c084fc` | Servers view: Git / CI server card |
+| `--dva-role-clients` | — | `#a16207` | `#facc15` | Servers view: dashed "Internet / Clients" card |
+| `--dva-graph-port` | — | `#0369a1` | `#7dd3fc` | Servers view: port labels on edges (≥ 4.5:1 on the map background in both themes) |
 
 Rules:
 - One emphasised (accent-filled) tile per row at most (e.g. "Open alerts" tile on Overview, "Last test passed" on Settings).
@@ -141,6 +147,30 @@ Focus: `outline: 2px solid var(--dva-accent); outline-offset: 2px` on every inte
 | Layout | Service view: ELK layered, left → right (domain → proxy → app → data). Network view: subnets as compound zones, hosts placed inside each subnet they have an interface on. |
 
 Legend row above the graph: "declared + observed", "observed only", "traced path" with line samples.
+
+### Servers view (default, T8.11)
+
+One card per server instead of one node per service. The view is built in `graph.js` from the Service-view data; the card sizes are measured first, then the cards are laid out with ELK (layered, left → right, node spacing 50, layer spacing 100; the fit keeps a 40px margin for the edge labels) and the contents are placed at preset positions.
+
+| Element | Style |
+|---|---|
+| Server card (compound node) | Fill card, 1.75px border and a soft glow (outline, 5px, 18 % opacity, follows the corner radius) in the **role** colour, radius 18, padding 14. Selected: accent border. Alert: danger / warn border (and the caption says "High alert" etc.). Stale: opacity .55, dashed border (and the caption says "stale · last seen …") |
+| Caption (card label, above the card, left-aligned with it) | `<Role> • <primary IP> • <OS>` mono 12 muted; missing parts are left out, then ` • <Severity> alert` and the stale text |
+| Header (child, not selectable; a tap selects the card) | 30px high: role icon (stroke SVG 20px in the role colour, `data:` URI built from the token value) + server name, 8px gap, Jakarta 15/700 ink |
+| Service / container row (direct child of the host) | Pill 34px high, radius 10, fill bg (darker than the card in dark theme), 1px line border, name centred ink 13/500, 8px gaps. All rows of a card have the same width: longest label + 32px, at least 180px |
+| Not drawn | Anything deeper than a row (compose service in a container, systemd unit in a container). nginx "server block ·" / "upstream ·" nodes are never rows: they are aliased to the server's nginx/proxy row, or to the card itself when it has none. Aliased nodes are selected, searched and traced through that row (or card), and the details panel shows their own data |
+| Internet / Clients card | One card for all Domain nodes, header "Internet / Clients" with a users icon, domains as rows (mono 12), **dashed** border in `--dva-role-clients`, faint glow |
+| Unknown node | As in the other views (dashed warn border, "Unknown" + address), top level |
+| Edge | One per pair of cards (all connections between them), dashed 6/5, 1.75px, arrow at the target (and at the source when connections go both ways), label = distinct ports sorted, "5432, 6379", mono 12/600 in `--dva-graph-port` on the map background. Declared + observed (or a mix of declared and observed connections): edge colour; observed only: warn; declared only: edge colour at .55 opacity. An edge that skips a layer is routed by ELK (polyline): its bend points become Cytoscape `segments`, so it goes around the cards in between and its label sits in the gap, not under a card. Other edges are straight beziers. Selecting it lists the underlying connections and their evidence |
+
+Roles. Row names are the label, unit, process name and compose service of a row and of everything aliased to it, never the image (an app may ship nginx in its image). A name matches at its start, after a leading path, and ends at `. @ : _ -` or the end: `redis-server`, `postgresql@15-main.service` and `nginx` match, `worker-redis` and `docker-proxy` do not. Edges are evidence too: a server connected from the Internet / Clients card is a proxy whatever its rows are called, and a server that receives connections on a database port (5432, 3306, 6379, 27017, 9200, 9300, 5672, 9092, 8123, 2379) is a data server. Order: proxy evidence, data, CI, application. With both proxy and data evidence the clients edge wins; otherwise the side with more rows (a tie goes to the proxy).
+
+| Role | Matches | Caption | Icon | Token |
+|---|---|---|---|---|
+| Reverse proxy | clients edge, or nginx, haproxy, traefik, caddy, envoy | Reverse proxy | layers | `--dva-role-proxy` |
+| Data server | database port edge, or postgres(ql), mysql(d), mariadb(d), redis, mongo(db), elasticsearch, opensearch, clickhouse, rabbitmq, kafka, minio, etcd | Data server | database | `--dva-role-data` |
+| Git / CI server | gitea, gitlab, jenkins, drone, woodpecker, runner, registry, nexus, harbor, argocd | Git / CI server | `</>` | `--dva-role-ci` |
+| Application server | everything else | Application server | server rack | `--dva-role-app` |
 
 ## 8. Page specs
 

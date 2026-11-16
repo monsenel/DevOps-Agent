@@ -21,6 +21,12 @@
     --dva-inv: #14181b;
     --dva-on-inv: #f3f5f7;
     --dva-on-inv-muted: #aab4bd;
+    --dva-role-proxy: #0369a1;
+    --dva-role-app: #15803d;
+    --dva-role-data: #a16207;
+    --dva-role-ci: #7e22ce;
+    --dva-role-clients: #a16207;
+    --dva-graph-port: #0369a1;
     --dva-page-pad: 20px;
     --dva-gap: 20px;
     --dva-card-pad: 22px;
@@ -56,6 +62,12 @@
     --dva-inv: #1e2429;
     --dva-on-inv: #eef1f3;
     --dva-on-inv-muted: #aab4bd;
+    --dva-role-proxy: #7cc4f0;
+    --dva-role-app: #4ade80;
+    --dva-role-data: #facc15;
+    --dva-role-ci: #c084fc;
+    --dva-role-clients: #facc15;
+    --dva-graph-port: #7dd3fc;
     --dva-page-pad: 20px;
     --dva-gap: 20px;
     --dva-card-pad: 22px;
