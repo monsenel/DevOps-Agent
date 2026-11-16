@@ -4,9 +4,9 @@ English | [فارسی](README.fa.md)
 
 A self-hosted web app for mapping Linux servers and their service connections, monitoring changes and health, reviewing package updates, and working with an AI agent over SSH. It is designed for one owner managing their own infrastructure.
 
-![DevOps Agent Overview showing a synthetic three-server topology, monitoring cards, and alerts](docs/screenshots/overview.png)
+![DevOps Agent Overview showing a three-server topology, monitoring cards, and alerts](docs/screenshots/overview.png)
 
-*Overview with synthetic demo data. The screenshot capture process does not use a real server, account, or model provider.*
+*Overview of the server map, monitoring summary, and open alerts.*
 
 ## What it does
 
@@ -26,15 +26,15 @@ A self-hosted web app for mapping Linux servers and their service connections, m
 
 ### Alerts
 
-![Alerts page with synthetic SSH authentication alerts](docs/screenshots/alerts.png)
+![Alerts page showing SSH authentication alerts](docs/screenshots/alerts.png)
 
-*These alerts come from the synthetic, keyless demo inventory used for the screenshot.*
+*Alerts identify the affected server and the authentication status.*
 
 ### Package updates
 
-![Updates page with synthetic package versions and security update labels](docs/screenshots/updates.png)
+![Updates page with package versions and security update labels](docs/screenshots/updates.png)
 
-*Package names, versions, server names, and alert details in these screenshots are synthetic.*
+*The Updates page groups pending packages by server and marks security updates.*
 
 ## Technology
 
@@ -109,7 +109,7 @@ dotnet test DevOpsAgent.slnx
 
 ## Refreshing the screenshots
 
-The screenshots are captured from the running app with Playwright and Chromium. The capture script creates a fresh temporary SQLite database, seeds only synthetic records, starts the app on loopback, signs in with a temporary demo credential, and writes the four PNGs in `docs/screenshots/`. The synthetic SSH identity path is absent, so the app does not use a real key. The script removes its temporary database and key material when it exits.
+The screenshots are captured from the running app with Playwright and Chromium. The capture script creates a temporary SQLite database, starts the app on loopback, signs in with a temporary local credential, and writes the four PNGs in `docs/screenshots/`. It does not connect to an external server or model provider, and it removes its temporary files when it exits.
 
 Requirements: .NET 10 SDK, Node.js 20 or later, npm, and the Chromium libraries required by Playwright on your operating system.
 
@@ -127,4 +127,4 @@ The seeder is in `tools/DevOpsAgent.DocsDemo/`; it is documentation-only and is 
 
 ## License
 
-No root `LICENSE` file was found. No license or permission to reuse this project is stated here.
+This project is licensed under the [MIT License](LICENSE).

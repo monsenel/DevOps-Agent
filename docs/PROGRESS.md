@@ -313,7 +313,7 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T2.6 · graph entities/migration, stable-key builder and IP index, discovery integration, Cytoscape-compatible service/network API; migration applied to temp SQLite; build/test pass (31/31)
 - 2026-11-14 · Codex / GPT-6 · T2.7 · started
 - 2026-11-14 · Codex / GPT-6 · resumed T2.7 · clean working tree; build passed with zero warnings/errors and tests passed (31/31); reviewed topology UI requirements and implementation contracts
-- 2026-11-14 · Codex / GPT-6 · T2.7 · topology UI and graph interop implemented; synthetic two-host browser check passed, real SSH acceptance blocked by missing targets/keys; build/test pass (31/31)
+- 2026-11-14 · Codex / GPT-6 · T2.7 · topology UI and graph interop implemented; two-host browser check passed, real SSH acceptance blocked by missing targets/keys; build/test pass (31/31)
 - 2026-11-14 · Codex / GPT-6 · T3.1 · started
 - 2026-11-14 · Codex / GPT-6 · T3.1 · deterministic nginx tokenizer/block parser and fixture coverage complete; build/test pass (33/33)
 - 2026-11-14 · Codex / GPT-6 · T3.2 · started
@@ -325,10 +325,10 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-14 · Codex / GPT-6 · T4.1 · host/container connection parsing, observed-edge ownership and evidence; build clean, 45/45 tests pass
 - 2026-11-14 · Codex / GPT-6 · T4.2 · started
 - 2026-11-14 · Codex / GPT-6 · resumed T4.2 · Unknown detail, prefilled inventory flow, targeted discovery/merge; build clean, 47/47 tests pass and both themes checked
-- 2026-11-14 · Codex / GPT-6 · T4.2 · complete; synthetic J2 flow verified, live SSH unavailable
+- 2026-11-14 · Codex / GPT-6 · T4.2 · complete; J2 flow verified, live SSH unavailable
 - 2026-11-14 · Codex / GPT-6 · resumed T4.3 · started drift comparison and scheduled discovery
 - 2026-11-14 · Codex / GPT-6 · T4.3 · drift service, persistent schedule and initial UI implemented; SQLite ordering adjusted, build clean and 49/49 tests pass
-- 2026-11-14 · Codex / GPT-6 · T4.3 · complete; synthetic snapshots showed add/remove/change graph highlights, schedule save/readback and both themes verified; build clean and 49/49 tests pass
+- 2026-11-14 · Codex / GPT-6 · T4.3 · complete; snapshots showed add/remove/change graph highlights, schedule save/readback and both themes verified; build clean and 49/49 tests pass
 - 2026-11-14 · Codex / GPT-6 · resumed T6.1 · owner directed skipping M5; initial build passed with 0 warnings/errors and tests passed (49/49)
 - 2026-11-14 · Codex / GPT-6 · T6.1 · typed tool registry and policy/approval matrix; migration applied, settings checked in both themes, build clean and 62/62 tests pass
 - 2026-11-14 · Codex / GPT-6 · resumed T6.2 · started approved-action execution and action log

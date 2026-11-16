@@ -98,7 +98,7 @@ try {
     seed.once('error', reject);
     seed.once('exit', resolve);
   });
-  if (seedExitCode !== 0) throw new Error(`Synthetic demo data seeding failed with code ${seedExitCode}.`);
+  if (seedExitCode !== 0) throw new Error(`Documentation data seeding failed with code ${seedExitCode}.`);
 
   const port = await freeLoopbackPort();
   const baseUrl = `http://127.0.0.1:${port}`;
