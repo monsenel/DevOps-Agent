@@ -91,7 +91,13 @@
                 <h2 id="topology-graph-title">Infrastructure map</h2>
                 <p class="muted">@GraphSummary</p>
             </div>
-            <button class="ui-button secondary" type="button" @onclick="FitGraphAsync" disabled="@(_graphModule is null)">Fit graph</button>
+            <div class="card-actions topology-zoom" role="group" aria-label="Zoom">
+                <button class="ui-button secondary icon-button" type="button" @onclick="ZoomOutAsync" disabled="@(_graphModule is null)"
+                        aria-label="Zoom out" title="Zoom out">−</button>
+                <button class="ui-button secondary icon-button" type="button" @onclick="ZoomInAsync" disabled="@(_graphModule is null)"
+                        aria-label="Zoom in" title="Zoom in">+</button>
+                <button class="ui-button secondary" type="button" @onclick="FitGraphAsync" disabled="@(_graphModule is null)">Fit graph</button>
+            </div>
         </div>
         <div @ref="_graphHost" class="topology-graph" role="img" aria-label="Interactive infrastructure graph. Use the node list below to select an item and inspect its details."></div>
         @if (_visibleNodes.Count > 0)
@@ -515,6 +521,11 @@
     }
 
     private Task FitGraphAsync() => _graphModule is null ? Task.CompletedTask : _graphModule.InvokeVoidAsync("fit").AsTask();
+
+    // One step is a factor of 1.4 around the middle of the map; the wheel and pinch still zoom around the pointer.
+    private Task ZoomInAsync() => _graphModule is null ? Task.CompletedTask : _graphModule.InvokeVoidAsync("zoomBy", 1.4).AsTask();
+
+    private Task ZoomOutAsync() => _graphModule is null ? Task.CompletedTask : _graphModule.InvokeVoidAsync("zoomBy", 1 / 1.4).AsTask();
 
     private async Task TraceAsync()
     {

@@ -89,13 +89,27 @@ export function init(container, dotNetReference) {
         container,
         elements: [],
         style: [],
-        minZoom: 0.08,
+        // A large estate fits at about 0.1: the old floor of 0.08 left almost no room to zoom out from the fitted view.
+        minZoom: 0.02,
         maxZoom: 3,
-        wheelSensitivity: 0.2,
         userZoomingEnabled: true,
         userPanningEnabled: true,
         boxSelectionEnabled: false
     });
+    // The current zoom factor, readable from the page (and from a browser check).
+    graph.on("zoom", () => { container.dataset.zoom = graph.zoom().toFixed(3); });
+    // The wheel is handled here: with Cytoscape's own handling (wheelSensitivity 0.2) one notch of a mouse wheel changed the
+    // zoom by about 1 %, so the map looked as if it did not zoom at all. One notch is about 16 %; a trackpad pinch (a wheel
+    // event with ctrlKey) is finer. The capture listener runs before Cytoscape's, which then never sees the event.
+    container.addEventListener("wheel", event => {
+        if (!graph) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 400 : 1;
+        const factor = Math.exp(-event.deltaY * unit * (event.ctrlKey ? 0.01 : 0.0015));
+        const bounds = container.getBoundingClientRect();
+        zoomAt(factor, { x: event.clientX - bounds.left, y: event.clientY - bounds.top });
+    }, { capture: true, passive: false });
     graph.on("select", "node, edge", event => {
         dotNet?.invokeMethodAsync("OnGraphSelection", JSON.stringify(event.target.data()));
     });
@@ -141,6 +155,18 @@ function staleText(lastSeenUtc) {
 
 export function setTheme() { applyStyles(); }
 export function fit() { graph?.fit(undefined, 28); }
+
+// Zooms by `factor` around a point of the visible map (pixels from its top left), kept inside the zoom limits.
+function zoomAt(factor, renderedPosition) {
+    if (!graph) return;
+    const level = Math.min(graph.maxZoom(), Math.max(graph.minZoom(), graph.zoom() * factor));
+    graph.zoom({ level, renderedPosition });
+}
+
+// Zoom buttons: a step around the middle of the visible map.
+export function zoomBy(factor) {
+    if (graph) zoomAt(factor, { x: graph.width() / 2, y: graph.height() / 2 });
+}
 
 export function select(id) {
     if (!graph) return;
