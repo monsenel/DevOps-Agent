@@ -95,7 +95,10 @@ public sealed class ChatService(
         var secrets = knownSecrets is null ? [] : await knownSecrets.GetAsync(cancellationToken);
         if (recordUserMessage)
         {
-            var userMessage = conversation.AddMessage("user", prompt.Length > 0 ? prompt : $"Attached: {string.Join(", ", files.Select(file => file.FileName))}",
+            // What the owner typed is stored (and becomes the conversation's title) without any stored sudo password in it: a
+            // password pasted into the chat must not outlive the protected column (D-040).
+            var userMessage = conversation.AddMessage("user",
+                KnownSecretRedaction.Redact(prompt.Length > 0 ? prompt : $"Attached: {string.Join(", ", files.Select(file => file.FileName))}", secrets),
                 timeProvider.GetUtcNow());
             // Text attachments get the same redaction as tool output before they are stored (T8.5), and therefore before
             // they are sent to any provider; images are stored as they are.

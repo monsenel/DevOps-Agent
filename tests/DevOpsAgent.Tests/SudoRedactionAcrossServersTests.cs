@@ -4,6 +4,7 @@ using DevOpsAgent.Application.Servers;
 using DevOpsAgent.Domain.Monitoring;
 using DevOpsAgent.Infrastructure.Monitoring;
 using DevOpsAgent.Infrastructure.Ssh;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -134,6 +135,22 @@ public sealed partial class SudoPasswordTests
         Assert.NotEmpty(chat.Requests);
         Assert.DoesNotContain(Password, chat.SentText);
         Assert.Contains("[REDACTED]", chat.SentText);
+    }
+
+    [Fact]
+    public async Task TheStoredMessage_AndTheConversationTitle_NeverHoldAStoredPassword()
+    {
+        await using var chat = await ChatServiceHarness.CreateAsync(new FixedSecrets(Password), baseUrl: "http://127.0.0.1:11434/v1",
+            type: Domain.Llm.ProviderType.Ollama);
+        var conversation = await chat.Service.CreateAsync(CancellationToken.None);
+
+        await chat.SendAsync(conversation, $"{Password} is rejected on db, why?");
+
+        var messages = await chat.Context.ChatMessages.ToListAsync();
+        Assert.NotEmpty(messages);
+        Assert.All(messages, message => Assert.DoesNotContain(Password, message.Content));
+        Assert.Contains("[REDACTED] is rejected on db, why?", messages.Single(message => message.Role == "user").Content);
+        Assert.DoesNotContain(Password, (await chat.Context.ChatConversations.SingleAsync()).Title);
     }
 
     private sealed class MemorySettings : IAppSettingRepository
