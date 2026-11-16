@@ -164,7 +164,7 @@ Statuses: `todo` · `in-progress` · `done` · `blocked`
 | T8.11 | Servers map view | done | `feat(T8.11): Servers map view: one card per server with its services, coloured by role, one labelled arrow per pair of servers` |
 | T8.12 | One box per unknown machine | done | `feat(T8.12): the Servers view draws all unknown endpoints of one address as one card with a row per port` |
 | T8.13 | Names and ports on the Servers view cards | done | `feat(T8.13): Servers view rows show their ports, cards their hostname, and unknown addresses of inventory servers carry the server's name` |
-| T8.14 | nginx `set` variables in proxy targets | in-progress | |
+| T8.14 | nginx `set` variables in proxy targets | done | `feat(T8.14): proxy targets written as an nginx set variable resolve to its value` |
 | T8.15 | BusyBox hosts: addresses and listeners | todo | |
 
 Recommended order inside M0: T0.1 → T0.3 → T0.5 → T0.2 → T0.4 → T0.6 → T0.7 → T0.8.
@@ -391,3 +391,4 @@ One line per session: date · tool/model · tasks touched · result.
 - 2026-11-16 · ZCode · T8.13 · started
 - 2026-11-16 · ZCode · T8.13 · rows `name · :ports`, hostname in the card caption, unknown addresses of inventory servers named after the server; checked on the lab and a copy of the owner's graph; build 0 warnings, 727 tests (D-048)
 - 2026-11-16 · ZCode · T8.14 · started (owner: map shows only nginx; cause: `proxy_pass $var` with `set $var` unresolved, and Alpine/BusyBox host collector failure → T8.15)
+- 2026-11-16 · ZCode · T8.14 · `proxy_pass $var` resolved from the nearest `set`; nested-location proxies and `${name}` fixed; checked on the owner's stored nginx -T (D-049)

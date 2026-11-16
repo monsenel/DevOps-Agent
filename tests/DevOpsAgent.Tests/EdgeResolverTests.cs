@@ -1,6 +1,7 @@
 using DevOpsAgent.Application.Discovery;
 using DevOpsAgent.Domain.Graph;
 using DevOpsAgent.Domain.Servers;
+using DevOpsAgent.Infrastructure.Collectors;
 using System.Text.Json;
 
 namespace DevOpsAgent.Tests;
@@ -123,6 +124,45 @@ public sealed class EdgeResolverTests
         Assert.Contains("/etc/nginx/sites-enabled/app:12", evidence.Description);
         Assert.Contains("/etc/nginx/conf.d/upstream.conf:2", evidence.Description);
         Assert.Contains("published host port", evidence.Description);
+    }
+
+    [Fact]
+    public void GraphBuilder_ResolvesNginxSetVariableToPublishedPortContainerAndNamesTheSetLine()
+    {
+        var target = Data("map-host", host: Host("192.168.20.14"), docker: Docker(Container("kartio-map-app-1",
+            "sample/map", "kartio", "map-app", Endpoint("kartio_default", "172.19.0.5", "map-app"),
+            published: new DockerPublishedPort(3030, "tcp", "0.0.0.0", 3030))));
+        const string config = """
+            # configuration file /etc/nginx/sites-enabled/kartio:
+            server {
+                listen 443 ssl;
+                server_name kartio.example.test;
+                set $map_app_upstream http://192.168.20.14:3030;
+                location /map/ {
+                    proxy_pass $map_app_upstream;
+                }
+                location /other/ {
+                    proxy_pass http://$not_set;
+                }
+            }
+            """;
+        // The server block is expanded from an include, so it sits in a wrapper http context.
+        var parsed = NginxCollectorParser.Parse("http {\ninclude /etc/nginx/sites-enabled/*;\n}\n" + config);
+        var source = Data("edge", host: Host("10.0.0.1")) with { Nginx = parsed };
+
+        var graph = new GraphBuilder().Build(Guid.NewGuid(), [source, target]);
+
+        var mapApp = graph.Nodes.Single(node => node.Key == $"service:{target.Server.Id:N}:compose:kartio/map-app");
+        var edge = Assert.Single(graph.Edges, item => item.Kind == GraphEdgeKind.Declared && item.TargetNodeId == mapApp.Id);
+        Assert.Equal(3030, edge.Port);
+        var evidence = Assert.Single(graph.Evidence, item => item.EdgeId == edge.Id);
+        Assert.Contains("proxy_pass $map_app_upstream;", evidence.Description);
+        Assert.Contains("set $map_app_upstream http://192.168.20.14:3030; (/etc/nginx/sites-enabled/kartio:4)",
+            evidence.Description);
+        Assert.Contains("/etc/nginx/sites-enabled/kartio:6:", evidence.Description);
+        // The proxy whose variable is never set keeps pointing at an Unknown node.
+        Assert.Contains(graph.Nodes, node => node.Kind == GraphNodeKind.Unknown
+            && node.AttributesJson.Contains("$not_set", StringComparison.Ordinal));
     }
 
     [Fact]

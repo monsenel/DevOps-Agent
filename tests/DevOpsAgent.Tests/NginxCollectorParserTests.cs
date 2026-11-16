@@ -79,6 +79,163 @@ public sealed class NginxCollectorParserTests
     }
 
     [Fact]
+    public void Parse_SetVariableAtServerScopeResolvesProxyTargetAndKeepsEvidence()
+    {
+        var map = MapServer();
+
+        var tiles = Assert.Single(map.Proxies, proxy => proxy.Line == 11);
+        Assert.Equal("proxy_pass", tiles.Directive);
+        Assert.Equal("http://192.168.20.14:8080", tiles.Target);
+        Assert.False(tiles.IsUnresolved);
+        Assert.Equal("/etc/nginx/sites-enabled/map", tiles.FilePath);
+        var from = Assert.IsType<NginxVariableResolution>(tiles.ResolvedFrom);
+        Assert.Equal("$tiles_upstream", from.OriginalTarget);
+        Assert.Equal("$tiles_upstream", from.Variable);
+        Assert.Equal("http://192.168.20.14:8080", from.Value);
+        Assert.Equal("/etc/nginx/sites-enabled/map", from.FilePath);
+        Assert.Equal(5, from.Line);
+
+        var mapApp = Assert.Single(map.Proxies, proxy => proxy.Line == 19);
+        Assert.Equal("http://192.168.20.14:3030", mapApp.Target);
+        Assert.Equal(6, mapApp.ResolvedFrom!.Line);
+        Assert.Equal("proxy_pass", mapApp.Directive);
+    }
+
+    [Fact]
+    public void Parse_NearestScopeWinsAndPathSuffixIsKept()
+    {
+        var map = MapServer();
+
+        // location sets $api_upstream differently from the server; the location value wins and /v2/ is kept.
+        var api = Assert.Single(map.Proxies, proxy => proxy.ResolvedFrom?.OriginalTarget == "$api_upstream/v2/");
+        Assert.Equal("http://192.168.20.15:4100/v2/", api.Target);
+        Assert.Equal("http://192.168.20.15:4100", api.ResolvedFrom!.Value);
+        Assert.Equal(15, api.ResolvedFrom.Line);
+    }
+
+    [Fact]
+    public void Parse_NestedLocationInheritsAndBracedVariableResolves()
+    {
+        var map = MapServer();
+
+        var nested = Assert.Single(map.Locations, location => location.Match == "/app/static/");
+        var proxy = Assert.Single(nested.Proxies);
+        Assert.Equal("http://192.168.20.14:3030/static/", proxy.Target);
+        Assert.Equal("${map_app_upstream}/static/", proxy.ResolvedFrom!.OriginalTarget);
+        // The nested proxy is no longer attributed to its parent location.
+        Assert.DoesNotContain(Assert.Single(map.Locations, location => location.Match == "/").Proxies,
+            item => item.Target.EndsWith("/static/", StringComparison.Ordinal));
+
+        var braced = Assert.Single(map.Proxies, item => item.ResolvedFrom?.OriginalTarget == "${tiles_upstream}");
+        Assert.Equal("http://192.168.20.14:8080", braced.Target);
+    }
+
+    [Fact]
+    public void Parse_VariableNamingAnUpstreamBlockResolvesToTheUpstreamName()
+    {
+        var map = MapServer();
+
+        var pool = Assert.Single(map.Proxies, proxy => proxy.ResolvedFrom?.OriginalTarget == "http://$named_upstream");
+        Assert.Equal("http://pool_backend", pool.Target);
+        Assert.Equal(NginxEndpointParser.Parse(pool.Target).Address,
+            Assert.Single(NginxCollectorParser.Parse(Fixture("nginx-T-set-variables.txt")).Upstreams).Name);
+    }
+
+    [Fact]
+    public void Parse_UnresolvableVariablesStayUnresolved()
+    {
+        var edge = Assert.Single(Servers(), server => server.ServerNames.Any(name => name.Value == "edge.example.test"));
+
+        foreach (var original in new[]
+        {
+            "$conflict",         // set twice with different values in the same scope
+            "$from_var",         // value itself contains a variable
+            "$only_in_if",       // set only inside an if block
+            "http://$never_set", // no set at all
+            "$host",             // nginx built-in, even though a set exists
+            "http://$host$request_uri",
+            "$a$request_uri",    // two variables
+            "http://$h:8080",    // text after the variable that is not a path
+            "http://$full"       // value already carries a scheme
+        })
+        {
+            var proxy = Assert.Single(edge.Proxies, item => item.Target == original);
+            Assert.True(proxy.IsUnresolved, original);
+            Assert.Null(proxy.ResolvedFrom);
+        }
+    }
+
+    [Fact]
+    public void Parse_SetInsideIfBlockDoesNotOverrideTheEnclosingScope()
+    {
+        var edge = Assert.Single(Servers(), server => server.ServerNames.Any(name => name.Value == "edge.example.test"));
+
+        var proxy = Assert.Single(edge.Locations, location => location.Match == "/conditional-override/").Proxies.Single();
+        Assert.Equal("http://10.0.0.9:9000", proxy.Target);
+        Assert.Equal(8, proxy.ResolvedFrom!.Line);
+    }
+
+    [Fact]
+    public void Parse_OtherProxyDirectivesAreResolvedToo()
+    {
+        var edge = Assert.Single(Servers(), server => server.ServerNames.Any(name => name.Value == "edge.example.test"));
+
+        var fastcgi = Assert.Single(edge.Proxies, proxy => proxy.Directive == "fastcgi_pass");
+        Assert.Equal("127.0.0.1:9000", fastcgi.Target);
+        Assert.Equal("$php", fastcgi.ResolvedFrom!.OriginalTarget);
+    }
+
+    [Fact]
+    public void Parse_SetAtHttpScopeIsUsedWhenServerAndLocationDoNotSetTheVariable()
+    {
+        const string config = """
+            http {
+                set $shared http://10.1.1.1:81;
+                server {
+                    server_name a.test;
+                    location / { proxy_pass $shared; }
+                }
+            }
+            """;
+
+        var proxy = Assert.Single(Assert.Single(NginxCollectorParser.Parse(config).Servers).Proxies);
+
+        Assert.Equal("http://10.1.1.1:81", proxy.Target);
+        Assert.Equal(2, proxy.ResolvedFrom!.Line);
+    }
+
+    [Fact]
+    public void Parse_SameValueSetTwiceInOneScopeStillResolves()
+    {
+        const string config = """
+            http {
+                server {
+                    set $u http://10.1.1.1:81;
+                    set $u http://10.1.1.1:81;
+                    location / { proxy_pass $u; }
+                }
+            }
+            """;
+
+        var proxy = Assert.Single(Assert.Single(NginxCollectorParser.Parse(config).Servers).Proxies);
+
+        Assert.Equal("http://10.1.1.1:81", proxy.Target);
+    }
+
+    [Fact]
+    public void ProxyInfo_DeserializesResultsStoredBeforeSetResolutionExisted()
+    {
+        const string json = """
+            {"Directive":"proxy_pass","Target":"http://10.0.0.1","IsUnresolved":false,"FilePath":"/a","Line":3}
+            """;
+
+        var proxy = System.Text.Json.JsonSerializer.Deserialize<NginxProxyInfo>(json);
+
+        Assert.NotNull(proxy);
+        Assert.Null(proxy.ResolvedFrom);
+    }
+
+    [Fact]
     public async Task CollectAsync_UsesSbinNginxWhenNonLoginPathOmitsSbin()
     {
         var server = new Server("edge", "edge.example.internal", 22, "deploy", "id_ed25519", "staging");
@@ -106,6 +263,12 @@ public sealed class NginxCollectorParserTests
             return Task.FromResult(new RemoteCommandResult(0, output, string.Empty, TimeSpan.FromMilliseconds(1)));
         }
     }
+
+    private static IReadOnlyList<NginxServerInfo> Servers() =>
+        NginxCollectorParser.Parse(Fixture("nginx-T-set-variables.txt")).Servers;
+
+    private static NginxServerInfo MapServer() =>
+        Assert.Single(Servers(), server => server.ServerNames.Any(name => name.Value == "map.example.test"));
 
     private static string Fixture(string name) => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", name));
 }

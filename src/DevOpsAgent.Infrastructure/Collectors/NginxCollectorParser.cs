@@ -4,12 +4,33 @@ using DevOpsAgent.Application.Discovery;
 
 namespace DevOpsAgent.Infrastructure.Collectors;
 
-public static class NginxCollectorParser
+public static partial class NginxCollectorParser
 {
     private static readonly HashSet<string> ProxyDirectives = new(StringComparer.Ordinal)
     {
         "proxy_pass", "fastcgi_pass", "grpc_pass", "uwsgi_pass"
     };
+
+    // Request-time variables that a `set` cannot turn into a fixed backend; never substituted.
+    private static readonly HashSet<string> BuiltInVariables = new(StringComparer.Ordinal)
+    {
+        "host", "hostname", "scheme", "uri", "document_uri", "request_uri", "request", "request_method",
+        "request_filename", "args", "query_string", "is_args", "server_name", "server_addr", "server_port",
+        "server_protocol", "remote_addr", "remote_port", "remote_user", "binary_remote_addr", "proxy_host",
+        "proxy_port", "proxy_add_x_forwarded_for", "realip_remote_addr", "https", "request_id", "connection",
+        "status", "time_local", "time_iso8601", "msec", "pid", "content_type", "content_length", "document_root",
+        "realpath_root", "limit_rate", "nginx_version", "upstream_addr", "upstream_status",
+        "upstream_response_time", "upstream_connect_time", "upstream_header_time", "upstream_first_byte_time",
+        "upstream_queue_time", "upstream_session_time", "upstream_response_length", "upstream_bytes_sent",
+        "upstream_bytes_received", "upstream_cache_status"
+    };
+
+    // `$upstream_*` is deliberately not a prefix: owners name their own variables `$upstream_app` and the like.
+    private static readonly string[] BuiltInVariablePrefixes =
+    [
+        "arg_", "http_", "sent_http_", "upstream_http_", "cookie_", "upstream_cookie_", "ssl_",
+        "geoip_", "sent_trailer_", "upstream_trailer_"
+    ];
 
     public static NginxDiscoveryResult Parse(string output)
     {
@@ -80,7 +101,7 @@ public static class NginxCollectorParser
             {
                 if (block.Name == "server")
                 {
-                    servers.Add(ParseServer(context.Name, block));
+                    servers.Add(ParseServer(context, block));
                 }
                 else if (block.Name == "upstream" && block.Arguments.Count > 0)
                 {
@@ -143,19 +164,27 @@ public static class NginxCollectorParser
         return false;
     }
 
-    private static NginxServerInfo ParseServer(string context, Block block)
+    private static NginxServerInfo ParseServer(Block contextBlock, Block block)
     {
         var listens = Values(block, "listen");
         var names = Values(block, "server_name");
-        var locations = block.Blocks.Where(child => child.Name == "location")
-            .Select(location => new NginxLocationInfo(
-                string.Join(' ', location.Arguments),
-                GetProxies(location),
-                location.FilePath,
-                location.Line))
-            .ToArray();
-        var proxies = GetProxies(block).Concat(locations.SelectMany(location => location.Proxies)).ToArray();
-        return new NginxServerInfo(context, listens, names, locations, proxies, block.FilePath, block.Line);
+        // Scope chain for `set` lookup, innermost first: server, then the http/stream context block.
+        Block[] serverScopes = [block, contextBlock];
+        var locations = ParseLocations(block, serverScopes).ToArray();
+        var proxies = GetProxies(block, serverScopes).Concat(locations.SelectMany(location => location.Proxies)).ToArray();
+        return new NginxServerInfo(contextBlock.Name, listens, names, locations, proxies, block.FilePath, block.Line);
+    }
+
+    // Nested locations are flattened into the list; each keeps only its own proxies.
+    private static IEnumerable<NginxLocationInfo> ParseLocations(Block parent, Block[] parentScopes)
+    {
+        foreach (var location in parent.Blocks.Where(child => child.Name == "location"))
+        {
+            Block[] scopes = [location, .. parentScopes];
+            yield return new NginxLocationInfo(string.Join(' ', location.Arguments), GetProxies(location, scopes),
+                location.FilePath, location.Line);
+            foreach (var nested in ParseLocations(location, scopes)) yield return nested;
+        }
     }
 
     private static NginxUpstreamInfo ParseUpstream(string context, Block block)
@@ -179,21 +208,72 @@ public static class NginxCollectorParser
                 new NginxSourceValue(argument, directive.FilePath, directive.Line)))
             .ToArray();
 
-    private static IReadOnlyList<NginxProxyInfo> GetProxies(Block block)
+    // Child blocks other than locations (e.g. `if`) are searched for proxies but never add `set` scope:
+    // a `set` inside a conditional block is not guaranteed to run, so it must not resolve anything.
+    private static IReadOnlyList<NginxProxyInfo> GetProxies(Block block, Block[] scopes)
     {
         var proxies = block.Directives.Where(directive => ProxyDirectives.Contains(directive.Name)
                 && directive.Arguments.Count > 0)
-            .Select(CreateProxy);
+            .Select(directive => CreateProxy(directive, scopes));
         return proxies.Concat(block.Blocks.Where(child => child.Name != "location")
-            .SelectMany(GetProxies)).ToArray();
+            .SelectMany(child => GetProxies(child, scopes))).ToArray();
     }
 
-    private static NginxProxyInfo CreateProxy(Directive directive)
+    private static NginxProxyInfo CreateProxy(Directive directive, Block[] scopes)
     {
         var target = directive.Arguments[0];
-        return new NginxProxyInfo(directive.Name, target, target.Contains('$'),
-            directive.FilePath, directive.Line);
+        var resolution = ResolveVariableTarget(target, scopes);
+        return resolution is null
+            ? new NginxProxyInfo(directive.Name, target, target.Contains('$'), directive.FilePath, directive.Line)
+            : new NginxProxyInfo(directive.Name, resolution.Target, false, directive.FilePath, directive.Line)
+            {
+                ResolvedFrom = resolution.Source
+            };
     }
+
+    // A target is resolvable only as [scheme://]$name or [scheme://]${name}, optionally followed by a literal
+    // URI path (/...). Anything else (two variables, a port after the variable, ...) stays unresolved.
+    [GeneratedRegex(@"^(?<prefix>[A-Za-z][A-Za-z0-9+.\-]*://)?\$(?:(?<name>[A-Za-z0-9_]+)|\{(?<braced>[A-Za-z0-9_]+)\})(?<suffix>/[^$]*)?$",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex VariableTargetPattern();
+
+    private static VariableResolution? ResolveVariableTarget(string target, Block[] scopes)
+    {
+        var match = VariableTargetPattern().Match(target);
+        if (!match.Success) return null;
+        var name = match.Groups["name"].Success ? match.Groups["name"].Value : match.Groups["braced"].Value;
+        if (IsBuiltInVariable(name)) return null;
+
+        foreach (var scope in scopes)
+        {
+            var sets = scope.Directives
+                .Where(directive => directive.Name == "set" && directive.Arguments.Count == 2
+                    && directive.Arguments[0].Length == name.Length + 1
+                    && directive.Arguments[0][0] == '$'
+                    && string.Equals(directive.Arguments[0][1..], name, StringComparison.Ordinal))
+                .ToArray();
+            if (sets.Length == 0) continue;
+
+            // The nearest scope that sets the variable decides; conflicting values there leave it unresolved.
+            var first = sets[0];
+            var value = first.Arguments[1];
+            if (sets.Any(set => !string.Equals(set.Arguments[1], value, StringComparison.Ordinal))) return null;
+            if (value.Length == 0 || value.Contains('$')) return null;
+
+            var prefix = match.Groups["prefix"].Value;
+            if (prefix.Length > 0 && value.Contains("://", StringComparison.Ordinal)) return null;
+            var resolved = prefix + value + match.Groups["suffix"].Value;
+            return new VariableResolution(resolved,
+                new NginxVariableResolution(target, "$" + name, value, first.FilePath, first.Line));
+        }
+
+        return null;
+    }
+
+    private static bool IsBuiltInVariable(string name) =>
+        BuiltInVariables.Contains(name) || BuiltInVariablePrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.Ordinal));
+
+    private sealed record VariableResolution(string Target, NginxVariableResolution Source);
 
     private static void AddDirective(Block block, List<Token> pending)
     {
@@ -230,10 +310,12 @@ public static class NginxCollectorParser
             var tokenStarted = false;
             var quote = '\0';
             var escaped = false;
+            var inVariableBrace = false;
             var tokenLine = line;
 
             void Flush()
             {
+                inVariableBrace = false;
                 if (!tokenStarted) return;
                 yieldBuffer.Add(new Token(TokenKind.Word, token.ToString(), filePath, tokenLine));
                 token.Clear();
@@ -273,6 +355,19 @@ public static class NginxCollectorParser
                 {
                     Flush();
                     break;
+                }
+                // `${name}` is a variable reference inside a word, not a block delimiter.
+                if (character == '{' && token.Length > 0 && token[^1] == '$')
+                {
+                    token.Append(character);
+                    inVariableBrace = true;
+                    continue;
+                }
+                if (character == '}' && inVariableBrace)
+                {
+                    token.Append(character);
+                    inVariableBrace = false;
+                    continue;
                 }
                 if (character is '{' or '}' or ';')
                 {

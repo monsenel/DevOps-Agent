@@ -264,7 +264,7 @@ public sealed class GraphBuilder
                             new { upstream.Name, upstream.FilePath, upstream.Line, Context = upstream.Context });
                         var upstreamEdge = AddDeclaredEdge(blockNode, upstreamNode, null, target.Protocol);
                         evidence.Add(new GraphEvidence(snapshotId, null, upstreamEdge.Id, "nginx",
-                            FormatEvidence(proxy.FilePath, proxy.Line, $"{proxy.Directive} {proxy.Target}; upstream {upstream.Name}")));
+                            FormatEvidence(proxy.FilePath, proxy.Line, $"{DescribeProxy(proxy)} upstream {upstream.Name}")));
                         sourceNode = upstreamNode;
                     }
 
@@ -287,7 +287,7 @@ public sealed class GraphBuilder
                             : $" {upstreamServer.FilePath ?? "nginx configuration"}:{upstreamServer.Line}: server {upstreamServer.Address};";
                         evidence.Add(new GraphEvidence(snapshotId, null, edge.Id, "nginx",
                             FormatEvidence(proxy.FilePath, proxy.Line,
-                                $"{proxy.Directive} {proxy.Target};{upstreamEvidence} {resolution.Reason}")));
+                                $"{DescribeProxy(proxy)}{upstreamEvidence} {resolution.Reason}")));
                     }
                 }
             }
@@ -552,6 +552,11 @@ public sealed class GraphBuilder
 
             return int.TryParse(candidate, out var port) && port is > 0 and <= 65535 ? port : null;
         }
+
+        // Directive text for evidence; a target resolved through `set` names the variable and its set line.
+        static string DescribeProxy(NginxProxyInfo proxy) => proxy.ResolvedFrom is { } set
+            ? $"{proxy.Directive} {set.OriginalTarget}; via set {set.Variable} {set.Value}; ({set.FilePath ?? "nginx configuration"}:{set.Line});"
+            : $"{proxy.Directive} {proxy.Target};";
 
         static string FormatEvidence(string? filePath, int line, string snippet) =>
             $"{filePath ?? "nginx configuration"}:{line}: {UrlUserInfo.Strip(snippet)}";

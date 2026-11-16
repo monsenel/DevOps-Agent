@@ -454,7 +454,7 @@ Owner order 2026-11-16: T8.1–T8.9 in order, one commit each, AGENTS.md §2, DE
 - **Done when:** GraphBuilder test for the hostname attribute; checked in a browser on the lab and on a copy of the owner's graph; build 0 warnings, tests green.
 - **Depends on:** T8.12
 
-### T8.14 nginx `set` variables in proxy targets (owner bug, 2026-11-16)
+### T8.14 nginx `set` variables in proxy targets (owner bug, 2026-11-16) — done (D-049)
 - **Do:** `proxy_pass $var;` (and the other proxy directives) whose variable is assigned with `set $var <value>;` in the enclosing location, server or http block resolve to that value, so the edge goes to the real backend (owner: `set $map_app_upstream http://192.168.20.14:3030;` left Kartio-nginx unconnected to the map server). Nearest scope wins; a variable set to different values in the same scope, set inside `if`, or built from other variables stays unresolved as today. The evidence names the `set` line.
 - **Done when:** Parser tests with fixtures (resolved, nested scope, conflicting values, unknown variable); the owner's map links Kartio-nginx to map after a discovery.
 - **Depends on:** T2.x nginx collector

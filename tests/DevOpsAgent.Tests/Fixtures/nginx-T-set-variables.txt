@@ -1,0 +1,98 @@
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+# configuration file /etc/nginx/nginx.conf:
+worker_processes auto;
+events { worker_connections 1024; }
+http {
+    resolver 8.8.8.8 8.8.4.4 valid=300s;
+    upstream pool_backend {
+        server 10.20.0.31:8080;
+    }
+    include /etc/nginx/sites-enabled/*;
+}
+# configuration file /etc/nginx/sites-enabled/map:
+server {
+    listen 443 ssl;
+    server_name map.example.test;
+
+    set $tiles_upstream http://192.168.20.14:8080;
+    set $map_app_upstream http://192.168.20.14:3030;
+    set $api_upstream http://192.168.20.14:4000;
+    set $named_upstream pool_backend;
+
+    location /tiles/ {
+        proxy_pass $tiles_upstream;
+    }
+    location /api/ {
+        # location scope wins over the server scope
+        set $api_upstream http://192.168.20.15:4100;
+        proxy_pass $api_upstream/v2/;
+    }
+    location / {
+        proxy_pass $map_app_upstream;
+        location /app/static/ {
+            proxy_pass ${map_app_upstream}/static/;
+        }
+    }
+    location /pool/ {
+        proxy_pass http://$named_upstream;
+    }
+    location /braced/ {
+        proxy_pass ${tiles_upstream};
+    }
+}
+# configuration file /etc/nginx/sites-enabled/edge:
+server {
+    listen 80;
+    server_name edge.example.test;
+
+    set $conflict http://10.0.0.1:80;
+    set $conflict http://10.0.0.2:80;
+    set $from_var http://$host:9000;
+    set $scoped http://10.0.0.9:9000;
+
+    location /conflict/ {
+        proxy_pass $conflict;
+    }
+    location /from-var/ {
+        proxy_pass $from_var;
+    }
+    location /conditional/ {
+        if ($request_method = POST) {
+            set $only_in_if http://10.0.0.5:5000;
+            proxy_pass $only_in_if;
+        }
+    }
+    location /conditional-override/ {
+        if ($http_x_beta) {
+            set $scoped http://10.0.0.10:9000;
+        }
+        proxy_pass $scoped;
+    }
+    location /unknown/ {
+        proxy_pass http://$never_set;
+    }
+    location /builtin/ {
+        set $host http://10.0.0.7:7000;
+        proxy_pass $host;
+    }
+    location /builtin-uri/ {
+        proxy_pass http://$host$request_uri;
+    }
+    location /two-vars/ {
+        set $a http://10.0.0.8:80;
+        proxy_pass $a$request_uri;
+    }
+    location /port-after/ {
+        set $h 10.0.0.8;
+        proxy_pass http://$h:8080;
+    }
+    location /scheme-twice/ {
+        set $full http://10.0.0.8:80;
+        proxy_pass http://$full;
+    }
+    location /fcgi/ {
+        set $php 127.0.0.1:9000;
+        fastcgi_pass $php;
+    }
+}
