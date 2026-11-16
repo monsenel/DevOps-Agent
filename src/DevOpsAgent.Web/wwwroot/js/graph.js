@@ -414,22 +414,38 @@ function portsText(ports) {
 
 // Unknown endpoints with the same address are one machine: one card, one row per port. Nodes with the same address and port
 // (seen by different servers) are one row; the first by id is the row, the others are aliased to it.
-function groupUnknownHosts(nodes) {
+// A client-side endpoint is the source of at least one edge and the target of none: it was seen connecting TO inventory servers
+// (the graph keeps its ephemeral source port as the node's port, which says nothing about the machine). Those members have no
+// port rows; they are `clients`, drawn as one row, with the first by id as the row and the others aliased to it. A node that is
+// the target of any edge (an nginx upstream, an observed outbound connection) is a backend and keeps its port row.
+function groupUnknownHosts(nodes, edges) {
+    const sources = new Set(edges.map(edge => edge.source));
+    const targets = new Set(edges.map(edge => edge.target));
     const groups = new Map();
     for (const node of nodes.filter(node => node.kind === "Unknown" && unknownAddress(node)).sort((a, b) => a.id.localeCompare(b.id))) {
         const address = unknownAddress(node);
         let group = groups.get(address);
         if (!group) {
-            group = { id: `${UNKNOWN_HOST_PREFIX}${address}`, address, members: [], ports: new Map() };
+            group = { id: `${UNKNOWN_HOST_PREFIX}${address}`, address, members: [], ports: new Map(), clients: [] };
             groups.set(address, group);
+        }
+        group.members.push(node);
+        if (sources.has(node.id) && !targets.has(node.id)) {
+            group.clients.push(node);
+            continue;
         }
         const port = unknownPort(node);
         if (!group.ports.has(port)) group.ports.set(port, { row: node, nodes: [] });
         group.ports.get(port).nodes.push(node);
-        group.members.push(node);
     }
+    // Only client-side members: an external client, not a machine that serves anything.
+    for (const group of groups.values()) group.external = group.clients.length > 0 && group.ports.size === 0;
     return groups;
 }
+
+// The label of the one row that stands for the client-side endpoints of an address: how many of them (distinct unknown nodes,
+// each one remote address and source port, so one connection each) were seen connecting.
+const clientRowLabel = count => `client · ${count} ${count === 1 ? "connection" : "connections"}`;
 
 function buildServers(elements, alertStatuses, serverInfo, c, listenerPorts, inventory) {
     const inventoryByAddress = new Map(Object.entries(inventory));
@@ -445,7 +461,7 @@ function buildServers(elements, alertStatuses, serverInfo, c, listenerPorts, inv
             && namesOf(node).some(name => ROLE_PATTERNS.proxy.test(name))) proxyRowByHost.set(parent.id, node.id);
     }
     const alias = new Map(nodes.map(node => [node.id, place(node, byId, hostByServer, proxyRowByHost)]));
-    const unknownHosts = groupUnknownHosts(nodes);
+    const unknownHosts = groupUnknownHosts(nodes, edges);
     // The unknown rows that are drawn inside the card of the inventory server that owns their address (row id -> row data): ports
     // that nothing on that server answers on.
     const mergedRows = new Map();
@@ -457,6 +473,9 @@ function buildServers(elements, alertStatuses, serverInfo, c, listenerPorts, inv
             for (const node of sameRow) alias.set(node.id, { box: hostId ?? group.id, row: row.id });
             if (hostId) mergedRows.set(row.id, { port, row: { ...row, memberNodeIds: sameRow.map(node => node.id), unmatched: true } });
         }
+        // Client-side endpoints are one row of the unknown card. On the card of an inventory server they get no row: their ports
+        // are the other side's ephemeral ports, not ports of that server, so they are the server itself (their edges are its).
+        for (const node of group.clients) alias.set(node.id, hostId ? { box: hostId, row: null } : { box: group.id, row: group.clients[0].id });
         if (hostId) group.mergedInto = hostId;
     }
 
@@ -481,12 +500,19 @@ function buildServers(elements, alertStatuses, serverInfo, c, listenerPorts, inv
             // A row stands for all unknown nodes with this address and port, so its connections are theirs together.
             return { ...entry.row, memberNodeIds: entry.nodes.map(node => node.id) };
         });
+        if (group.clients.length > 0) {
+            // The client row goes last; selecting it shows the connections of all client-side endpoints together.
+            const [clientRow] = group.clients;
+            rowLabels.set(clientRow.id, clientRowLabel(group.clients.length));
+            rows.push({ ...clientRow, memberNodeIds: group.clients.map(node => node.id) });
+        }
         boxes.set(group.id, {
             id: group.id, kind: "unknownHost", rows, rowLabels, address: first.attributes.Address, inventory: group.inventory,
+            external: group.external,
             // An address of an inventory server that is not on the map yet: the card is named after that server.
-            node: { id: group.id, kind: "Unknown", label: group.inventory?.name || "Unknown host", serverId: first.serverId,
-                attributes: { Address: first.attributes.Address }, memberNodeIds: group.members.map(node => node.id),
-                inventoryServerId: group.inventory?.serverId },
+            node: { id: group.id, kind: "Unknown", label: group.inventory?.name || (group.external ? "External client" : "Unknown host"),
+                serverId: first.serverId, attributes: { Address: first.attributes.Address }, memberNodeIds: group.members.map(node => node.id),
+                inventoryServerId: group.inventory?.serverId, external: group.external || undefined },
             allStale: group.members.every(node => node.attributes?.Stale === true)
         });
     }
@@ -657,7 +683,12 @@ async function layoutServers(built) {
             "elk.spacing.edgeNode": "24",
             "elk.layered.spacing.edgeNodeBetweenLayers": "24"
         },
-        children: [...built.boxes.values()].map(box => ({ id: box.id, width: box.slotW, height: box.slotH })),
+        // Clients (the Internet / Clients card and external clients) only connect to servers: they are the first layer, on the
+        // left, so they never sit between two servers and look like a hop.
+        children: [...built.boxes.values()].map(box => ({
+            id: box.id, width: box.slotW, height: box.slotH,
+            ...(box.kind === "clients" || box.external ? { layoutOptions: { "elk.layered.layering.layerConstraint": "FIRST" } } : {})
+        })),
         edges: built.aggregated.map(edge => ({ id: edge.id, sources: [edge.source], targets: [edge.target] }))
     });
     return {

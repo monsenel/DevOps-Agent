@@ -322,7 +322,7 @@
     private string SelectedTitle => _selected is JsonElement selected && IsEdge(selected)
         ? $"{EndpointName(ReadString(selected, "source") ?? "") ?? "Source"} {(MemberEdgeIds(selected).Count > 0 ? "↔" : "→")} {EndpointName(ReadString(selected, "target") ?? "") ?? "Target"}"
         : _selected is JsonElement node && ReadString(node, "id") is string cardId && cardId.StartsWith(UnknownHostCardPrefix, StringComparison.Ordinal)
-            ? InventoryServerOf(node)?.Name ?? $"Unknown host · {UnknownHostAddress(node)}"
+            ? InventoryServerOf(node)?.Name ?? UnknownHostTitle(UnknownHostAddress(node), ReadBool(node, "external"))
         : _selected is JsonElement other ? ReadString(other, "label") ?? ReadString(other, "kind") ?? "Selected node" : "Node or edge details";
     private int ProgressPercent => _servers.Count == 0 ? (_discovering ? 15 : 0) : _completedServers * 100 / _servers.Count;
     private string GraphSummary => _graph is null
@@ -411,6 +411,7 @@
     {
         _graph = await GraphRepository.GetAsync(snapshotId, CurrentGraphView, CancellationToken.None);
         _inventory = null;
+        _externalClientAddresses = null;
         _selected = null;
         _selectedId = null;
         _traceMessage = null;
@@ -699,6 +700,39 @@
         ? address
         : (ReadString(card, "id") ?? string.Empty)[UnknownHostCardPrefix.Length..];
 
+    // "Unknown host · 10.0.0.5", or "External client · 93.118.144.130" for an address that only connects to inventory servers.
+    private static string UnknownHostTitle(string address, bool external) => $"{(external ? "External client" : "Unknown host")} · {address}";
+
+    // The addresses (as the Servers view groups them) whose unknown endpoints are all client-side: each is the source of an edge and
+    // the target of none, like graph.js decides. Computed from the whole loaded graph, so a search or tag filter that hides edges
+    // can make the card (which goes by what is shown) and this list disagree; the card's own "external" flag wins where it is known.
+    private IReadOnlySet<string>? _externalClientAddresses;
+
+    private IReadOnlySet<string> ExternalClientAddresses => _externalClientAddresses ??= BuildExternalClientAddresses();
+
+    private IReadOnlySet<string> BuildExternalClientAddresses()
+    {
+        var sources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var targets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var edge in (_graph?.Edges ?? []).Select(item => item.Data))
+        {
+            if (ReadString(edge, "source") is { } source) sources.Add(source);
+            if (ReadString(edge, "target") is { } target) targets.Add(target);
+        }
+
+        var clientByAddress = new Dictionary<string, bool>(StringComparer.Ordinal);
+        foreach (var node in (_graph?.Nodes ?? []).Select(item => item.Data).Where(IsUnknown))
+        {
+            if (!TryGetProperty(node, "attributes", out var attributes) || ReadString(attributes, "address") is not { Length: > 0 } address
+                || ReadString(node, "id") is not { } id) continue;
+            var client = sources.Contains(id) && !targets.Contains(id);
+            var key = NormalizeAddress(address);
+            clientByAddress[key] = clientByAddress.GetValueOrDefault(key, true) && client;
+        }
+
+        return clientByAddress.Where(item => item.Value).Select(item => item.Key).ToHashSet(StringComparer.Ordinal);
+    }
+
     // Inventory servers by address, for the Servers view (an unknown host card whose address belongs to one is named after it) and
     // the details panel. Built lazily from the loaded graph, so LoadGraphAsync resets it.
     private IReadOnlyDictionary<string, InventoryServer>? _inventory;
@@ -851,6 +885,8 @@
             ? value.ToString()
             : null;
 
+    private static bool ReadBool(JsonElement element, string property) => TryGetProperty(element, property, out var value) && value.ValueKind == JsonValueKind.True;
+
     private static bool IsEdge(JsonElement element) => ReadString(element, "source") is not null
         && ReadString(element, "target") is not null;
 
@@ -895,7 +931,9 @@
     private string? EndpointName(string id) => id == ClientsCardId
         ? "Internet / Clients"
         : id.StartsWith(UnknownHostCardPrefix, StringComparison.Ordinal)
-            ? Inventory.TryGetValue(id[UnknownHostCardPrefix.Length..], out var inventoryServer) ? inventoryServer.Name : $"Unknown host · {id[UnknownHostCardPrefix.Length..]}"
+            ? Inventory.TryGetValue(id[UnknownHostCardPrefix.Length..], out var inventoryServer)
+                ? inventoryServer.Name
+                : UnknownHostTitle(id[UnknownHostCardPrefix.Length..], ExternalClientAddresses.Contains(id[UnknownHostCardPrefix.Length..]))
         : _graph?.Nodes.Select(element => element.Data)
             .FirstOrDefault(data => string.Equals(ReadString(data, "id"), id, StringComparison.OrdinalIgnoreCase)) is JsonElement node
                 ? ReadString(node, "kind") == "Unknown" ? GraphNodeLabel.Describe(node) : ReadString(node, "label")

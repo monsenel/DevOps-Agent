@@ -464,7 +464,7 @@ Owner order 2026-11-16: T8.1–T8.9 in order, one commit each, AGENTS.md §2, DE
 - **Done when:** Parser tests on BusyBox fixtures; an Alpine server gets its addresses and its nginx row on the map.
 - **Depends on:** T8.14
 
-### T8.16 External clients are not a hop on the Servers view (owner report, 2026-11-16)
+### T8.16 External clients are not a hop on the Servers view (owner report, 2026-11-16) — done (D-051)
 - **Do:** An Unknown address that only connects *to* inventory servers (observed inbound connections; the unknown node is the source of every edge) is an external client, not a backend: its card is titled "External client" (caption "Not in inventory • <address>"), shows ONE row "client · N connections" instead of one row per ephemeral source port, and is placed in the first layer (left) like Internet / Clients, so it no longer sits between two servers and looks like a hop. Unknown addresses that are connected to (nginx upstreams, observed outbound connections) keep their port rows. A mixed address keeps its target ports and gets the extra client row.
 - **Done when:** Checked in a browser on a copy of the owner's graph (93.118.144.130: SSH to both servers, 443, 21116); build 0 warnings, tests green.
 - **Depends on:** T8.12
