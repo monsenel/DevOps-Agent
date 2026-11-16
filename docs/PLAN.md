@@ -453,6 +453,16 @@ Owner order 2026-11-16: T8.1–T8.9 in order, one commit each, AGENTS.md §2, DE
 - **Do:** Rows of a server card show the ports the service or container answers on next to its name ("api · :8080", at most three, then "+N"), from its listeners, published host ports and the connections it receives. The card caption adds the machine's real hostname (from host discovery) when it differs from the inventory name. An Unknown host card whose address belongs to a server in the inventory is named after that server: merged into its card when the server is on the map, otherwise titled with the server name and captioned "In inventory, not discovered yet • <address>".
 - **Done when:** GraphBuilder test for the hostname attribute; checked in a browser on the lab and on a copy of the owner's graph; build 0 warnings, tests green.
 - **Depends on:** T8.12
+
+### T8.14 nginx `set` variables in proxy targets (owner bug, 2026-11-16)
+- **Do:** `proxy_pass $var;` (and the other proxy directives) whose variable is assigned with `set $var <value>;` in the enclosing location, server or http block resolve to that value, so the edge goes to the real backend (owner: `set $map_app_upstream http://192.168.20.14:3030;` left Kartio-nginx unconnected to the map server). Nearest scope wins; a variable set to different values in the same scope, set inside `if`, or built from other variables stays unresolved as today. The evidence names the `set` line.
+- **Done when:** Parser tests with fixtures (resolved, nested scope, conflicting values, unknown variable); the owner's map links Kartio-nginx to map after a discovery.
+- **Depends on:** T2.x nginx collector
+
+### T8.15 BusyBox hosts (Alpine): addresses and listeners (owner bug, 2026-11-16)
+- **Do:** The host collector falls back to the text output of `ip addr`/`ip route` when `ip -j` is not supported (BusyBox), and the listener collector falls back to `netstat -tulpn` when `ss` is missing; both read-only, parsed deterministically, with fixtures of real BusyBox output.
+- **Done when:** Parser tests on BusyBox fixtures; an Alpine server gets its addresses and its nginx row on the map.
+- **Depends on:** T8.14
 ---
 
 ## v2 backlog (do not start without being told)
