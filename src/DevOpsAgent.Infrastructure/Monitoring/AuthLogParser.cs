@@ -89,8 +89,16 @@ public static partial class AuthLogParser
             }
         }
 
-        return events;
+        // journald and auth.log write the same sudo event in different formats, so its key is the second, user and command
+        // rather than the raw line. A scan that reads one source and then the other does not count it twice (T7.R7).
+        return events.Select(item => item.Kind == AuthLogEventKind.SudoCommand
+            ? item with { EventKey = SudoEventKey(item) }
+            : item).ToArray();
     }
+
+    private static string SudoEventKey(AuthLogEvent item) => Fingerprint(
+        "sudo|" + item.Timestamp.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture)
+        + "|" + item.Username + "|" + item.Command);
 
     private static bool TryParseTimestamp(string line, DateTimeOffset now, TimeSpan? serverOffset, out DateTimeOffset timestamp)
     {

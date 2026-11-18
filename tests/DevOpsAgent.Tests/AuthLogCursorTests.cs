@@ -134,3 +134,33 @@ public sealed class AuthLogCursorTests
         return output;
     }
 }
+
+public sealed class SudoEventDedupeTests
+{
+    [Fact]
+    public void TheSameSudoEventFromJournaldAndAuthLogHasOneKey()
+    {
+        var now = DateTimeOffset.Parse("2026-11-18T11:00:00+00:00");
+        const string journal = "2026-11-18T10:00:00.000000+00:00 srv sudo[123]: dva : PWD=/home/dva ; USER=root ; COMMAND=/usr/bin/apt-get update\n";
+        const string authLog = "Nov 18 10:00:00 srv sudo:      dva : PWD=/home/dva ; USER=root ; COMMAND=/usr/bin/apt-get update\n";
+
+        var fromJournal = Assert.Single(AuthLogParser.Parse(journal, now));
+        var fromAuthLog = Assert.Single(AuthLogParser.Parse(authLog, now, TimeSpan.Zero));
+
+        Assert.Equal(fromJournal.EventKey, fromAuthLog.EventKey);
+        Assert.Equal(fromJournal.Command, fromAuthLog.Command);
+    }
+
+    [Fact]
+    public void DifferentSudoCommandsOrUsersKeepDifferentKeys()
+    {
+        var now = DateTimeOffset.Parse("2026-11-18T11:00:00+00:00");
+        const string log = "2026-11-18T10:00:00.000000+00:00 srv sudo[1]: dva : PWD=/ ; USER=root ; COMMAND=/usr/bin/id\n"
+            + "2026-11-18T10:00:00.000000+00:00 srv sudo[2]: dva : PWD=/ ; USER=root ; COMMAND=/usr/bin/whoami\n"
+            + "2026-11-18T10:00:00.000000+00:00 srv sudo[3]: ops : PWD=/ ; USER=root ; COMMAND=/usr/bin/id\n";
+
+        var keys = AuthLogParser.Parse(log, now).Select(item => item.EventKey).ToArray();
+
+        Assert.Equal(3, keys.Distinct().Count());
+    }
+}
