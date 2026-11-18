@@ -1,3 +1,4 @@
+using DevOpsAgent.Application.Llm;
 using System.Text.Json;
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Monitoring;
@@ -129,6 +130,9 @@ public sealed class NotificationService(IAppSettingRepository settings, ISecretP
             if (!Uri.TryCreate(input.NtfyBaseUrl, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") ||
                 !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
                 throw new ArgumentException("Enter a valid ntfy HTTP or HTTPS base URL without credentials or query parameters.");
+            // The topic is the secret that addresses the channel, and the token is sent as a bearer header.
+            if (!LlmEndpointLocality.AllowsCredentials(input.NtfyBaseUrl))
+                throw new ArgumentException("Use an HTTPS ntfy URL: plain HTTP is only allowed for localhost and private network addresses.");
         }
     }
 

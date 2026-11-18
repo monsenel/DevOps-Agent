@@ -1,3 +1,4 @@
+using DevOpsAgent.Application.Chat;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -146,6 +147,8 @@ public sealed class DockerCollector : ICollector
 
         foreach (var container in containers)
         {
+            RedactCommandAndLabels(container?["Config"]);
+            RedactCommandAndLabels(container?["Config"]?["Healthcheck"]);
             if (container?["Config"]?["Env"] is not JsonArray environment)
             {
                 continue;
@@ -164,6 +167,55 @@ public sealed class DockerCollector : ICollector
         }
 
         return containers.ToJsonString();
+    }
+
+    private const string Masked = "[REDACTED]";
+
+    /// <summary>Masks secret-looking values in Cmd, Entrypoint, healthcheck commands and label values before they are stored.</summary>
+    private static void RedactCommandAndLabels(JsonNode? config)
+    {
+        if (config is not JsonObject obj) return;
+        foreach (var name in new[] { "Cmd", "Entrypoint", "Test" })
+        {
+            if (obj[name] is JsonArray args) RedactArguments(args);
+        }
+
+        if (obj["Labels"] is JsonObject labels)
+        {
+            foreach (var key in labels.Select(pair => pair.Key).ToArray())
+            {
+                if (labels[key] is not JsonValue value || !value.TryGetValue<string>(out var text)) continue;
+                var probe = $"{key}={text}";
+                labels[key] = ChatContentRedactor.Redact(probe) != probe || ChatContentRedactor.Redact(text) != text
+                    ? Masked
+                    : text;
+            }
+        }
+    }
+
+    // "--password=x", "-e TOKEN=x", "--password x" and "--api-key x" (the flag names the secret, the next argument is it).
+    private static void RedactArguments(JsonArray args)
+    {
+        var maskNext = false;
+        for (var index = 0; index < args.Count; index++)
+        {
+            if (args[index] is not JsonValue value || !value.TryGetValue<string>(out var arg)) continue;
+            if (maskNext)
+            {
+                maskNext = false;
+                if (!arg.StartsWith('-')) { args[index] = Masked; continue; }
+            }
+
+            var redacted = ChatContentRedactor.Redact(arg);
+            if (redacted != arg) { args[index] = redacted; continue; }
+
+            var trimmed = arg.TrimStart('-');
+            if (arg.StartsWith('-') && trimmed.Length > 0 && !trimmed.Contains('=')
+                && ChatContentRedactor.Redact($"{trimmed}=x") != $"{trimmed}=x")
+            {
+                maskNext = true;
+            }
+        }
     }
 
     private sealed record DockerCollectorRawOutput(string ContainersJson, string NetworksJson);

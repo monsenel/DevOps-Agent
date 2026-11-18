@@ -6,6 +6,13 @@ namespace DevOpsAgent.Application.Llm;
 /// <summary>Decides whether an LLM base URL points at infrastructure the owner controls (no secret redaction needed).</summary>
 public static class LlmEndpointLocality
 {
+    /// <summary>True when credentials may be sent to <paramref name="baseUrl"/>: HTTPS, or HTTP to a loopback/private/single-label host.</summary>
+    public static bool AllowsCredentials(string? baseUrl)
+    {
+        if (!Uri.TryCreate(baseUrl?.Trim(), UriKind.Absolute, out var uri)) return false;
+        return uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp && IsLocal(baseUrl);
+    }
+
     public static bool IsLocal(string? baseUrl)
     {
         if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)) return false;

@@ -98,6 +98,9 @@ public sealed class ProviderService(
             }
         }
 
+        if (effectiveApiKey is not null && !LlmEndpointLocality.AllowsCredentials(normalizedBaseUrl))
+            throw new ArgumentException("Use an HTTPS base URL: the API key is not sent over plain HTTP to a public host.", nameof(baseUrl));
+
         return await modelLister.ListAsync(normalizedBaseUrl, effectiveApiKey, timeoutSeconds, cancellationToken);
     }
 
@@ -180,6 +183,10 @@ public sealed class ProviderService(
         {
             throw new ArgumentException("Base URL must be an absolute HTTP or HTTPS URL.", nameof(input));
         }
+
+        // An API key (new, or already stored and kept) must not travel over plain HTTP to a public host.
+        if (!LlmEndpointLocality.AllowsCredentials(input.BaseUrl))
+            throw new ArgumentException("Use an HTTPS base URL: plain HTTP is only allowed for localhost and private network addresses, because requests carry the API key.", nameof(input));
 
         if (input.ContextWindow < 0) throw new ArgumentOutOfRangeException(nameof(input), "Context window cannot be negative.");
         if (!double.IsFinite(input.Temperature) || input.Temperature is < 0 or > 2)

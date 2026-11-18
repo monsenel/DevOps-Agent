@@ -59,7 +59,7 @@ public sealed class NginxCollector : ICollector
             }
         }
 
-        var raw = JsonSerializer.Serialize(new NginxCollectorRawOutput(config.StandardOutput, resolutions));
+        var raw = JsonSerializer.Serialize(new NginxCollectorRawOutput(NginxConfigRedactor.Redact(config.StandardOutput), resolutions));
         return new CollectorOutput(raw, config.StandardError, config.ExitCode, duration);
     }
 
