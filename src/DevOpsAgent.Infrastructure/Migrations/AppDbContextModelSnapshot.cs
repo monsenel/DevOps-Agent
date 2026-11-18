@@ -640,8 +640,8 @@ namespace DevOpsAgent.Infrastructure.Migrations
                     b.Property<double>("Average")
                         .HasColumnType("REAL");
 
-                    b.Property<DateTimeOffset>("BucketStartUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<long>("BucketStartUtc")
+                        .HasColumnType("INTEGER");
 
                     b.Property<double>("Maximum")
                         .HasColumnType("REAL");
@@ -674,8 +674,8 @@ namespace DevOpsAgent.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset>("AtUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<long>("AtUtc")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Metric")
                         .IsRequired()

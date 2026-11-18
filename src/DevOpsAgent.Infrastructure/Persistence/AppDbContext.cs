@@ -209,6 +209,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             entity.HasKey(sample => sample.Id);
             entity.Property(sample => sample.Metric).HasMaxLength(120).IsRequired();
+            entity.Property(sample => sample.AtUtc).HasConversion(new UtcMillisecondsConverter());
             entity.HasIndex(sample => new { sample.ServerId, sample.Metric, sample.AtUtc });
             entity.HasOne<Server>().WithMany().HasForeignKey(sample => sample.ServerId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -217,6 +218,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             entity.HasKey(sample => sample.Id);
             entity.Property(sample => sample.Metric).HasMaxLength(120).IsRequired();
+            entity.Property(sample => sample.BucketStartUtc).HasConversion(new UtcMillisecondsConverter());
             entity.HasIndex(sample => new { sample.ServerId, sample.Metric, sample.BucketStartUtc }).IsUnique();
             entity.HasOne<Server>().WithMany().HasForeignKey(sample => sample.ServerId).OnDelete(DeleteBehavior.Cascade);
         });

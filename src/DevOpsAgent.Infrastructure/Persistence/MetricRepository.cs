@@ -23,23 +23,27 @@ public sealed class MetricRepository(AppDbContext dbContext) : IMetricRepository
 
     public async Task<IReadOnlyList<MetricSample>> GetRecentAsync(Guid serverId, DateTimeOffset sinceUtc, CancellationToken cancellationToken)
     {
-        var serverSamples = await dbContext.MetricSamples.AsNoTracking().Where(item => item.ServerId == serverId)
+        // Time predicates run in SQL: timestamps are integer ticks (UtcMillisecondsConverter, T7.R7).
+        return await dbContext.MetricSamples.AsNoTracking()
+            .Where(item => item.ServerId == serverId && item.AtUtc >= sinceUtc)
+            .OrderBy(item => item.AtUtc)
             .ToArrayAsync(cancellationToken);
-        return serverSamples.Where(item => item.AtUtc >= sinceUtc).OrderBy(item => item.AtUtc).ToArray();
     }
 
     public async Task<IReadOnlyList<MetricSample>> GetLatestAsync(Guid serverId, CancellationToken cancellationToken)
     {
-        var serverSamples = await dbContext.MetricSamples.AsNoTracking().Where(item => item.ServerId == serverId)
+        var latestAt = await dbContext.MetricSamples.AsNoTracking().Where(item => item.ServerId == serverId)
+            .Select(item => (DateTimeOffset?)item.AtUtc).MaxAsync(cancellationToken);
+        if (latestAt is null) return [];
+        return await dbContext.MetricSamples.AsNoTracking()
+            .Where(item => item.ServerId == serverId && item.AtUtc == latestAt.Value)
             .ToArrayAsync(cancellationToken);
-        var latestAt = serverSamples.MaxBy(item => item.AtUtc)?.AtUtc;
-        return latestAt is null ? [] : serverSamples.Where(item => item.AtUtc == latestAt).ToArray();
     }
 
     public async Task<IReadOnlyList<MetricSample>> GetUnrolledAsync(DateTimeOffset beforeUtc, CancellationToken cancellationToken)
     {
-        var samples = await dbContext.MetricSamples.AsNoTracking().ToArrayAsync(cancellationToken);
-        return samples.Where(item => item.AtUtc < beforeUtc).OrderBy(item => item.AtUtc).ToArray();
+        return await dbContext.MetricSamples.AsNoTracking().Where(item => item.AtUtc < beforeUtc)
+            .OrderBy(item => item.AtUtc).ToArrayAsync(cancellationToken);
     }
 
     public async Task SaveRollupsAsync(IReadOnlyCollection<MetricRollup> rollups, DateTimeOffset rawPruneBeforeUtc,
@@ -66,11 +70,10 @@ public sealed class MetricRepository(AppDbContext dbContext) : IMetricRepository
             }
         }
 
-        var allSamples = await dbContext.MetricSamples.ToArrayAsync(cancellationToken);
-        var staleSamples = allSamples.Where(item => item.AtUtc < rawPruneBeforeUtc).ToArray();
+        var staleSamples = await dbContext.MetricSamples.Where(item => item.AtUtc < rawPruneBeforeUtc).ToArrayAsync(cancellationToken);
         dbContext.MetricSamples.RemoveRange(staleSamples);
-        var allRollups = await dbContext.MetricRollups.ToArrayAsync(cancellationToken);
-        var staleRollups = allRollups.Where(item => item.BucketStartUtc < rollupPruneBeforeUtc).ToArray();
+        var staleRollups = await dbContext.MetricRollups.Where(item => item.BucketStartUtc < rollupPruneBeforeUtc)
+            .ToArrayAsync(cancellationToken);
         dbContext.MetricRollups.RemoveRange(staleRollups);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
