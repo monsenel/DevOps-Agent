@@ -114,6 +114,8 @@ public static class AppSudoCommands
             ConnectionCollector.NamespaceCommand(SentinelNumber),
             ConnectionCollector.NamespaceNetstatCommand(SentinelNumber),
             AuthLogScanner.BuildCommand(DateTimeOffset.FromUnixTimeSeconds(SentinelNumber)),
+            // Lines written before T7.R7 changed the scan command (journal error marker, timezone line).
+            AuthLogScanner.BuildCommandBeforeT7R7(DateTimeOffset.FromUnixTimeSeconds(SentinelNumber)),
             UpdatesCollector.AptScanCommand(SentinelNumber),
             Application.Monitoring.ContainerStatusQuery.Command,
             AlertSignalSource.StatusCommand,

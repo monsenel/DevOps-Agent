@@ -85,9 +85,23 @@ public sealed class AuthLogScanner(ISshRunner sshRunner, IAppSettingRepository s
         if (response.ExitCode is not 0)
             return BuildConditions(server, ActiveWindow(state.RecentEvents, now), state.NewLoginIps, [], "Scan unavailable.");
 
-        var (log, banTools, banState) = SplitOutput(response.StandardOutput);
+        var (rawLog, banTools, banState) = SplitOutput(response.StandardOutput);
+        var journalFailed = false;
+        TimeSpan? serverOffset = null;
+        var logLines = new List<string>();
+        foreach (var line in rawLog.Split('\n'))
+        {
+            if (line.StartsWith(JournalErrorMarker, StringComparison.Ordinal)) journalFailed = true;
+            else if (line.StartsWith(TimezoneMarker, StringComparison.Ordinal)) serverOffset = ParseUtcOffset(line[TimezoneMarker.Length..]);
+            else logLines.Add(line);
+        }
+        // The journal could not be read and there is no auth.log to fall back on: report the scan as unavailable and keep the
+        // cursor, so the next scan reads the same window again instead of skipping it.
+        if (journalFailed)
+            return BuildConditions(server, ActiveWindow(state.RecentEvents, now), state.NewLoginIps, [], "Scan unavailable.");
+        var log = string.Join('\n', logLines);
         var banSummary = FormatBanSummary(banTools, banState);
-        var parsed = AuthLogParser.Parse(log, now)
+        var parsed = AuthLogParser.Parse(log, now, serverOffset)
             // journalctl and auth.log generally timestamp to the nearest second. Re-read
             // a small overlap and de-duplicate by source-line fingerprint to avoid losing
             // entries written in the same second as the previous cursor.
@@ -193,7 +207,9 @@ public sealed class AuthLogScanner(ISshRunner sshRunner, IAppSettingRepository s
         return new AuthLogState { CursorUtc = now - Window };
     }
 
-    public static string BuildCommand(DateTimeOffset cursor) =>
+    // The scan command as deployed before T7.R7. Kept only so the app's own sudo lines written by that version are still
+    // recognised as its own (AppSudoCommands); it is never run.
+    public static string BuildCommandBeforeT7R7(DateTimeOffset cursor) =>
         // sudo does not run under the ssh units, so it is read with a second journal query (matches on different
         // fields are ANDed, and mixing -u with `+` is ambiguous); both are read-only.
         // The auth.log fallback depends only on the sshd journal query being empty, not on the sudo query.
@@ -207,6 +223,41 @@ public sealed class AuthLogScanner(ISshRunner sshRunner, IAppSettingRepository s
         + "printf '__DVA_BAN_STATE__\\n'; if command -v fail2ban-client >/dev/null 2>&1; then fail2ban-client status sshd 2>/dev/null || true; fi; "
         + "if command -v nft >/dev/null 2>&1; then nft list set inet dva blocked_ipv4 2>/dev/null || true; nft list set inet dva blocked_ipv6 2>/dev/null || true; fi; "
         + "if command -v ufw >/dev/null 2>&1; then ufw status numbered 2>/dev/null || true; fi";
+
+    // Printed first so the scanner knows the server's UTC offset (for auth.log lines, which carry none) and whether a journal
+    // query failed (T7.R7). A failed query must not move the cursor past events that were never read.
+    public const string TimezoneMarker = "__DVA_TZ__";
+    public const string JournalErrorMarker = "__DVA_JOURNAL_ERROR__";
+
+    public static string BuildCommand(DateTimeOffset cursor) =>
+        // sudo does not run under the ssh units, so it is read with a second journal query (matches on different
+        // fields are ANDed, and mixing -u with `+` is ambiguous); both are read-only.
+        // The auth.log fallback depends only on the sshd journal query being empty, not on the sudo query.
+        "ssh_output=''; sudo_output=''; journal_err=0; "
+        + "printf '" + TimezoneMarker + "%s\\n' \"$(date +%:z 2>/dev/null)\"; "
+        + "if command -v journalctl >/dev/null 2>&1; then "
+        + "ssh_output=$(journalctl -u ssh -u sshd --since '@" + cursor.ToUnixTimeSeconds()
+        + "' --no-pager -o short-iso 2>/dev/null) || journal_err=1; "
+        + "sudo_output=$(journalctl SYSLOG_IDENTIFIER=sudo --since '@" + cursor.ToUnixTimeSeconds()
+        + "' --no-pager -o short-iso 2>/dev/null) || journal_err=1; fi; "
+        + "if [ \"$journal_err\" = 1 ] && [ ! -r /var/log/auth.log ]; then printf '" + JournalErrorMarker + "\\n'; fi; "
+        + "if [ -n \"$(printf '%s' \"$ssh_output\" | tr -d '[:space:]')\" ]; then printf '%s\\n%s\\n' \"$ssh_output\" \"$sudo_output\"; "
+        + "elif [ -r /var/log/auth.log ]; then tail -n 1000 /var/log/auth.log; else printf '%s\\n' \"$sudo_output\"; fi; "
+        + "printf '\\n__DVA_BAN_TOOLS__\\n'; for tool in fail2ban-client nft ufw; do command -v \"$tool\" >/dev/null 2>&1 && printf '%s\\n' \"$tool\"; done; "
+        + "printf '__DVA_BAN_STATE__\\n'; if command -v fail2ban-client >/dev/null 2>&1; then fail2ban-client status sshd 2>/dev/null || true; fi; "
+        + "if command -v nft >/dev/null 2>&1; then nft list set inet dva blocked_ipv4 2>/dev/null || true; nft list set inet dva blocked_ipv6 2>/dev/null || true; fi; "
+        + "if command -v ufw >/dev/null 2>&1; then ufw status numbered 2>/dev/null || true; fi";
+
+    /// <summary>Parses "+03:30" / "-05:00" as printed by `date +%:z`; null when it is not one.</summary>
+    public static TimeSpan? ParseUtcOffset(string text)
+    {
+        var value = text.Trim();
+        if (value.Length != 6 || value[0] is not ('+' or '-') || value[3] != ':') return null;
+        if (!int.TryParse(value.AsSpan(1, 2), out var hours) || !int.TryParse(value.AsSpan(4, 2), out var minutes)) return null;
+        if (hours > 14 || minutes > 59) return null;
+        var offset = new TimeSpan(hours, minutes, 0);
+        return value[0] == '-' ? -offset : offset;
+    }
 
     private static (string Log, string[] BanTools, string BanState) SplitOutput(string output)
     {

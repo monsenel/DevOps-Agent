@@ -36,7 +36,9 @@ builder.Services.AddScoped<RollupService>();
 builder.Services.AddScoped<HealthCheckService>();
 builder.Services.AddScoped<AlertService>();
 builder.Services.AddScoped<NotificationService>();
-builder.Services.AddScoped<IAlertNotificationService>(provider => provider.GetRequiredService<NotificationService>());
+builder.Services.AddSingleton<AlertNotificationQueue>();
+// Alert evaluation only queues notifications; AlertNotificationDispatcher sends them, so a slow endpoint never stalls it (T7.R7).
+builder.Services.AddScoped<IAlertNotificationService>(provider => provider.GetRequiredService<AlertNotificationQueue>());
 builder.Services.AddScoped<ServerService>();
 builder.Services.AddScoped<ServerCapabilityService>();
 builder.Services.AddScoped<DiscoveryService>();
@@ -61,6 +63,7 @@ builder.Services.AddHostedService<MetricPollerService>();
 builder.Services.AddHostedService<MetricRollupHostedService>();
 builder.Services.AddHostedService<HealthCheckHostedService>();
 builder.Services.AddHostedService<AlertEngineHostedService>();
+builder.Services.AddHostedService<AlertNotificationDispatcher>();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddRazorPages();

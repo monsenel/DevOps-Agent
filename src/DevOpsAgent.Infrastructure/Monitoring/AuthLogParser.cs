@@ -34,7 +34,7 @@ public static partial class AuthLogParser
     [GeneratedRegex(@"sudo(?:\[\d+\])?:\s+(?<user>[a-zA-Z0-9_.-]+)\s*:\s\(command continued\)\s(?<rest>.*)$", RegexOptions.IgnoreCase)]
     private static partial Regex SudoContinuationRegex();
 
-    public static IReadOnlyList<AuthLogEvent> Parse(string output, DateTimeOffset now)
+    public static IReadOnlyList<AuthLogEvent> Parse(string output, DateTimeOffset now, TimeSpan? serverOffset = null)
     {
         var events = new List<AuthLogEvent>();
         AuthLogEvent? openSudo = null;
@@ -55,7 +55,7 @@ public static partial class AuthLogParser
 
             openSudo = null;
             if (string.IsNullOrWhiteSpace(line)) continue;
-            if (!TryParseTimestamp(line, now, out var timestamp)) continue;
+            if (!TryParseTimestamp(line, now, serverOffset, out var timestamp)) continue;
             var failed = FailedLoginRegex().Match(line);
             if (failed.Success && TryGetIp(failed.Groups["ip"].Value, out var failedIp))
             {
@@ -92,7 +92,7 @@ public static partial class AuthLogParser
         return events;
     }
 
-    private static bool TryParseTimestamp(string line, DateTimeOffset now, out DateTimeOffset timestamp)
+    private static bool TryParseTimestamp(string line, DateTimeOffset now, TimeSpan? serverOffset, out DateTimeOffset timestamp)
     {
         var firstSpace = line.IndexOf(' ');
         if (firstSpace > 0 && DateTimeOffset.TryParse(line[..firstSpace], CultureInfo.InvariantCulture,
@@ -113,11 +113,13 @@ public static partial class AuthLogParser
         if (parts.Length >= 3 && DateTime.TryParseExact(string.Join(' ', parts.Take(3)), "MMM d HH:mm:ss",
                 CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var local))
         {
-            var year = now.Year;
-            if (local.Month > now.Month + 6) year--;
-            else if (local.Month + 6 < now.Month) year++;
-            timestamp = new DateTimeOffset(year, local.Month, local.Day, local.Hour, local.Minute, local.Second,
-                now.Offset);
+            // auth.log is written in the server's local time (T7.R7): read it with the server's offset, not the app's.
+            var offset = serverOffset ?? now.Offset;
+            var nowLocal = now.ToOffset(offset);
+            var year = nowLocal.Year;
+            if (local.Month > nowLocal.Month + 6) year--;
+            else if (local.Month + 6 < nowLocal.Month) year++;
+            timestamp = new DateTimeOffset(year, local.Month, local.Day, local.Hour, local.Minute, local.Second, offset);
             return true;
         }
 
