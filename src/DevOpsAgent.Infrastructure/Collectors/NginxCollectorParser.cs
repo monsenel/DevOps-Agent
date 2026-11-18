@@ -43,6 +43,8 @@ public static partial class NginxCollectorParser
         var wrapperActive = false;
 
         var tokens = Tokenize(output).ToArray();
+        // nginx resolves a relative include against its prefix, the directory of the main configuration file.
+        var prefix = NginxPrefix(tokens);
         for (var index = 0; index < tokens.Length; index++)
         {
             var token = tokens[index];
@@ -55,7 +57,7 @@ public static partial class NginxCollectorParser
                     wrapperActive = false;
                 }
 
-                var context = FindIncludedContext(token.Value, includeContexts);
+                var context = FindIncludedContext(token.Value, includeContexts, prefix);
                 if (context is not null && !StartsWithContextBlock(tokens, index + 1, context))
                 {
                     var wrapper = new Block(context, [], token.Value, 0);
@@ -130,10 +132,20 @@ public static partial class NginxCollectorParser
         }
     }
 
-    private static string? FindIncludedContext(string filePath, IReadOnlyList<(string Pattern, string Context)> includes)
+    private static string NginxPrefix(IReadOnlyList<Token> tokens)
     {
-        foreach (var (pattern, context) in includes)
+        var mainFile = tokens.FirstOrDefault(token => token.Kind == TokenKind.FileMarker)?.Value;
+        var directory = string.IsNullOrEmpty(mainFile) ? null : Path.GetDirectoryName(mainFile)?.Replace('\\', '/');
+        return string.IsNullOrEmpty(directory) ? "/etc/nginx" : directory;
+    }
+
+    private static string? FindIncludedContext(string filePath, IReadOnlyList<(string Pattern, string Context)> includes, string prefix)
+    {
+        foreach (var (rawPattern, context) in includes)
         {
+            // A relative pattern is relative to the nginx prefix; the included file markers carry absolute paths.
+            var relative = rawPattern.StartsWith("./", StringComparison.Ordinal) ? rawPattern[2..] : rawPattern;
+            var pattern = relative.StartsWith('/') ? relative : prefix.TrimEnd('/') + "/" + relative;
             var regex = "^" + Regex.Escape(pattern).Replace("\\*", ".*", StringComparison.Ordinal)
                 .Replace("\\?", ".", StringComparison.Ordinal) + "$";
             if (Regex.IsMatch(filePath, regex, RegexOptions.CultureInvariant)) return context;
