@@ -76,11 +76,14 @@ public static partial class UnifiedDiff
     /// <summary>Applies a unified diff; every context and removed line must match the current file exactly.</summary>
     public static string Apply(string original, string diff)
     {
+        var eol = original.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
         var source = SplitLines(original, out var trailingNewline);
         var result = new List<string>();
         var position = 0;
         var lines = diff.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         var hunks = 0;
+        var outputTrailingNewline = trailingNewline;
+        char? lastOp = null;
         for (var index = 0; index < lines.Length; index++)
         {
             var header = HunkHeader().Match(lines[index]);
@@ -92,10 +95,18 @@ public static partial class UnifiedDiff
             if (oldStart < position || oldStart > source.Count) throw new ArgumentException("The diff does not fit the current file (hunk position).");
             result.AddRange(source.Skip(position).Take(oldStart - position));
             position = oldStart;
+            lastOp = null;
             for (index++; index < lines.Length && !lines[index].StartsWith("@@", StringComparison.Ordinal); index++)
             {
                 var line = lines[index];
-                if (line.StartsWith('\\')) continue; // "\ No newline at end of file"
+                if (line.StartsWith('\\'))
+                {
+                    // "\ No newline at end of file" applies to the immediately preceding line op.
+                    if (lastOp is '+' or ' ') outputTrailingNewline = false;
+                    else if (lastOp == '-') outputTrailingNewline = true;
+                    continue;
+                }
+
                 if (line.Length == 0 && index == lines.Length - 1) continue;
                 var kind = line.Length == 0 ? ' ' : line[0];
                 var text = line.Length == 0 ? string.Empty : line[1..];
@@ -106,9 +117,11 @@ public static partial class UnifiedDiff
                             throw new ArgumentException($"The diff does not match the current file at line {position + 1}.");
                         if (kind == ' ') result.Add(text);
                         position++;
+                        lastOp = kind;
                         break;
                     case '+':
                         result.Add(text);
+                        lastOp = '+';
                         break;
                     default:
                         if (line.StartsWith("---", StringComparison.Ordinal) || line.StartsWith("+++", StringComparison.Ordinal)) break;
@@ -121,14 +134,16 @@ public static partial class UnifiedDiff
 
         if (hunks == 0) throw new ArgumentException("The diff has no hunks (@@ -a,b +c,d @@).");
         result.AddRange(source.Skip(position));
-        return string.Join('\n', result) + (trailingNewline ? "\n" : string.Empty);
+        return result.Count == 0
+            ? (outputTrailingNewline ? eol : string.Empty)
+            : string.Join(eol, result) + (outputTrailingNewline ? eol : string.Empty);
     }
 
     /// <summary>A unified diff with three lines of context (for review; not minimal on very large files).</summary>
     public static string Create(string original, string updated, string path)
     {
-        var a = SplitLines(original, out _);
-        var b = SplitLines(updated, out _);
+        var a = SplitLines(original, out var origTrailing);
+        var b = SplitLines(updated, out var updatedTrailing);
         // Longest common subsequence on lines: fine for configuration files (the size is capped).
         var lcs = new int[a.Count + 1, b.Count + 1];
         for (var i = a.Count - 1; i >= 0; i--)
@@ -142,6 +157,15 @@ public static partial class UnifiedDiff
             // Removals before additions, as diff(1) prints them.
             else if (x < a.Count && (y >= b.Count || lcs[x + 1, y] >= lcs[x, y + 1])) { ops.Add(('-', a[x], x, y)); x++; }
             else { ops.Add(('+', b[y], x, y)); y++; }
+        }
+
+        // If only the final newline changed on the last line, turn that shared last line into a -/+ pair so the diff is non-empty.
+        if (origTrailing != updatedTrailing && ops.Count > 0 && ops[^1].Kind == ' ')
+        {
+            var last = ops[^1];
+            ops.RemoveAt(ops.Count - 1);
+            ops.Add(('-', last.Text, last.OldLine, last.NewLine));
+            ops.Add(('+', last.Text, last.OldLine + 1, last.NewLine));
         }
 
         var output = new StringBuilder($"--- a{path}\n+++ b{path}\n");
@@ -161,7 +185,17 @@ public static partial class UnifiedDiff
             var oldCount = slice.Count(op => op.Kind != '+');
             var newCount = slice.Count(op => op.Kind != '-');
             output.Append($"@@ -{(oldCount == 0 ? oldStart - 1 : oldStart)},{oldCount} +{(newCount == 0 ? newStart - 1 : newStart)},{newCount} @@\n");
-            foreach (var op in slice) output.Append(op.Kind).Append(op.Text).Append('\n');
+            for (var i = 0; i < slice.Count; i++)
+            {
+                var op = slice[i];
+                output.Append(op.Kind).Append(op.Text).Append('\n');
+                if (op.Kind == '-' && !origTrailing && op.OldLine == a.Count - 1)
+                    output.Append("\\ No newline at end of file\n");
+                else if (op.Kind == '+' && !updatedTrailing && op.NewLine == b.Count - 1)
+                    output.Append("\\ No newline at end of file\n");
+                else if (op.Kind == ' ' && !origTrailing && !updatedTrailing && op.OldLine == a.Count - 1 && op.NewLine == b.Count - 1)
+                    output.Append("\\ No newline at end of file\n");
+            }
         }
 
         return output.ToString();

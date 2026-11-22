@@ -41,12 +41,13 @@ public sealed class AppSudoCommandsTests
         var rule = ConfigServiceRule.Nginx;
         var staged = ConfigEditService.StagingDirectory(Guid.NewGuid()) + "/content";
         var hash = new string('a', 64);
-        string Apply(string path, string stagedFile) => ConfigEditService.ApplyCommand(path, stagedFile, 1763164800, hash, rule);
+        string Apply(string path, string stagedFile) => ConfigEditService.ApplyCommand(path, stagedFile, 1763164800, hash, rule, hash);
         bool Exempt(string command) => AppSudoCommands.IsAppCommand(SudoLogged(command));
 
         Assert.True(Exempt(Apply("/etc/nginx/conf.d/demo.conf", staged)));
         Assert.True(Exempt(Apply("/etc/nginx/conf.d/a..b.conf", staged))); // ".." inside a name is not a segment
         Assert.True(Exempt(ConfigEditService.ReadCommand("/etc/nginx/nginx.conf", 262145)));
+        Assert.True(Exempt(ConfigEditService.VerifyHashCommand("/etc/nginx/nginx.conf")));
         Assert.True(Exempt(ConfigEditService.RollbackCommand("/etc/nginx/nginx.conf", 1763164800, rule)));
 
         // Anything else the same script could be pointed at is a root write or read the owner has to hear about.

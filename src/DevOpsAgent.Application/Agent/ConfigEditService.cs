@@ -37,6 +37,9 @@ public sealed partial class ConfigEditService(
     public async Task<(JsonElement? Arguments, string? Error)> PrepareAsync(EditConfigArgs args, CancellationToken cancellationToken)
     {
         if (ConfigEditPolicy.Check(args.Path, options.AllowedPaths) is { } refused) return (null, refused);
+        var rule = options.RuleFor(args.Path);
+        if (rule is null || string.IsNullOrWhiteSpace(rule.Validate))
+            return (null, $"No validation rule matches '{args.Path}'. Configure a ConfigEdit:Services rule with a validation command before editing it.");
         if (args.ServerIds is not [var serverId]) return (null, "edit_config changes one server at a time.");
         var server = await servers.GetAsync(serverId, cancellationToken);
         if (server is null) return (null, "The target server no longer exists.");
@@ -92,22 +95,36 @@ public sealed partial class ConfigEditService(
 
     public static long Timestamp(ActionRecord action) => action.CreatedAtUtc.ToUnixTimeSeconds();
 
+    /// <summary>The dot-prefixed backup file beside <paramref name="path"/> so globs like <c>sites-enabled/*</c> never include it (T7.R28).</summary>
+    public static string BackupPath(string path, long timestamp)
+    {
+        var slash = path.LastIndexOf('/');
+        var dir = slash <= 0 ? "/" : path[..slash];
+        var file = slash < 0 ? path : path[(slash + 1)..];
+        return $"{(dir == "/" ? string.Empty : dir)}/.{file}.bak-{timestamp.ToString(CultureInfo.InvariantCulture)}";
+    }
+
     /// <summary>The root step: check, back up, replace atomically, validate, reload; the backup is restored on any failure.</summary>
-    public static string ApplyCommand(string path, string stagedFile, long timestamp, string baseSha256, ConfigServiceRule? rule)
+    public static string ApplyCommand(string path, string stagedFile, long timestamp, string baseSha256, ConfigServiceRule? rule, string? newSha256 = null)
     {
         // "Restored" is only printed when the copy worked; a failed copy says so, and nothing is reloaded from a file that is not
         // the original.
         var restore = "if cp -p -- \"$b\" \"$p\"; then printf '%s\\n' 'DVA_RESTORED'" + (string.IsNullOrWhiteSpace(rule?.Reload) ? string.Empty
             : "; if " + Group(rule!.Reload) + " >/dev/null 2>&1; then printf '%s\\n' 'DVA_RELOADED_AFTER_RESTORE'; fi")
             + "; else printf '%s\\n' 'DVA_RESTORE_FAILED'; fi";
-        return "set -u; p=" + Quote(path) + "; s=" + Quote(stagedFile) + "; b=\"$p.bak-" + timestamp.ToString(CultureInfo.InvariantCulture) + "\"; "
+        var stagedHashCheck = string.IsNullOrWhiteSpace(newSha256)
+            ? string.Empty
+            : "if [ \"$(sha256sum < \"$s\" | cut -d ' ' -f 1)\" != " + newSha256 + " ]; then printf '%s\\n' 'DVA_EDIT_FAILED=staged_hash'; exit 14; fi; ";
+        return "set -u; p=" + Quote(path) + "; s=" + Quote(stagedFile) + "; d=$(dirname -- \"$p\"); f=$(basename -- \"$p\"); b=\"$d/.$f.bak-" + timestamp.ToString(CultureInfo.InvariantCulture) + "\"; "
             + "if [ ! -f \"$p\" ]; then printf '%s\\n' 'DVA_EDIT_FAILED=missing'; exit 3; fi; "
             // The allowlist and the deny list judge the text of the path. A link in it (the file or a directory) could lead
             // anywhere, and the final rename would replace a link with a regular file.
             + "if [ \"$(readlink -f -- \"$p\")\" != \"$p\" ]; then printf '%s\\n' 'DVA_EDIT_FAILED=symlink'; exit 12; fi; "
+            + "if [ ! -f \"$s\" ] || [ -L \"$s\" ] || [ \"$(readlink -f -- \"$s\")\" != \"$s\" ]; then printf '%s\\n' 'DVA_EDIT_FAILED=staged_symlink'; exit 13; fi; "
+            + stagedHashCheck
             + "if [ \"$(sha256sum < \"$p\" | cut -d ' ' -f 1)\" != " + baseSha256 + " ]; then printf '%s\\n' 'DVA_EDIT_FAILED=changed'; exit 4; fi; "
             + "if ! cp -p -- \"$p\" \"$b\"; then printf '%s\\n' 'DVA_EDIT_FAILED=backup'; exit 5; fi; printf 'DVA_BACKUP=%s\\n' \"$b\"; "
-            + "t=$(mktemp -- \"$p.dva-XXXXXX\") || { printf '%s\\n' 'DVA_EDIT_FAILED=write'; exit 6; }; "
+            + "t=$(mktemp -- \"$d/.$f.dva-XXXXXX\") || { printf '%s\\n' 'DVA_EDIT_FAILED=write'; exit 6; }; "
             + "if ! cat -- \"$s\" > \"$t\" || ! chmod --reference=\"$p\" -- \"$t\" || ! chown --reference=\"$p\" -- \"$t\" || ! mv -f -- \"$t\" \"$p\"; then "
             + "rm -f -- \"$t\"; printf '%s\\n' 'DVA_EDIT_FAILED=write'; exit 6; fi; printf '%s\\n' 'DVA_WRITTEN'; "
             + (string.IsNullOrWhiteSpace(rule?.Validate) ? "printf '%s\\n' 'DVA_VALIDATE_SKIPPED'; "
@@ -118,12 +135,16 @@ public sealed partial class ConfigEditService(
 
     /// <summary>The root step after a failed health check: restore the backup, validate it, reload.</summary>
     public static string RollbackCommand(string path, long timestamp, ConfigServiceRule? rule) =>
-        "set -u; p=" + Quote(path) + "; b=\"$p.bak-" + timestamp.ToString(CultureInfo.InvariantCulture) + "\"; "
+        "set -u; p=" + Quote(path) + "; d=$(dirname -- \"$p\"); f=$(basename -- \"$p\"); b=\"$d/.$f.bak-" + timestamp.ToString(CultureInfo.InvariantCulture) + "\"; "
         + "if ! cp -p -- \"$b\" \"$p\"; then printf '%s\\n' 'DVA_ROLLBACK_FAILED=restore'; exit 9; fi; printf '%s\\n' 'DVA_RESTORED'; "
         + (string.IsNullOrWhiteSpace(rule?.Validate) ? string.Empty
             : "if ! " + Group(rule!.Validate) + " 2>&1; then printf '%s\\n' 'DVA_ROLLBACK_FAILED=validate'; exit 10; fi; ")
         + (string.IsNullOrWhiteSpace(rule?.Reload) ? "printf '%s\\n' 'DVA_RELOAD_SKIPPED'"
             : "if ! " + Group(rule!.Reload) + " 2>&1; then printf '%s\\n' 'DVA_ROLLBACK_FAILED=reload'; exit 11; fi; printf '%s\\n' 'DVA_RELOADED'");
+
+    /// <summary>Read-only live hash check used after a lost connection during apply (T7.R28).</summary>
+    public static string VerifyHashCommand(string path) =>
+        "set -u; p=" + Quote(path) + "; [ -f \"$p\" ] && sha256sum < \"$p\" | cut -d ' ' -f 1";
 
     private static string StageCommand(string directory, string content) =>
         "umask 077; d=" + Quote(directory) + "; mkdir -m 700 -- \"$d\" && printf '%s' " + Quote(Convert.ToBase64String(Encoding.UTF8.GetBytes(content)))
@@ -141,13 +162,18 @@ public sealed partial class ConfigEditService(
         if (!args.IsPrepared || args.Content is null) return Done(null, "The edit was not prepared (no base hash); nothing was changed.");
         if (ConfigEditPolicy.Check(args.Path, options.AllowedPaths) is { } refused) return Done(null, refused + " Nothing was changed.");
         var rule = options.RuleFor(args.Path);
+        if (rule is null || string.IsNullOrWhiteSpace(rule.Validate))
+            return Done(null, $"No validation rule matches '{args.Path}'. Nothing was changed.");
         var timestamp = Timestamp(action);
+        var backupPath = BackupPath(args.Path, timestamp);
+        var newHash = Sha256(args.Content);
         var directory = StagingDirectory(action.Id);
+        var applyUncertain = false;
         try
         {
             // 1. Stage the new content as the SSH user, in a directory only that user can read.
             var staged = await sshRunner.RunAsync(server.Id, StageCommand(directory, args.Content), new SshRunOptions(TimeSpan.FromSeconds(30)), cancellationToken);
-            if (staged.ExitCode != 0 || staged.StandardOutput.Trim() != Sha256(args.Content))
+            if (staged.ExitCode != 0 || staged.StandardOutput.Trim() != newHash)
             {
                 log.AppendLine("Staging the new content failed; the file was not touched.");
                 return Done(staged.ExitCode ?? 1, "Staging failed: nothing was changed.");
@@ -156,9 +182,30 @@ public sealed partial class ConfigEditService(
             log.AppendLine($"Staged the new content in {directory}.");
 
             // 2. As root: check, back up, write, validate, reload (restores itself on a failed validation or reload).
-            var applied = await sshRunner.RunAsync(server.Id, plan.Command, new SshRunOptions(TimeSpan.FromMinutes(2), UseSudo: true), cancellationToken);
+            RemoteCommandResult applied;
+            try
+            {
+                applied = await sshRunner.RunAsync(server.Id, plan.Command, new SshRunOptions(TimeSpan.FromMinutes(2), UseSudo: true), cancellationToken);
+            }
+            catch (OperationCanceledException exception) when (exception is SshShutdownException) { throw; }
+            catch (Exception exception)
+            {
+                applyUncertain = true;
+                log.AppendLine($"Connection lost or interrupted during apply ({exception.GetType().Name}). Verifying live file state…");
+                var recovery = await VerifyAfterLostApplyAsync(server, args.Path, args.BaseSha256!, newHash, timestamp, backupPath, rule, log);
+                return Done(null, recovery);
+            }
+
             var output = applied.StandardOutput + applied.StandardError;
             log.AppendLine(Clip(output));
+            if (applied.ExitCode is null)
+            {
+                applyUncertain = true;
+                log.AppendLine("Apply returned no exit status. Verifying live file state…");
+                var recovery = await VerifyAfterLostApplyAsync(server, args.Path, args.BaseSha256!, newHash, timestamp, backupPath, rule, log);
+                return Done(null, recovery);
+            }
+
             if (applied.ExitCode != 0)
             {
                 var step = Marker().Match(output) is { Success: true } marker ? marker.Groups[1].Value : $"exit {applied.ExitCode?.ToString(CultureInfo.InvariantCulture) ?? "unknown"}";
@@ -169,12 +216,14 @@ public sealed partial class ConfigEditService(
                     "backup" => "the backup could not be written",
                     "write" => "the new content could not be written",
                     "symlink" => "the path is a symbolic link or lies behind one",
-                    "validate" => $"validation ({rule?.Validate}) failed",
-                    "reload" => $"the reload ({rule?.Service}) failed",
+                    "staged_symlink" => "the staged content path was a symbolic link",
+                    "staged_hash" => "the staged content hash did not match the approved edit",
+                    "validate" => $"validation ({rule.Validate}) failed",
+                    "reload" => $"the reload ({rule.Service}) failed",
                     _ => step
                 };
                 var restored = output.Contains("DVA_RESTORED", StringComparison.Ordinal) ? " The backup was restored" + (output.Contains("DVA_RELOADED_AFTER_RESTORE", StringComparison.Ordinal) ? " and the service reloaded." : ".")
-                    : output.Contains("DVA_RESTORE_FAILED", StringComparison.Ordinal) ? $" The backup could NOT be restored: restore {args.Path} from its .bak-{timestamp} copy by hand."
+                    : output.Contains("DVA_RESTORE_FAILED", StringComparison.Ordinal) ? $" The backup could NOT be restored: restore {args.Path} from its {backupPath} copy by hand."
                     : string.Empty;
                 return Done(applied.ExitCode, $"Edit failed: {reason}.{restored}");
             }
@@ -204,21 +253,63 @@ public sealed partial class ConfigEditService(
             catch (Exception exception)
             {
                 log.AppendLine($"The rollback could not be run ({exception.GetType().Name}).");
-                return Done(null, $"Health check failed after the reload ({health.Failure}) and the rollback could not be run; restore {args.Path} from its .bak-{timestamp} copy by hand.");
+                return Done(null, $"Health check failed after the reload ({health.Failure}) and the rollback could not be run; restore {args.Path} from its {backupPath} copy by hand.");
             }
 
             log.AppendLine("Rolled back:").AppendLine(Clip(rollback.StandardOutput + rollback.StandardError));
             return Done(rollback.ExitCode == 0 ? 1 : rollback.ExitCode,
                 rollback.ExitCode == 0
-                    ? $"Health check failed after the reload ({health.Failure}); the backup was restored and {rule?.Service ?? "the service"} reloaded."
-                    : $"Health check failed after the reload ({health.Failure}) and the rollback failed too; restore {args.Path} from its .bak-{timestamp} copy by hand.");
+                    ? $"Health check failed after the reload ({health.Failure}); the backup was restored and {rule.Service} reloaded."
+                    : $"Health check failed after the reload ({health.Failure}) and the rollback failed too; restore {args.Path} from its {backupPath} copy by hand.");
         }
         finally
         {
-            // The staged copy is removed in every outcome, also after a cancellation.
-            try { await sshRunner.RunAsync(server.Id, "rm -rf -- " + Quote(directory), new SshRunOptions(TimeSpan.FromSeconds(15)), CancellationToken.None); }
-            catch (Exception) { /* best effort; the directory is private to the SSH user */ }
+            // When apply's remote state is uncertain (connection dropped mid-step), do not delete the staging dir under a possibly still-running root apply.
+            if (!applyUncertain)
+            {
+                try { await sshRunner.RunAsync(server.Id, "rm -rf -- " + Quote(directory), new SshRunOptions(TimeSpan.FromSeconds(15)), CancellationToken.None); }
+                catch (Exception) { /* best effort; the directory is private to the SSH user */ }
+            }
         }
+    }
+
+    private async Task<string> VerifyAfterLostApplyAsync(
+        Server server, string path, string baseHash, string newHash, long timestamp, string backupPath, ConfigServiceRule rule, StringBuilder log)
+    {
+        try
+        {
+            var verify = await sshRunner.RunAsync(server.Id, VerifyHashCommand(path), new SshRunOptions(TimeSpan.FromSeconds(20), UseSudo: server.CanUseSudo), CancellationToken.None);
+            var liveHash = verify.StandardOutput.Trim();
+            if (verify.ExitCode == 0 && string.Equals(liveHash, baseHash, StringComparison.OrdinalIgnoreCase))
+            {
+                log.AppendLine("Verified: the live file still matches the original hash.");
+                return $"Apply outcome unknown (connection lost), but verified {path} on {server.Name} is still unchanged.";
+            }
+
+            if (verify.ExitCode == 0 && string.Equals(liveHash, newHash, StringComparison.OrdinalIgnoreCase))
+            {
+                log.AppendLine("Verified: the new content is live on disk; running validation…");
+                var check = await sshRunner.RunAsync(server.Id, Group(rule.Validate), new SshRunOptions(TimeSpan.FromSeconds(30), UseSudo: true), CancellationToken.None);
+                if (check.ExitCode == 0)
+                {
+                    log.AppendLine("Validation passed after reconnect.");
+                    return $"Apply outcome unknown (connection lost after write) — check {server.Name}: the new {path} is on disk and validation ({rule.Validate}) passed, but reload/health check status is unverified.";
+                }
+
+                log.AppendLine($"Validation failed after reconnect: {Clip(check.StandardOutput + check.StandardError)}");
+                var rollback = await sshRunner.RunAsync(server.Id, RollbackCommand(path, timestamp, rule), new SshRunOptions(TimeSpan.FromMinutes(2), UseSudo: true), CancellationToken.None);
+                log.AppendLine("Rolled back after reconnect:").AppendLine(Clip(rollback.StandardOutput + rollback.StandardError));
+                return rollback.ExitCode == 0
+                    ? $"Apply outcome unknown (connection lost after write): validation failed and the backup was restored — check {server.Name}."
+                    : $"Apply outcome unknown (connection lost after write): validation failed and automatic rollback failed too — check {server.Name} and restore {path} from {backupPath} by hand.";
+            }
+        }
+        catch (Exception exception)
+        {
+            log.AppendLine($"Verification could not complete ({exception.GetType().Name}).");
+        }
+
+        return $"Apply outcome unknown (connection lost and live state could not be verified) — check {path} and backup {backupPath} on {server.Name} by hand.";
     }
 
     private async Task<(bool Healthy, string Report, string? Failure)> CheckHealthAsync(Server server, string path, CancellationToken cancellationToken)
@@ -257,7 +348,7 @@ public sealed partial class ConfigEditService(
             }
         }
 
-        if (ran == 0) report.AppendLine("  No health check applies (no configured checks, no domains served from this file).");
+        if (ran == 0) report.AppendLine("  Health check unverified: no configured checks or domains could be probed (validation and reload succeeded).");
         return (failures.Count == 0, report.ToString().TrimEnd(), failures.Count == 0 ? null : string.Join("; ", failures));
     }
 

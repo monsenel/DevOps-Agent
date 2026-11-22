@@ -127,9 +127,11 @@ public static class AppSudoCommands
             Mutating("block_ip", new { address = SentinelIpv6 }),
             Mutating("unblock_ip", new { address = SentinelIpv4 }),
             Mutating("unblock_ip", new { address = SentinelIpv6 }),
-            // edit_config (T8.8) with the built-in nginx rule: the sudo read fallback, the apply step and the rollback.
+            // edit_config (T8.8 / T7.R28) with the built-in nginx rule: the sudo read fallback, the apply step, lost-apply verify and rollback.
             ConfigEditService.ReadCommand(SentinelConfigPath, SentinelNumber),
+            ConfigEditService.ApplyCommand(SentinelConfigPath, SentinelStagedPath, SentinelNumber, "dvasentinelids", ConfigServiceRule.Nginx, "dvasentinelids"),
             ConfigEditService.ApplyCommand(SentinelConfigPath, SentinelStagedPath, SentinelNumber, "dvasentinelids", ConfigServiceRule.Nginx),
+            ConfigEditService.VerifyHashCommand(SentinelConfigPath),
             ConfigEditService.RollbackCommand(SentinelConfigPath, SentinelNumber, ConfigServiceRule.Nginx),
         ];
     }

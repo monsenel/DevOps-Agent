@@ -148,7 +148,9 @@ public sealed class ConfigEditTests
     [Theory]
     [InlineData("DVA_EDIT_FAILED=validate\nDVA_RESTORED\nDVA_RELOADED_AFTER_RESTORE", 7, "validation (nginx -t) failed. The backup was restored and the service reloaded.")]
     [InlineData("DVA_EDIT_FAILED=changed", 4, "the file changed since the edit was proposed")]
-    [InlineData("DVA_EDIT_FAILED=validate\nDVA_RESTORE_FAILED", 7, "The backup could NOT be restored: restore /etc/nginx/conf.d/demo.conf from its .bak-")]
+    [InlineData("DVA_EDIT_FAILED=staged_hash", 14, "the staged content hash did not match the approved edit")]
+    [InlineData("DVA_EDIT_FAILED=staged_symlink", 13, "the staged content path was a symbolic link")]
+    [InlineData("DVA_EDIT_FAILED=validate\nDVA_RESTORE_FAILED", 7, "The backup could NOT be restored: restore /etc/nginx/conf.d/demo.conf from its /etc/nginx/conf.d/.demo.conf.bak-")]
     public async Task FailedApplySteps_AreReported_WithoutAHealthCheck(string output, int exit, string expected)
     {
         await using var lab = await Lab.CreateAsync(applyOutput: (output, exit));
@@ -175,13 +177,18 @@ public sealed class ConfigEditTests
             File.WriteAllText(target, Demo);
             File.WriteAllText(staged, "new content\n");
             var rule = new ConfigServiceRule("/**", "test", validate, reload);
-            var (exit, output) = Shell(ConfigEditService.ApplyCommand(target, staged, 1763164800, ConfigEditService.Sha256(Demo), rule));
+            var (exit, output) = Shell(ConfigEditService.ApplyCommand(target, staged, 1763164800, ConfigEditService.Sha256(Demo), rule, ConfigEditService.Sha256("new content\n")));
 
             Assert.Equal(expectedExit, exit);
             Assert.Contains(marker, output);
-            Assert.Equal(Demo, File.ReadAllText(target + ".bak-1763164800"));
+            // Dot-prefixed backup and temp files are never matched by wildcard globs like `include sites-enabled/*;`.
+            var backup = ConfigEditService.BackupPath(target, 1763164800);
+            Assert.Equal(Path.Combine(directory, ".demo.conf.bak-1763164800"), backup);
+            Assert.Equal(Demo, File.ReadAllText(backup));
             Assert.Equal(keepsNew ? "new content\n" : Demo, File.ReadAllText(target));
-            Assert.Empty(Directory.GetFiles(directory, "demo.conf.dva-*")); // no temporary file left behind
+            Assert.Empty(Directory.GetFiles(directory, ".demo.conf.dva-*")); // no temporary file left behind
+            Assert.Equal(new[] { "demo.conf", "staged" },
+                Directory.GetFiles(directory).Select(Path.GetFileName).Where(name => !name!.StartsWith('.')).Order()); // nothing extra visible to non-dot globs
 
             if (keepsNew)
             {
@@ -294,6 +301,130 @@ public sealed class ConfigEditTests
             new HealthCheckRepository(lab.Context), new NoProbe(), new ConfigEditOptions());
         (_, error) = await service.PrepareAsync(new EditConfigArgs("/etc/nginx/conf.d/demo.conf", "x\n", null, null, [lab.Edge.Id]), default);
         Assert.DoesNotContain("shadow", error);
+    }
+
+    [Fact]
+    public async Task AllowlistedPathWithoutValidationRuleIsRefused()
+    {
+        await using var lab = await Lab.CreateAsync();
+        var options = new ConfigEditOptions
+        {
+            AllowedPaths = ["/etc/**"],
+            Services = [ConfigServiceRule.Nginx]
+        };
+        var service = new ConfigEditService(lab.Runner, new ServerRepository(lab.Context), new SnapshotRepository(lab.Context),
+            new GraphRepository(lab.Context), new HealthCheckRepository(lab.Context), new NoProbe(), options);
+
+        var (args, error) = await service.PrepareAsync(new EditConfigArgs("/etc/hosts", "127.0.0.1 localhost\n", null, null, [lab.Edge.Id]), default);
+
+        Assert.Null(args);
+        Assert.Contains("No validation rule matches", error);
+        Assert.Empty(lab.Runner.Calls); // refused before touching the server
+    }
+
+    [Fact]
+    public void ApplyScript_RefusesStagedSymlinkAndMismatchedStagedHash_InARealShell()
+    {
+        var directory = RealTempDirectory();
+        try
+        {
+            var target = Path.Combine(directory, "demo.conf");
+            var realStaged = Path.Combine(directory, "real-staged");
+            var linkStaged = Path.Combine(directory, "link-staged");
+            File.WriteAllText(target, Demo);
+            File.WriteAllText(realStaged, "new content\n");
+            File.CreateSymbolicLink(linkStaged, realStaged);
+            var rule = new ConfigServiceRule("/**", "test", "true", "true");
+
+            var (linkExit, linkOutput) = Shell(ConfigEditService.ApplyCommand(target, linkStaged, 1763164800,
+                ConfigEditService.Sha256(Demo), rule, ConfigEditService.Sha256("new content\n")));
+            Assert.Equal(13, linkExit);
+            Assert.Contains("DVA_EDIT_FAILED=staged_symlink", linkOutput);
+            Assert.Equal(Demo, File.ReadAllText(target));
+
+            var (hashExit, hashOutput) = Shell(ConfigEditService.ApplyCommand(target, realStaged, 1763164800,
+                ConfigEditService.Sha256(Demo), rule, new string('0', 64)));
+            Assert.Equal(14, hashExit);
+            Assert.Contains("DVA_EDIT_FAILED=staged_hash", hashOutput);
+            Assert.Equal(Demo, File.ReadAllText(target));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task LostConnectionDuringApply_VerifiesLiveFileAndRollsBackInvalidWrite_WithoutDeletingStaging()
+    {
+        await using var lab = await Lab.CreateAsync();
+        var updated = Demo.Replace("5000", "5999", StringComparison.Ordinal);
+        var (action, plan) = await lab.ProposeAsync(updated);
+        var newHash = ConfigEditService.Sha256(updated);
+        var runner = new LostApplyRunner(newHash, validateExit: 1, rollbackExit: 0);
+        var service = new ConfigEditService(runner, new ServerRepository(lab.Context), new SnapshotRepository(lab.Context),
+            new GraphRepository(lab.Context), new HealthCheckRepository(lab.Context), new NoProbe(), new ConfigEditOptions());
+
+        var result = await service.ExecuteAsync(action, plan, lab.Edge, default);
+
+        Assert.Contains("Apply outcome unknown", result.Error);
+        Assert.Contains("validation failed and the backup was restored", result.Error);
+        Assert.DoesNotContain(runner.Commands, cmd => cmd.StartsWith("rm -rf -- ", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task UnverifiedHealthCheck_ReportsUnverifiedWithoutRollingBack()
+    {
+        await using var lab = await Lab.CreateAsync();
+        // Remove snapshots so no domains are discovered and no health checks exist.
+        lab.Context.Snapshots.RemoveRange(lab.Context.Snapshots);
+        await lab.Context.SaveChangesAsync();
+        var (action, plan) = await lab.ProposeAsync(Demo.Replace("5000", "5001", StringComparison.Ordinal));
+
+        var result = await lab.Service.ExecuteAsync(action, plan, lab.Edge, default);
+
+        Assert.Null(result.Error);
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("Health check unverified", result.StandardOutput);
+        Assert.DoesNotContain(lab.Runner.Calls, call => call.Command.Contains("DVA_ROLLBACK_FAILED", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void UnifiedDiff_PreservesCrLfAndHandlesTrailingNewlineChanges()
+    {
+        const string crlf = "line1\r\nline2\r\n";
+        const string crlfUpdated = "line1\r\nline2-edited\r\n";
+        var crlfDiff = UnifiedDiff.Create(crlf, crlfUpdated, "/etc/nginx/demo.conf");
+        Assert.Equal(crlfUpdated, UnifiedDiff.Apply(crlf, crlfDiff));
+
+        const string withNewline = "server {\n}\n";
+        const string withoutNewline = "server {\n}";
+        var dropNewlineDiff = UnifiedDiff.Create(withNewline, withoutNewline, "/etc/nginx/demo.conf");
+        Assert.Contains("\\ No newline at end of file", dropNewlineDiff);
+        Assert.Equal(withoutNewline, UnifiedDiff.Apply(withNewline, dropNewlineDiff));
+
+        var addNewlineDiff = UnifiedDiff.Create(withoutNewline, withNewline, "/etc/nginx/demo.conf");
+        Assert.Contains("\\ No newline at end of file", addNewlineDiff);
+        Assert.Equal(withNewline, UnifiedDiff.Apply(withoutNewline, addNewlineDiff));
+    }
+
+    private sealed class LostApplyRunner(string liveHashAfterDrop, int validateExit, int rollbackExit) : ISshRunner
+    {
+        public List<string> Commands { get; } = [];
+
+        public Task<RemoteCommandResult> RunAsync(Guid serverId, string command, SshRunOptions options, CancellationToken cancellationToken)
+        {
+            Commands.Add(command);
+            if (command.StartsWith("umask 077;", StringComparison.Ordinal))
+                return Task.FromResult(new RemoteCommandResult(0, liveHashAfterDrop + "\n", string.Empty, TimeSpan.Zero));
+            if (command.Contains("DVA_EDIT_FAILED=missing", StringComparison.Ordinal))
+                throw new IOException("connection reset");
+            if (command.Contains("sha256sum", StringComparison.Ordinal))
+                return Task.FromResult(new RemoteCommandResult(0, liveHashAfterDrop + "\n", string.Empty, TimeSpan.Zero));
+            if (command.Contains("DVA_ROLLBACK_FAILED=restore", StringComparison.Ordinal))
+                return Task.FromResult(new RemoteCommandResult(rollbackExit, "DVA_RESTORED\nDVA_RELOADED\n", string.Empty, TimeSpan.Zero));
+            return Task.FromResult(new RemoteCommandResult(validateExit, string.Empty, validateExit == 0 ? string.Empty : "nginx: [emerg] syntax error", TimeSpan.Zero));
+        }
     }
 
     // Resolved, because the scripts refuse a path that lies behind a link (a temporary directory may do).
