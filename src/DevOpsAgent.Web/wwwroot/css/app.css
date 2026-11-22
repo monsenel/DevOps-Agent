@@ -3535,3 +3535,24 @@ p {
     0%, 100% { opacity: 0.45; }
     50% { opacity: 0.9; }
 }
+
+.chat-mode-control {
+    display: inline-flex;
+    align-items: center;
+}
+
+.chat-mode-select {
+    min-height: 44px;
+    padding: 0 12px;
+    border-radius: 12px;
+    border: 1px solid var(--dva-border);
+    background: var(--dva-surface);
+    color: var(--dva-text);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.chat-mode-select.auto {
+    border-color: var(--dva-warn);
+}

@@ -39,6 +39,19 @@
                 <p class="muted">Chat uses your default provider and policy-checked server tools.</p>
             </div>
             <div class="chat-header-controls">
+                @if (_selectedConversationId is not null)
+                {
+                    <label class="chat-mode-control">
+                        <span class="visually-hidden">Chat execution mode</span>
+                        <select id="chat-mode-select" class="chat-mode-select @(_mode == ChatMode.Auto ? "auto" : null)"
+                                aria-label="Chat execution mode" disabled="@_isSending"
+                                value="@_mode" @onchange="OnModeChangedAsync">
+                            <option value="@ChatMode.ReadOnly">Read-only</option>
+                            <option value="@ChatMode.Confirm">Confirm changes</option>
+                            <option value="@ChatMode.Auto">Auto (safe changes)</option>
+                        </select>
+                    </label>
+                }
                 @if (_capabilities.ReasoningEffort && _selectedConversationId is not null)
                 {
                     @* T8.5: per conversation, only for a model that takes a reasoning effort. *@
@@ -50,7 +63,7 @@
                         }
                     </div>
                 }
-                <span class="ui-badge neutral">@(_isSending ? "Generating" : "Basic chat")</span>
+                <span class="ui-badge @ModeBadgeClass">@(_isSending ? "Generating…" : ModeBadgeText)</span>
             </div>
         </header>
 
@@ -205,6 +218,21 @@
     private string? _attachError;
     private ModelCapabilities _capabilities = ModelCapabilities.None;
     private ChatEffort _effort = ChatEffort.Medium;
+    private ChatMode _mode = ChatMode.Confirm;
+
+    private string ModeBadgeClass => _isSending ? "neutral" : _mode switch
+    {
+        ChatMode.Auto => "warn",
+        ChatMode.Confirm => "soft",
+        _ => "neutral"
+    };
+
+    private string ModeBadgeText => _mode switch
+    {
+        ChatMode.ReadOnly => "Read-only",
+        ChatMode.Auto => "Auto",
+        _ => "Confirm"
+    };
 
     private static string Size(long bytes) => bytes < 1024 ? $"{bytes} B" : bytes < 1024 * 1024 ? $"{bytes / 1024d:0.#} KB" : $"{bytes / 1024d / 1024d:0.#} MB";
 
@@ -247,6 +275,14 @@
         _effort = effort;
     }
 
+    private async Task OnModeChangedAsync(ChangeEventArgs args)
+    {
+        if (_selectedConversationId is not Guid id) return;
+        if (!Enum.TryParse<ChatMode>(args.Value?.ToString(), ignoreCase: true, out var next)) return;
+        await Chat.SetModeAsync(id, next, CancellationToken.None);
+        _mode = next;
+    }
+
     private string SelectedTitle => _conversations.SingleOrDefault(item => item.Id == _selectedConversationId)?.Title ?? "New conversation";
 
     protected override async Task OnInitializedAsync()
@@ -281,6 +317,7 @@
     {
         _selectedConversationId = id;
         _effort = _conversations.SingleOrDefault(item => item.Id == id)?.Effort ?? ChatEffort.Medium;
+        _mode = await Chat.GetModeAsync(id, CancellationToken.None);
         _messages.Clear();
         _messages.AddRange(await Chat.GetMessagesAsync(id, CancellationToken.None));
         _error = null;

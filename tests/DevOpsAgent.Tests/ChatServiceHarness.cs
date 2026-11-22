@@ -75,7 +75,7 @@ internal sealed class ChatServiceHarness : IAsyncDisposable
         var client = new RecordingChatClient(reply, script);
         var limits = new ToolCallLimitService(new AppSettingRepository(context));
         var service = new ChatService(new ChatConversationRepository(context), new LlmProviderRepository(context), new Factory(client),
-            registry, contextBuilder, dispatcher, TimeProvider.System, secrets, capabilities, limits);
+            registry, contextBuilder, dispatcher, TimeProvider.System, secrets, capabilities, limits, new AppSettingRepository(context));
         return new ChatServiceHarness(connection, context, client, service, provider, limits);
     }
 

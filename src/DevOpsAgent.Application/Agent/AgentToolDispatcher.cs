@@ -2,6 +2,7 @@ using System.Text.Json;
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Discovery;
 using DevOpsAgent.Application.Security;
+using DevOpsAgent.Domain.Chat;
 
 namespace DevOpsAgent.Application.Agent;
 
@@ -27,10 +28,13 @@ public sealed class AgentToolDispatcher(
         string name,
         JsonElement arguments,
         Guid? conversationId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ChatMode mode = ChatMode.Confirm)
     {
         if (!tools.TryGet(name, out var descriptor))
             return new(name, $"Unknown tool '{name}'.");
+        if (descriptor.Access == ToolAccess.Mutating && mode == ChatMode.ReadOnly)
+            return new(name, "This conversation is in Read-only mode. Switch the chat mode dropdown to Confirm or Auto to make changes.");
         object validated;
         try { validated = tools.ValidateArguments(name, arguments); }
         catch (ArgumentException exception) { return new(name, $"Invalid arguments: {exception.Message}"); }
@@ -96,6 +100,22 @@ public sealed class AgentToolDispatcher(
             return new(name, approval.Message);
         if (approval.State == ToolApprovalState.PendingApproval)
         {
+            if (approval.ActionId is Guid autoActionId && CanAutoExecute(name, validated, mode))
+            {
+                var completed = await execution.ApproveAndRunAsync(autoActionId, "auto (chat)", cancellationToken);
+                var entry = (await execution.ListAsync(cancellationToken)).Single(item => item.Action.Id == autoActionId);
+                var resultSummary = string.Join("\n", entry.Results.Select(item =>
+                    $"[{item.ServerName}] exit={item.ExitCode?.ToString() ?? "null"}"
+                    + (string.IsNullOrWhiteSpace(item.Error) ? string.Empty : $" error={item.Error}")
+                    + (string.IsNullOrWhiteSpace(item.StandardOutput) ? string.Empty : $"\n{item.StandardOutput}")
+                    + (string.IsNullOrWhiteSpace(item.StandardError) ? string.Empty : $"\n{item.StandardError}")));
+                var header = completed.Status == Domain.Agent.ActionRecordStatus.Succeeded
+                    ? $"Auto-executed {name} (recorded in Action log)."
+                    : $"Auto-executed {name}, status={completed.Status} (recorded in Action log).";
+                var withDiff = diff is not null ? $"{header}\n{diff}\n{resultSummary}" : $"{header}\n{resultSummary}";
+                return new(name, withDiff, autoActionId, NeedsApproval: false);
+            }
+
             var previews = await execution.ListAsync(cancellationToken);
             var pending = previews.Single(entry => entry.Action.Id == approval.ActionId);
             if (diff is not null)
@@ -158,5 +178,21 @@ public sealed class AgentToolDispatcher(
             finally { throttle.Release(); }
         }));
         return new(name, string.Join("\n", output), ReadOnlyServerIds: selected.Select(server => server.Id).ToArray());
+    }
+
+    /// <summary>
+    /// Guardrail for ChatMode.Auto (D-066): only safe, bounded typed tools auto-execute on non-read-only server groups.
+    /// Arbitrary shell commands (run_shell), OS upgrades (apply_updates), and critical services (ssh/sshd/docker/containerd)
+    /// always require explicit owner approval.
+    /// </summary>
+    public static bool CanAutoExecute(string toolName, object validatedArgs, ChatMode mode)
+    {
+        if (mode != ChatMode.Auto) return false;
+        return toolName switch
+        {
+            "edit_config" or "restart_container" or "block_ip" or "unblock_ip" => true,
+            "restart_service" when validatedArgs is RestartServiceArgs restart => !CriticalServiceGuard.IsProtected(restart.Unit),
+            _ => false
+        };
     }
 }
