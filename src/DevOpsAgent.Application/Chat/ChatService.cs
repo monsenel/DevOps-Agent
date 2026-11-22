@@ -432,8 +432,13 @@ public sealed class ChatService(
         }
         if (normalized.Contains("update", StringComparison.Ordinal) || normalized.Contains("install", StringComparison.Ordinal))
             return [.. readOnly, tools.Tools.Single(tool => tool.Name == "apply_updates")];
-        if (normalized.Contains("config", StringComparison.Ordinal) && (normalized.Contains("edit", StringComparison.Ordinal)
-                || normalized.Contains("change", StringComparison.Ordinal) || normalized.Contains("set ", StringComparison.Ordinal)))
+        if ((normalized.Contains("config", StringComparison.Ordinal) || normalized.Contains("nginx", StringComparison.Ordinal)
+                || normalized.Contains("systemd", StringComparison.Ordinal) || normalized.Contains("compose", StringComparison.Ordinal)
+                || normalized.Contains("vhost", StringComparison.Ordinal))
+            && (normalized.Contains("edit", StringComparison.Ordinal) || normalized.Contains("change", StringComparison.Ordinal)
+                || normalized.Contains("set ", StringComparison.Ordinal) || normalized.Contains("create", StringComparison.Ordinal)
+                || normalized.Contains("setup", StringComparison.Ordinal) || normalized.Contains("configure", StringComparison.Ordinal)
+                || normalized.Contains("write", StringComparison.Ordinal) || normalized.Contains("add ", StringComparison.Ordinal)))
             return [.. readOnly, tools.Tools.Single(tool => tool.Name == "edit_config")];
         if (normalized.Contains("run shell", StringComparison.Ordinal) || normalized.Contains("shell command", StringComparison.Ordinal))
             return [.. readOnly, tools.Tools.Single(tool => tool.Name == "run_shell")];

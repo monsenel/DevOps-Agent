@@ -23,10 +23,10 @@ public sealed class ToolCommandBuilder(ToolRegistry tools, ConfigEditOptions? co
             BlockIpArgs value => new(BuildBlockIp(value), true),
             UnblockIpArgs value => new(BuildUnblockIp(value), true),
             RunShellArgs value => new(value.Command, false),
-            // The root step of edit_config (T8.8 / T7.R28); staging, the health check and a rollback run around it (ConfigEditService).
+            // The root step of edit_config (T8.8 / T7.R28 / T9.2); staging, the health check and a rollback run around it (ConfigEditService).
             EditConfigArgs { IsPrepared: true } value => new(ConfigEditService.ApplyCommand(value.Path,
                 ConfigEditService.StagingDirectory(action.Id) + "/content", ConfigEditService.Timestamp(action), value.BaseSha256!,
-                _configEdits.RuleFor(value.Path), ConfigEditService.Sha256(value.Content!)), true),
+                _configEdits.RuleFor(value.Path), ConfigEditService.Sha256(value.Content!), value.Create), true),
             _ => throw new InvalidOperationException($"Tool '{action.ToolName}' has no mutating command implementation.")
         };
     }

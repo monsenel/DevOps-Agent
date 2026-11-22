@@ -50,9 +50,11 @@ public sealed class ToolRegistry
             Define<UnblockIpArgs>("unblock_ip", "Remove an IP address firewall block.", ToolAccess.Mutating),
             Define<ListBansArgs>("list_bans", "List addresses currently blocked by host security tools.", ToolAccess.ReadOnly),
             Define<RunShellArgs>("run_shell", "Run a shell command. Always requires explicit approval.", ToolAccess.Mutating),
-            Define<EditConfigArgs>("edit_config", "Change a configuration file on one server (allowlisted paths such as /etc/nginx/**). "
-                + "Give the full new content or a unified diff against the current file. Always requires approval; the file is backed up, "
-                + "validated (nginx -t for nginx), the service reloaded and health-checked, and the backup restored on any failure.", ToolAccess.Mutating)
+            Define<EditConfigArgs>("edit_config", "Create (with create: true) or update a configuration file on one server "
+                + "(allowlisted paths: /etc/nginx/**, /etc/systemd/system/*.service, /opt/**/compose.yml, /opt/**/docker-compose.yml, "
+                + "/srv/**/compose.yml, /srv/**/docker-compose.yml). Give the full new content or a unified diff against the current file. "
+                + "Always requires approval; the file is backed up (or removed on rollback when newly created), validated (nginx -t, "
+                + "systemd-analyze verify, or docker compose config -q), reloaded where applicable, health-checked, and rolled back on any failure.", ToolAccess.Mutating)
         ];
         _tools = tools.ToDictionary(tool => tool.Name, StringComparer.Ordinal);
     }
@@ -210,7 +212,8 @@ public sealed record EditConfigArgs(
     [property: StringLength(1_048_576)] string? Content = null,
     [property: StringLength(1_048_576)] string? Diff = null,
     [property: RegularExpression("\\A[0-9a-f]{64}\\z")] string? BaseSha256 = null,
-    [property: MinLength(1), MaxLength(1)] IReadOnlyList<Guid>? ServerIds = null) : IValidatableObject, IServerTargetArgs
+    [property: MinLength(1), MaxLength(1)] IReadOnlyList<Guid>? ServerIds = null,
+    bool Create = false) : IValidatableObject, IServerTargetArgs
 {
     public bool IsPrepared => BaseSha256 is not null;
 
@@ -219,7 +222,9 @@ public sealed record EditConfigArgs(
         // The allowlist is checked with the configured patterns when the edit is prepared and again when it runs.
         if (SensitivePathPolicy.Check(Path) is { } sensitive) yield return new ValidationResult(sensitive, [nameof(Path)]);
         else if (ConfigEditPolicy.Check(Path, ["/**"]) is { } shape) yield return new ValidationResult(shape, [nameof(Path)]);
-        if (!IsPrepared && (Content is null) == (Diff is null))
+        if (!IsPrepared && Create && (Content is null || Diff is not null))
+            yield return new ValidationResult("Creating a new file requires full content, not a diff.", [nameof(Content), nameof(Diff)]);
+        else if (!IsPrepared && (Content is null) == (Diff is null))
             yield return new ValidationResult("Give either the full new content or a unified diff, not both.", [nameof(Content), nameof(Diff)]);
         if (IsPrepared && Content is null)
             yield return new ValidationResult("A prepared edit carries the full new content.", [nameof(Content)]);

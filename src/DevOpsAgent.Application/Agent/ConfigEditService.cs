@@ -31,6 +31,9 @@ public sealed partial class ConfigEditService(
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
+    /// <summary>Sentinel base hash stored when <see cref="EditConfigArgs.Create"/> creates a brand-new file (T9.2).</summary>
+    public const string EmptyFileSha256 = "0000000000000000000000000000000000000000000000000000000000000000";
+
     /// <summary>
     /// Reads the file and returns the arguments to store with the proposal, or an error for the model. Read-only on the server.
     /// </summary>
@@ -43,6 +46,25 @@ public sealed partial class ConfigEditService(
         if (args.ServerIds is not [var serverId]) return (null, "edit_config changes one server at a time.");
         var server = await servers.GetAsync(serverId, cancellationToken);
         if (server is null) return (null, "The target server no longer exists.");
+
+        if (args.Create)
+        {
+            if (args.Content is null) return (null, "Creating a new file requires full content, not a diff.");
+            var existing = await ReadAsync(server, args.Path, cancellationToken);
+            if (existing.NotFound)
+            {
+                var created = args.Content;
+                if (Encoding.UTF8.GetByteCount(created) > options.MaxContentBytes) return (null, $"The new content is larger than {options.MaxContentBytes} bytes.");
+                if (created.Contains('\0')) return (null, "The new content contains NUL bytes.");
+                if (created.Length == 0) return (null, "The new file content cannot be empty.");
+                var createdPrepared = new EditConfigArgs(args.Path, created, UnifiedDiff.Create(string.Empty, created, args.Path), EmptyFileSha256, [serverId], Create: true);
+                return (JsonSerializer.SerializeToElement(createdPrepared, JsonOptions), null);
+            }
+
+            return existing.Error is not null
+                ? (null, existing.Error)
+                : (null, $"{args.Path} already exists on {server.Name}; omit create: true to edit it.");
+        }
 
         var read = await ReadAsync(server, args.Path, cancellationToken);
         if (read.Error is not null) return (null, read.Error);
@@ -59,7 +81,7 @@ public sealed partial class ConfigEditService(
     }
 
     // Read-only: as the SSH user first, then with sudo when the file is not readable and the server allows sudo.
-    private async Task<(string? Content, string? Error)> ReadAsync(Server server, string path, CancellationToken cancellationToken)
+    private async Task<(string? Content, string? Error, bool NotFound)> ReadAsync(Server server, string path, CancellationToken cancellationToken)
     {
         var command = ReadCommand(path, options.MaxContentBytes + 1);
         var result = await sshRunner.RunAsync(server.Id, command, new SshRunOptions(TimeSpan.FromSeconds(30)), cancellationToken);
@@ -67,19 +89,19 @@ public sealed partial class ConfigEditService(
             && !result.StandardError.Contains("DVA_SYMLINK=", StringComparison.Ordinal) && server.CanUseSudo)
             result = await sshRunner.RunAsync(server.Id, command, new SshRunOptions(TimeSpan.FromSeconds(30), UseSudo: true), cancellationToken);
         if (result.StandardError.Contains("DVA_NO_FILE", StringComparison.Ordinal))
-            return (null, $"{path} does not exist on {server.Name}; edit_config changes existing files only.");
+            return (null, $"{path} does not exist on {server.Name}; pass create: true to create a new file.", true);
         if (Symlink().Match(result.StandardError) is { Success: true } link)
         {
             // The resolved path comes from the server: it is only repeated when it is a plain, permitted path.
             var resolved = link.Groups[1].Value;
             var hint = ConfigEditPolicy.Check(resolved, ["/**"]) is null ? $" (it resolves to {resolved})" : string.Empty;
-            return (null, $"{path} is a symbolic link or lies behind one{hint}; edit_config changes real files only, so give the real path.");
+            return (null, $"{path} is a symbolic link or lies behind one{hint}; edit_config changes real files only, so give the real path.", false);
         }
 
-        if (result.ExitCode != 0) return (null, $"{path} could not be read on {server.Name} (exit {result.ExitCode?.ToString(CultureInfo.InvariantCulture) ?? "unknown"}).");
+        if (result.ExitCode != 0) return (null, $"{path} could not be read on {server.Name} (exit {result.ExitCode?.ToString(CultureInfo.InvariantCulture) ?? "unknown"}).", false);
         if (Encoding.UTF8.GetByteCount(result.StandardOutput) > options.MaxContentBytes)
-            return (null, $"{path} is larger than {options.MaxContentBytes} bytes.");
-        return (result.StandardOutput, null);
+            return (null, $"{path} is larger than {options.MaxContentBytes} bytes.", false);
+        return (result.StandardOutput, null, false);
     }
 
     /// <summary>Read-only; sent with sudo only when the SSH user cannot read the file.</summary>
@@ -104,17 +126,38 @@ public sealed partial class ConfigEditService(
         return $"{(dir == "/" ? string.Empty : dir)}/.{file}.bak-{timestamp.ToString(CultureInfo.InvariantCulture)}";
     }
 
-    /// <summary>The root step: check, back up, replace atomically, validate, reload; the backup is restored on any failure.</summary>
-    public static string ApplyCommand(string path, string stagedFile, long timestamp, string baseSha256, ConfigServiceRule? rule, string? newSha256 = null)
+    /// <summary>The root step: check, back up (or create), replace atomically, validate, reload; restores backup or deletes new file on any failure.</summary>
+    public static string ApplyCommand(string path, string stagedFile, long timestamp, string baseSha256, ConfigServiceRule? rule, string? newSha256 = null, bool create = false)
     {
+        var stagedHashCheck = string.IsNullOrWhiteSpace(newSha256)
+            ? string.Empty
+            : "if [ \"$(sha256sum < \"$s\" | cut -d ' ' -f 1)\" != " + newSha256 + " ]; then printf '%s\\n' 'DVA_EDIT_FAILED=staged_hash'; exit 14; fi; ";
+
+        if (create)
+        {
+            var undoCreate = "if rm -f -- \"$p\"; then printf '%s\\n' 'DVA_RESTORED'" + (string.IsNullOrWhiteSpace(rule?.Reload) ? string.Empty
+                : "; if " + Group(rule!.Reload) + " >/dev/null 2>&1; then printf '%s\\n' 'DVA_RELOADED_AFTER_RESTORE'; fi")
+                + "; else printf '%s\\n' 'DVA_RESTORE_FAILED'; fi";
+            return "set -u; p=" + Quote(path) + "; s=" + Quote(stagedFile) + "; d=$(dirname -- \"$p\"); f=$(basename -- \"$p\"); "
+                + "if [ -e \"$p\" ] || [ -L \"$p\" ]; then printf '%s\\n' 'DVA_EDIT_FAILED=exists'; exit 15; fi; "
+                + "if [ ! -f \"$s\" ] || [ -L \"$s\" ] || [ \"$(readlink -f -- \"$s\")\" != \"$s\" ]; then printf '%s\\n' 'DVA_EDIT_FAILED=staged_symlink'; exit 13; fi; "
+                + stagedHashCheck
+                + "if ! mkdir -p -- \"$d\"; then printf '%s\\n' 'DVA_EDIT_FAILED=write'; exit 6; fi; "
+                + "if [ \"$(readlink -f -- \"$d\")\" != \"$d\" ]; then printf '%s\\n' 'DVA_EDIT_FAILED=symlink'; exit 12; fi; "
+                + "t=$(mktemp -- \"$d/.$f.dva-XXXXXX\") || { printf '%s\\n' 'DVA_EDIT_FAILED=write'; exit 6; }; "
+                + "if ! cat -- \"$s\" > \"$t\" || ! chmod 0644 -- \"$t\" || ! mv -f -- \"$t\" \"$p\"; then "
+                + "rm -f -- \"$t\"; printf '%s\\n' 'DVA_EDIT_FAILED=write'; exit 6; fi; printf '%s\\n' 'DVA_WRITTEN'; "
+                + (string.IsNullOrWhiteSpace(rule?.Validate) ? "printf '%s\\n' 'DVA_VALIDATE_SKIPPED'; "
+                    : "if ! " + Group(rule!.Validate) + " 2>&1; then printf '%s\\n' 'DVA_EDIT_FAILED=validate'; " + undoCreate + "; exit 7; fi; printf '%s\\n' 'DVA_VALIDATED'; ")
+                + (string.IsNullOrWhiteSpace(rule?.Reload) ? "printf '%s\\n' 'DVA_RELOAD_SKIPPED'"
+                    : "if ! " + Group(rule!.Reload) + " 2>&1; then printf '%s\\n' 'DVA_EDIT_FAILED=reload'; " + undoCreate + "; exit 8; fi; printf '%s\\n' 'DVA_RELOADED'");
+        }
+
         // "Restored" is only printed when the copy worked; a failed copy says so, and nothing is reloaded from a file that is not
         // the original.
         var restore = "if cp -p -- \"$b\" \"$p\"; then printf '%s\\n' 'DVA_RESTORED'" + (string.IsNullOrWhiteSpace(rule?.Reload) ? string.Empty
             : "; if " + Group(rule!.Reload) + " >/dev/null 2>&1; then printf '%s\\n' 'DVA_RELOADED_AFTER_RESTORE'; fi")
             + "; else printf '%s\\n' 'DVA_RESTORE_FAILED'; fi";
-        var stagedHashCheck = string.IsNullOrWhiteSpace(newSha256)
-            ? string.Empty
-            : "if [ \"$(sha256sum < \"$s\" | cut -d ' ' -f 1)\" != " + newSha256 + " ]; then printf '%s\\n' 'DVA_EDIT_FAILED=staged_hash'; exit 14; fi; ";
         return "set -u; p=" + Quote(path) + "; s=" + Quote(stagedFile) + "; d=$(dirname -- \"$p\"); f=$(basename -- \"$p\"); b=\"$d/.$f.bak-" + timestamp.ToString(CultureInfo.InvariantCulture) + "\"; "
             + "if [ ! -f \"$p\" ]; then printf '%s\\n' 'DVA_EDIT_FAILED=missing'; exit 3; fi; "
             // The allowlist and the deny list judge the text of the path. A link in it (the file or a directory) could lead
@@ -133,14 +176,19 @@ public sealed partial class ConfigEditService(
                 : "if ! " + Group(rule!.Reload) + " 2>&1; then printf '%s\\n' 'DVA_EDIT_FAILED=reload'; " + restore + "; exit 8; fi; printf '%s\\n' 'DVA_RELOADED'");
     }
 
-    /// <summary>The root step after a failed health check: restore the backup, validate it, reload.</summary>
-    public static string RollbackCommand(string path, long timestamp, ConfigServiceRule? rule) =>
-        "set -u; p=" + Quote(path) + "; d=$(dirname -- \"$p\"); f=$(basename -- \"$p\"); b=\"$d/.$f.bak-" + timestamp.ToString(CultureInfo.InvariantCulture) + "\"; "
-        + "if ! cp -p -- \"$b\" \"$p\"; then printf '%s\\n' 'DVA_ROLLBACK_FAILED=restore'; exit 9; fi; printf '%s\\n' 'DVA_RESTORED'; "
-        + (string.IsNullOrWhiteSpace(rule?.Validate) ? string.Empty
-            : "if ! " + Group(rule!.Validate) + " 2>&1; then printf '%s\\n' 'DVA_ROLLBACK_FAILED=validate'; exit 10; fi; ")
-        + (string.IsNullOrWhiteSpace(rule?.Reload) ? "printf '%s\\n' 'DVA_RELOAD_SKIPPED'"
-            : "if ! " + Group(rule!.Reload) + " 2>&1; then printf '%s\\n' 'DVA_ROLLBACK_FAILED=reload'; exit 11; fi; printf '%s\\n' 'DVA_RELOADED'");
+    /// <summary>The root step after a failed health check: restore the backup (or remove a newly created file), validate, reload.</summary>
+    public static string RollbackCommand(string path, long timestamp, ConfigServiceRule? rule, bool create = false) =>
+        create
+            ? "set -u; p=" + Quote(path) + "; "
+              + "if ! rm -f -- \"$p\"; then printf '%s\\n' 'DVA_ROLLBACK_FAILED=restore'; exit 9; fi; printf '%s\\n' 'DVA_RESTORED'; "
+              + (string.IsNullOrWhiteSpace(rule?.Reload) ? "printf '%s\\n' 'DVA_RELOAD_SKIPPED'"
+                  : "if ! " + Group(rule!.Reload) + " 2>&1; then printf '%s\\n' 'DVA_ROLLBACK_FAILED=reload'; exit 11; fi; printf '%s\\n' 'DVA_RELOADED'")
+            : "set -u; p=" + Quote(path) + "; d=$(dirname -- \"$p\"); f=$(basename -- \"$p\"); b=\"$d/.$f.bak-" + timestamp.ToString(CultureInfo.InvariantCulture) + "\"; "
+              + "if ! cp -p -- \"$b\" \"$p\"; then printf '%s\\n' 'DVA_ROLLBACK_FAILED=restore'; exit 9; fi; printf '%s\\n' 'DVA_RESTORED'; "
+              + (string.IsNullOrWhiteSpace(rule?.Validate) ? string.Empty
+                  : "if ! " + Group(rule!.Validate) + " 2>&1; then printf '%s\\n' 'DVA_ROLLBACK_FAILED=validate'; exit 10; fi; ")
+              + (string.IsNullOrWhiteSpace(rule?.Reload) ? "printf '%s\\n' 'DVA_RELOAD_SKIPPED'"
+                  : "if ! " + Group(rule!.Reload) + " 2>&1; then printf '%s\\n' 'DVA_ROLLBACK_FAILED=reload'; exit 11; fi; printf '%s\\n' 'DVA_RELOADED'");
 
     /// <summary>Read-only live hash check used after a lost connection during apply (T7.R28).</summary>
     public static string VerifyHashCommand(string path) =>
@@ -212,6 +260,7 @@ public sealed partial class ConfigEditService(
                 var reason = step switch
                 {
                     "missing" => "the file does not exist",
+                    "exists" => "the file already exists",
                     "changed" => "the file changed since the edit was proposed",
                     "backup" => "the backup could not be written",
                     "write" => "the new content could not be written",
@@ -247,7 +296,7 @@ public sealed partial class ConfigEditService(
             try
             {
                 // Not cancellable: the new file is live, and the rollback is what makes the server safe again (its own timeout bounds it).
-                rollback = await sshRunner.RunAsync(server.Id, RollbackCommand(args.Path, timestamp, rule),
+                rollback = await sshRunner.RunAsync(server.Id, RollbackCommand(args.Path, timestamp, rule, args.Create),
                     new SshRunOptions(TimeSpan.FromMinutes(2), UseSudo: true), CancellationToken.None);
             }
             catch (Exception exception)

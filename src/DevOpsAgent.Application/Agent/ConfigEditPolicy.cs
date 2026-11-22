@@ -10,12 +10,28 @@ public sealed class ConfigEditOptions
 
     /// <summary>
     /// Paths edit_config may change: <c>**</c> matches any number of directories, <c>*</c> part of one name. The sensitive-path
-    /// deny list applies on top.
+    /// deny list applies on top. Defaults cover nginx, systemd units, and compose files under /opt or /srv (T9.2).
     /// </summary>
-    public string[] AllowedPaths { get; set; } = ["/etc/nginx/**"];
+    public string[] AllowedPaths { get; set; } =
+    [
+        "/etc/nginx/**",
+        "/etc/systemd/system/*.service",
+        "/opt/**/docker-compose.yml",
+        "/opt/**/compose.yml",
+        "/srv/**/docker-compose.yml",
+        "/srv/**/compose.yml"
+    ];
 
     /// <summary>How a changed file is validated and its service reloaded; the first rule whose pattern matches wins.</summary>
-    public ConfigServiceRule[] Services { get; set; } = [ConfigServiceRule.Nginx];
+    public ConfigServiceRule[] Services { get; set; } =
+    [
+        ConfigServiceRule.Nginx,
+        ConfigServiceRule.Systemd,
+        ConfigServiceRule.OptDockerCompose,
+        ConfigServiceRule.OptCompose,
+        ConfigServiceRule.SrvDockerCompose,
+        ConfigServiceRule.SrvCompose
+    ];
 
     public int MaxContentBytes { get; set; } = 256 * 1024;
 
@@ -31,6 +47,22 @@ public sealed record ConfigServiceRule(string PathPattern, string Service, strin
 
     public static ConfigServiceRule Nginx { get; } = new("/etc/nginx/**", "nginx", "nginx -t",
         "if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet nginx 2>/dev/null; then systemctl reload nginx; else nginx -s reload; fi");
+
+    public static ConfigServiceRule Systemd { get; } = new("/etc/systemd/system/*.service", "systemd",
+        "systemd-analyze verify \"$p\"",
+        "systemctl daemon-reload");
+
+    public static ConfigServiceRule OptDockerCompose { get; } = new("/opt/**/docker-compose.yml", "docker-compose",
+        "docker compose -f \"$p\" config -q", string.Empty);
+
+    public static ConfigServiceRule OptCompose { get; } = new("/opt/**/compose.yml", "docker-compose",
+        "docker compose -f \"$p\" config -q", string.Empty);
+
+    public static ConfigServiceRule SrvDockerCompose { get; } = new("/srv/**/docker-compose.yml", "docker-compose",
+        "docker compose -f \"$p\" config -q", string.Empty);
+
+    public static ConfigServiceRule SrvCompose { get; } = new("/srv/**/compose.yml", "docker-compose",
+        "docker compose -f \"$p\" config -q", string.Empty);
 }
 
 public static partial class ConfigEditPolicy

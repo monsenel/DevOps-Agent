@@ -408,6 +408,105 @@ public sealed class ConfigEditTests
         Assert.Equal(withNewline, UnifiedDiff.Apply(withoutNewline, addNewlineDiff));
     }
 
+    [Theory]
+    [InlineData("/etc/nginx/conf.d/app.conf", "nginx", "nginx -t")]
+    [InlineData("/etc/systemd/system/myapp.service", "systemd", "systemd-analyze verify \"$p\"")]
+    [InlineData("/opt/myapp/compose.yml", "docker-compose", "docker compose -f \"$p\" config -q")]
+    [InlineData("/opt/stack/sub/docker-compose.yml", "docker-compose", "docker compose -f \"$p\" config -q")]
+    [InlineData("/srv/web/compose.yml", "docker-compose", "docker compose -f \"$p\" config -q")]
+    [InlineData("/srv/web/docker-compose.yml", "docker-compose", "docker compose -f \"$p\" config -q")]
+    public void DefaultServiceRulesCoverNginxSystemdAndCompose(string path, string expectedService, string expectedValidate)
+    {
+        var options = new ConfigEditOptions();
+        Assert.Null(ConfigEditPolicy.Check(path, options.AllowedPaths));
+        var rule = options.RuleFor(path);
+        Assert.NotNull(rule);
+        Assert.Equal(expectedService, rule.Service);
+        Assert.Equal(expectedValidate, rule.Validate);
+    }
+
+    [Theory]
+    [InlineData("/etc/systemd/system/nested/myapp.service")]
+    [InlineData("/opt/myapp/.env")]
+    [InlineData("/srv/myapp/config.yaml")]
+    [InlineData("/etc/ssh/sshd_config")]
+    public void DefaultAllowlistStillRejectsOtherServiceAndSecretPaths(string path)
+    {
+        var options = new ConfigEditOptions();
+        Assert.NotNull(ConfigEditPolicy.Check(path, options.AllowedPaths));
+    }
+
+    [Fact]
+    public async Task CreateMode_ProposesNewFileAndRefusesExistingFile()
+    {
+        await using var lab = await Lab.CreateAsync();
+        await lab.ConfirmAsync();
+        var missingRunner = new StderrRunner(3, "DVA_NO_FILE\n");
+        var service = new ConfigEditService(missingRunner, new ServerRepository(lab.Context), new SnapshotRepository(lab.Context),
+            new GraphRepository(lab.Context), new HealthCheckRepository(lab.Context), new NoProbe(), new ConfigEditOptions());
+
+        var unitText = "[Unit]\nDescription=My App\n[Service]\nExecStart=/usr/bin/myapp\n";
+        var (prepared, error) = await service.PrepareAsync(
+            new EditConfigArgs("/etc/systemd/system/myapp.service", unitText, null, null, [lab.Edge.Id], Create: true), default);
+
+        Assert.Null(error);
+        Assert.NotNull(prepared);
+        var stored = JsonSerializer.Deserialize<EditConfigArgs>(prepared.Value.GetRawText(), new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+        Assert.True(stored.Create);
+        Assert.Equal(ConfigEditService.EmptyFileSha256, stored.BaseSha256);
+        Assert.Contains("+Description=My App", stored.Diff);
+
+        // Existing file is refused when create: true.
+        var (dupArgs, dupError) = await lab.Service.PrepareAsync(
+            new EditConfigArgs("/etc/nginx/conf.d/demo.conf", "server {}\n", null, null, [lab.Edge.Id], Create: true), default);
+        Assert.Null(dupArgs);
+        Assert.Contains("already exists", dupError);
+    }
+
+    [Theory]
+    [InlineData("true", "true", 0, "DVA_RELOADED", true)]
+    [InlineData("false", "true", 7, "DVA_EDIT_FAILED=validate", false)]
+    [InlineData("true", "false", 8, "DVA_EDIT_FAILED=reload", false)]
+    public void CreateScript_CreatesParentDirectoryValidatesAndRemovesFileOnFailure_InARealShell(
+        string validate, string reload, int expectedExit, string marker, bool fileStays)
+    {
+        var directory = RealTempDirectory();
+        try
+        {
+            var target = Path.Combine(directory, "myapp", "compose.yml");
+            var staged = Path.Combine(directory, "staged");
+            const string yaml = "services:\n  web:\n    image: nginx:alpine\n";
+            File.WriteAllText(staged, yaml);
+            var rule = new ConfigServiceRule("/**", "docker-compose", validate, reload);
+
+            var (exit, output) = Shell(ConfigEditService.ApplyCommand(target, staged, 1763164800,
+                ConfigEditService.EmptyFileSha256, rule, ConfigEditService.Sha256(yaml), create: true));
+
+            Assert.Equal(expectedExit, exit);
+            Assert.Contains(marker, output);
+            Assert.Equal(fileStays, File.Exists(target));
+            if (fileStays)
+            {
+                Assert.Equal(yaml, File.ReadAllText(target));
+                // Trying to create again must fail with exists (exit 15).
+                var (existsExit, existsOutput) = Shell(ConfigEditService.ApplyCommand(target, staged, 1763164801,
+                    ConfigEditService.EmptyFileSha256, rule, ConfigEditService.Sha256(yaml), create: true));
+                Assert.Equal(15, existsExit);
+                Assert.Contains("DVA_EDIT_FAILED=exists", existsOutput);
+
+                // Health-check rollback of a newly created file removes it cleanly.
+                var (rbExit, rbOutput) = Shell(ConfigEditService.RollbackCommand(target, 1763164800, rule, create: true));
+                Assert.Equal(0, rbExit);
+                Assert.Contains("DVA_RESTORED", rbOutput);
+                Assert.False(File.Exists(target));
+            }
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private sealed class LostApplyRunner(string liveHashAfterDrop, int validateExit, int rollbackExit) : ISshRunner
     {
         public List<string> Commands { get; } = [];

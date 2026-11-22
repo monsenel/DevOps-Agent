@@ -217,6 +217,26 @@ public sealed class ImpactService(IServerRepository servers, ISnapshotRepository
                     // nginx is reloaded after an edit under /etc/nginx: everything it serves is affected.
                     if (path.StartsWith("/etc/nginx/", StringComparison.Ordinal))
                         inFile.AddRange(nodes.Where(node => IsNginxConfig(node) || (node.Kind == GraphNodeKind.Service && node.Name == "nginx")));
+                    else if (path.StartsWith("/etc/systemd/system/", StringComparison.Ordinal) && path.EndsWith(".service", StringComparison.Ordinal))
+                    {
+                        var unitFile = path["/etc/systemd/system/".Length..];
+                        var bare = BareUnit(unitFile);
+                        inFile.AddRange(nodes.Where(node => node.Kind == GraphNodeKind.Service
+                            && (string.Equals(node.Name, bare, StringComparison.Ordinal)
+                                || string.Equals(node.Name, unitFile, StringComparison.Ordinal))));
+                    }
+                    else if (path.EndsWith("/compose.yml", StringComparison.Ordinal) || path.EndsWith("/docker-compose.yml", StringComparison.Ordinal))
+                    {
+                        var slash = path.LastIndexOf('/');
+                        var parentDir = slash > 0 ? path[..slash] : string.Empty;
+                        var project = parentDir.Contains('/') ? parentDir[(parentDir.LastIndexOf('/') + 1)..] : parentDir;
+                        if (!string.IsNullOrWhiteSpace(project))
+                        {
+                            inFile.AddRange(nodes.Where(node => node.Kind == GraphNodeKind.Container
+                                && string.Equals(ReadString(node.AttributesJson, "composeProject"), project, StringComparison.OrdinalIgnoreCase)));
+                        }
+                    }
+
                     return inFile.Count > 0 ? inFile.Distinct().ToArray() : WholeHost(nodes);
                 });
             case "apply_updates":
