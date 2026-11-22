@@ -60,6 +60,8 @@ public sealed class ImpactService(IServerRepository servers, ISnapshotRepository
             return new ImpactPreview(description, [], [], [], ["No discovery has run yet, so the impact is unknown. Run discovery first."], null, false);
 
         var warnings = new List<string>();
+        if (toolName == "restart_service" && ReadString(args, "unit") is { } criticalUnit && CriticalServiceGuard.IsSshUnit(criticalUnit))
+            warnings.Add($"Restarting {criticalUnit} can sever remote SSH access to {serverName}.");
         var age = timeProvider.GetUtcNow() - (latest.FinishedAtUtc ?? latest.StartedAtUtc);
         if (age > StaleGraphAge)
             warnings.Add($"The graph is {FormatAge(age)} old (older than 24 h); dependencies may have changed. Run discovery for a current view.");

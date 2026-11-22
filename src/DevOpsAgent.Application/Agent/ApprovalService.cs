@@ -96,6 +96,12 @@ public sealed class ApprovalService(
             return new(ToolApprovalState.Denied, refusal);
         }
 
+        if (arguments is RestartServiceArgs restart
+            && CriticalServiceGuard.GetRefusal(restart) is { } serviceRefusal)
+        {
+            return new(ToolApprovalState.Denied, serviceRefusal);
+        }
+
         var action = new ActionRecord(
             request.ToolName,
             string.Join(",", policies.Select(policy => policy.Group).Order(StringComparer.Ordinal)),

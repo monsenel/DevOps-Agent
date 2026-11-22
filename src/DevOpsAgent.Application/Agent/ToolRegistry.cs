@@ -34,7 +34,9 @@ public sealed class ToolRegistry
             Define<QueryGraphArgs>("query_graph", "Query known infrastructure nodes and connections.", ToolAccess.ReadOnly, requiresServer: false),
             Define<RunDiscoveryArgs>("run_discovery", "Run read-only discovery and save a snapshot.", ToolAccess.ReadOnly, requiresServer: false),
             Define<ServiceStatusArgs>("service_status", "Read the state of a systemd unit.", ToolAccess.ReadOnly),
-            Define<RestartServiceArgs>("restart_service", "Restart a systemd unit.", ToolAccess.Mutating),
+            Define<RestartServiceArgs>("restart_service",
+                "Restart a systemd unit. Critical units (ssh, sshd, docker, containerd) are refused unless confirmCritical is true after explicit owner confirmation.",
+                ToolAccess.Mutating),
             Define<RestartContainerArgs>("restart_container", "Restart a Docker container. Always requires explicit approval.", ToolAccess.Mutating),
             Define<DockerPsArgs>("docker_ps", "List Docker containers.", ToolAccess.ReadOnly),
             Define<DockerDiskUsageArgs>("docker_disk_usage", "Read Docker image, container, and volume disk usage.", ToolAccess.ReadOnly),
@@ -115,7 +117,8 @@ public sealed record ServiceStatusArgs(
 
 public sealed record RestartServiceArgs(
     [property: Required, StringLength(200, MinimumLength = 1), RegularExpression("\\A[A-Za-z0-9][A-Za-z0-9@_.:-]*\\z")] string Unit,
-    [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
+    [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null,
+    bool ConfirmCritical = false) : IServerTargetArgs;
 
 public sealed record DockerPsArgs([property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 public sealed record DockerDiskUsageArgs([property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;

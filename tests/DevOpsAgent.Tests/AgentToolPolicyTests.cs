@@ -1,4 +1,5 @@
 using System.Text.Json;
+using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Agent;
 using DevOpsAgent.Domain.Agent;
 using DevOpsAgent.Domain.Servers;
@@ -556,6 +557,109 @@ public sealed class AgentToolPolicyTests
         Assert.Equal(ToolApprovalState.Denied, refused.State);
         Assert.Contains("inventory", refused.Message, StringComparison.Ordinal);
         Assert.Equal(ToolApprovalState.PendingApproval, allowed.State);
+    }
+
+    [Theory]
+    [InlineData("ssh")]
+    [InlineData("sshd")]
+    [InlineData("ssh.service")]
+    [InlineData("sshd.service")]
+    [InlineData("sshd.socket")]
+    [InlineData("sshd@10.0.0.1.service")]
+    [InlineData("SSH.SERVICE")]
+    [InlineData("docker")]
+    [InlineData("docker.service")]
+    [InlineData("docker.socket")]
+    [InlineData("containerd")]
+    [InlineData("containerd.service")]
+    public async Task RestartServiceRefusesCriticalUnitsUnlessExplicitlyConfirmed(string unit)
+    {
+        await using var database = await CreateDatabaseAsync();
+        var server = await AddServerAsync(database.Context, "staging");
+        var executionModes = new ExecutionModeService(new AppSettingRepository(database.Context), new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
+        await executionModes.SaveAsync(new ExecutionModePolicy("staging", ExecutionMode.Confirm), CancellationToken.None);
+        var service = new ApprovalService(new ToolRegistry(), executionModes, new ServerRepository(database.Context),
+            new ActionRecordRepository(database.Context), TestBanGuard.Create(), TimeProvider.System);
+
+        var refused = await service.EvaluateAsync(new ToolApprovalRequest("restart_service",
+            Json(JsonSerializer.Serialize(new { unit, serverIds = new[] { server.Id } })), [server.Id]), CancellationToken.None);
+        var confirmed = await service.EvaluateAsync(new ToolApprovalRequest("restart_service",
+            Json(JsonSerializer.Serialize(new { unit, serverIds = new[] { server.Id }, confirmCritical = true })), [server.Id]), CancellationToken.None);
+
+        Assert.Equal(ToolApprovalState.Denied, refused.State);
+        Assert.Contains("confirmCritical", refused.Message, StringComparison.Ordinal);
+        Assert.Equal(ToolApprovalState.PendingApproval, confirmed.State);
+        Assert.Single(await database.Context.ActionRecords.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData("nginx")]
+    [InlineData("nginx.service")]
+    [InlineData("dockerish")]
+    [InlineData("ssh-agent.service")]
+    [InlineData("postgresql")]
+    public async Task RestartServiceAllowsOrdinaryUnitsWithoutConfirmCritical(string unit)
+    {
+        await using var database = await CreateDatabaseAsync();
+        var server = await AddServerAsync(database.Context, "staging");
+        var executionModes = new ExecutionModeService(new AppSettingRepository(database.Context), new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
+        await executionModes.SaveAsync(new ExecutionModePolicy("staging", ExecutionMode.Confirm), CancellationToken.None);
+        var service = new ApprovalService(new ToolRegistry(), executionModes, new ServerRepository(database.Context),
+            new ActionRecordRepository(database.Context), TestBanGuard.Create(), TimeProvider.System);
+
+        var result = await service.EvaluateAsync(new ToolApprovalRequest("restart_service",
+            Json(JsonSerializer.Serialize(new { unit, serverIds = new[] { server.Id } })), [server.Id]), CancellationToken.None);
+
+        Assert.Equal(ToolApprovalState.PendingApproval, result.State);
+    }
+
+    [Fact]
+    public async Task RestartServiceConfirmCriticalStillDeniedInReadOnlyGroup()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var server = await AddServerAsync(database.Context, "prod");
+        var executionModes = new ExecutionModeService(new AppSettingRepository(database.Context), new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
+        await executionModes.SaveAsync(new ExecutionModePolicy("prod", ExecutionMode.ReadOnly), CancellationToken.None);
+        var service = new ApprovalService(new ToolRegistry(), executionModes, new ServerRepository(database.Context),
+            new ActionRecordRepository(database.Context), TestBanGuard.Create(), TimeProvider.System);
+
+        var result = await service.EvaluateAsync(new ToolApprovalRequest("restart_service",
+            Json(JsonSerializer.Serialize(new { unit = "sshd", serverIds = new[] { server.Id }, confirmCritical = true })), [server.Id]), CancellationToken.None);
+
+        Assert.Equal(ToolApprovalState.Denied, result.State);
+        Assert.Contains("read-only", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ActionExecutionReChecksCriticalServiceGuardAtApproval()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var server = await AddServerAsync(database.Context, "staging");
+        var executionModes = new ExecutionModeService(new AppSettingRepository(database.Context), new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
+        await executionModes.SaveAsync(new ExecutionModePolicy("staging", ExecutionMode.Confirm), CancellationToken.None);
+        var action = new ActionRecord("restart_service", "staging", JsonSerializer.Serialize(new[] { server.Id }),
+            "{\"unit\":\"sshd\"}", null, DateTimeOffset.UtcNow);
+        database.Context.ActionRecords.Add(action);
+        await database.Context.SaveChangesAsync();
+
+        var runner = new NoOpSshRunner();
+        var execution = new ActionExecutionService(new ActionRecordRepository(database.Context), new ServerRepository(database.Context),
+            new ToolRegistry(), executionModes, new ToolCommandBuilder(new ToolRegistry()), runner, TestBanGuard.Create(), TimeProvider.System);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => execution.ApproveAndRunAsync(action.Id, "admin", CancellationToken.None));
+        Assert.Contains("confirmCritical", error.Message, StringComparison.Ordinal);
+        Assert.Equal(0, runner.Calls);
+    }
+
+    private sealed class NoOpSshRunner : ISshRunner
+    {
+        public int Calls { get; private set; }
+
+        public Task<RemoteCommandResult> RunAsync(Guid serverId, string command, SshRunOptions options, CancellationToken cancellationToken)
+        {
+            Calls++;
+            return Task.FromResult(new RemoteCommandResult(0, string.Empty, string.Empty, TimeSpan.Zero));
+        }
     }
 
     private static async Task<Server> AddServerAsync(AppDbContext context, string group)

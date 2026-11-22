@@ -121,6 +121,13 @@ public sealed class ActionExecutionService(
             throw new InvalidOperationException(refusal);
         }
 
+        if (action.ToolName == "restart_service"
+            && JsonSerializer.Deserialize<RestartServiceArgs>(action.ArgumentsJson, JsonOptions) is { } restart
+            && CriticalServiceGuard.GetRefusal(restart) is { } serviceRefusal)
+        {
+            throw new InvalidOperationException(serviceRefusal);
+        }
+
         var plan = commandBuilder.Build(action);
         // Atomic claim: only one caller can move Proposed -> Running, so an action can never execute twice.
         if (!await actions.TryTransitionFromProposedAsync(actionId, ActionRecordStatus.Running, approvedBy.Trim(),
