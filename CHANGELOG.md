@@ -1,26 +1,28 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-11-23
 
-Independent review of 0.1.2 (T7.R1–T7.R3):
+Personal operations release: scheduled update alerts, expanded config scaffolding, proactive security hardening audit, and core M7 reliability fixes (1,000 tests passing, 0 build warnings).
 
-- Health checks of a server in SSH backoff are skipped and keep their last result instead of being stored as failing (they raised a High alert for sites that may be fine).
-- Restart-loop alert: one restart after an earlier, resolved loop no longer reopens it; a container needs two consecutive `restarting` samples to alert (D-035).
-- A connect that fails after the server was edited no longer puts the new settings into backoff; editing a jump server resets the backoff of the servers behind it.
-- Drift no longer throws when two Docker DNS listeners share one identity.
+### New features
+- **Scheduled update scans & security alerts (T9.1):** automatic periodic OS update scans (`UpdateScanHostedService`, default every 24 h, configurable 0–168 h in Settings › Discovery, cache-only on read-only groups) and a `Medium` `security-updates-available` alert rule that notifies via Telegram/ntfy, holds across failed scans, and auto-resolves when 0 security packages remain.
+- **Initial service config scaffolding (T9.2):** `edit_config` defaults expanded to `/etc/nginx/**`, `/etc/systemd/system/*.service` (`systemd-analyze verify` + `systemctl daemon-reload`), and `/opt|srv/**/compose.yml` / `docker-compose.yml` (`docker compose config -q`), with `create: true` for safely creating brand-new files (parent directory creation, symlink checks, automatic deletion on rollback).
+- **Proactive security hardening audit (T9.3):** deterministic read-only `SecurityAuditService` inspecting `sshd` effective settings (`PermitRootLogin`, `PasswordAuthentication`, `PermitEmptyPasswords`, `MaxAuthTries`), host firewall (`ufw`/`nft`/`iptables`), `fail2ban` `sshd` jail, unattended security upgrades, and pending security updates; exposed via the read-only `security_audit` agent tool and a **Security hardening** card on Server detail.
 
-Independent review of the SSH lifecycle work (T7.R15, T7.R17–T7.R19) and the auth-retry cap:
+### Reliability & safety
+- **Critical service guardrails (T7.R4):** `restart_service` refuses `ssh`, `sshd`, `docker`, and `containerd` (including `.service`/`.socket` and `@` templates) unless `confirmCritical: true` is passed after explicit confirmation, enforced at both proposal and approval time.
+- **Host-owned discovery (T7.R8):** app-wide single-flight `IDiscoveryCoordinator` executing in a host-owned DI scope bound to application shutdown so closing a browser tab never interrupts an in-progress discovery.
+- **Outage-safe alert holding (T7.R20):** probe-driven alerts (`container-state`, `docker-status-unavailable`, `unit-failed`), resource thresholds on stale metrics, and failed auth-log scans stay held during outages or truncated probes (up to 24 h) instead of falsely resolving; restart-count increases across unsampled gaps no longer open fresh restart-loop alerts.
+- **`edit_config` hardening (T7.R28):** requires a matching `Services` rule with a validation command; uses dot-prefixed temp and backup files so wildcard globs (`sites-enabled/*`) never include them; verifies staged file hash and non-symlink status as root; verifies and recovers on lost connection during apply; preserves CRLF and final-newline changes in unified diffs.
+- **UI & updates polish (T7.R10):** `apply_updates` automatically re-runs the server's enabled health checks and appends results to the action output; live **Groups** list in the sidebar linking to `/servers?group=…`; SSH-config import offers groups in use; Topology adds a **Subnet** filter across all views.
+- **Monitoring & secret handling (T7.R5–T7.R7):** HTTPS/private-host enforcement for endpoints receiving credentials; Docker `Cmd`/labels and raw `nginx -T` secret redaction before storage; relative nginx `include` resolution; bounded background notification queue; SQLite UTC-tick metric time filters; cross-source sudo event deduplication.
 
-- A command's start no longer blocks the cycle's thread: with a frozen jump host the alert cycle took 31 s (deadline 25 s, interval 30 s); it now ends within its deadline.
-- Security alerts of a host whose status probe fails stay open instead of ageing out after 5 minutes.
-- A server that closes the connection during login (sshd MaxAuthTries, login penalties) counts as a failed login, so the three-attempt cap applies to it too.
-- Health checks of a host whose login failed keep running (they use no SSH).
-- A container query that fails half-way is a failed sample; a stored container history with a missing field is reported as corrupt instead of stopping every alert evaluation.
+## 0.2.0 — 2026-11-16
 
-Independent review of the sudo password (T7.R24), its lockout safety and alert, and the auth-retry cap:
-
-- The 15 s sudo authentication window starts when the password is sent; a slow connect no longer uses it up and lets a second password sudo start while the first is still being checked.
-- A wrong sudo password whose rejection cannot be stored (database error) still pauses sudo on that server in the running app instead of being sent again.
+- **Servers map view & SSH visibility (T8.11–T8.18):** Servers card map view grouped by role with aggregated port arrows, grouped unknown machines, real hostnames and service ports, nginx `set` variable resolution, BusyBox (Alpine) host/listener fallback, external client separation, and per-server inbound SSH session listing with allowed source IP/CIDR rules and map warnings.
+- **Agent & workflow upgrades (T8.1–T8.10):** `edit_config` with backup, validation, reload, health check, and automatic rollback; approval card Impact preview and package-restart awareness; global top-bar search; automatic TOFU `known_hosts` with explicit key-change acceptance; chat attachments, reasoning effort selector, Markdown rendering, and configurable tool-call limits with Continue and loop guard; Updates select-all/security-only and package source listing; icon-only theme toggle.
+- **SSH lifecycle, sudo password & container monitoring (T7.R15, T7.R17–T7.R19, T7.R24–T7.R26):** leased pooled SSH clients, command-timeout backoff, cycle deadlines and fast SIGTERM shutdown, container state alerts (`paused`, `created`/`removing` > 10 min) and Docker permission reporting, `ssh-auth-failed` rule with 3-attempt pause cap, and optional per-server stdin sudo password with marker confirmation, lockout protection, and cross-server redaction.
+- Includes independent review fixes (r1–r4) for SSH backoff, health checks, restart-loop detection, cycle deadlines, sudo authentication window, and redaction.
 
 ## 0.1.2 — 2026-11-15
 
