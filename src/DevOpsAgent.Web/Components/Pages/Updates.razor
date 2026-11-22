@@ -3,6 +3,7 @@
 @using DevOpsAgent.Application.Updates
 @using DevOpsAgent.Domain.Updates
 @inject UpdatesService UpdateService
+@inject UpdateScheduleService UpdateSchedule
 @inject ApprovalService Approvals
 @inject ActionExecutionService ActionExecution
 @inject ToolCommandBuilder CommandBuilder
@@ -14,7 +15,17 @@
     <header class="ui-card-header">
         <div>
             <h2 id="updates-title">Available updates</h2>
-            <p class="muted">Review package changes by server. Security updates are marked separately.</p>
+            <p class="muted">
+                Review package changes by server. Security updates are marked separately.
+                @if (_scheduleIntervalHours > 0)
+                {
+                    <span> · Automatic scan every @_scheduleIntervalHours h (<a href="/settings">change</a>)</span>
+                }
+                else
+                {
+                    <span> · Automatic scans disabled (<a href="/settings">enable</a>)</span>
+                }
+            </p>
         </div>
         <button class="ui-button secondary" type="button" disabled="@_scanning" @onclick="ScanAsync">
             @(_scanning ? "Scanning…" : "Scan servers")
@@ -177,13 +188,19 @@
     private bool _scanning;
     private bool _busy;
     private Guid? _pendingId;
+    private int _scheduleIntervalHours = UpdateScheduleService.DefaultIntervalHours;
 
     protected override Task OnInitializedAsync() => LoadAsync();
 
     private async Task LoadAsync()
     {
         _loading = true;
-        try { _servers.Clear(); _servers.AddRange(await UpdateService.ListAsync(CancellationToken.None)); }
+        try
+        {
+            _scheduleIntervalHours = await UpdateSchedule.GetIntervalHoursAsync(CancellationToken.None);
+            _servers.Clear();
+            _servers.AddRange(await UpdateService.ListAsync(CancellationToken.None));
+        }
         catch (Exception exception) { _message = exception.Message; _isError = true; }
         finally { _loading = false; }
     }

@@ -17,7 +17,9 @@ public sealed class AlertSignalSource(
     DriftService drift,
     ContainerRestartMonitor containerRestarts,
     TimeProvider timeProvider,
-    MonitoringCycleOptions? cycleOptions = null) : IAlertSignalSource
+    MonitoringCycleOptions? cycleOptions = null,
+    IUpdateScanRepository? updateScans = null,
+    IUpdatePackageRepository? updatePackages = null) : IAlertSignalSource
 {
     private const int MaxParallelServers = 8;
 
@@ -26,6 +28,9 @@ public sealed class AlertSignalSource(
 
     /// <summary>The alert rule of a rejected stored sudo password (D-040 amendment 2), Medium, one per server.</summary>
     public const string SudoAuthFailedRule = "sudo-auth-failed";
+
+    /// <summary>The alert rule for pending OS security updates from the latest update scan (T9.1), Medium, one per server.</summary>
+    public const string SecurityUpdatesRule = "security-updates-available";
 
     private readonly MonitoringCycleOptions _cycle = cycleOptions ?? new MonitoringCycleOptions();
 
@@ -177,8 +182,39 @@ public sealed class AlertSignalSource(
             }
         }
 
+        var scansByServer = updateScans is null
+            ? null
+            : (await updateScans.ListAsync(cancellationToken)).ToDictionary(scan => scan.ServerId);
+        var securityPackagesByServer = updatePackages is null
+            ? null
+            : (await updatePackages.ListAsync(cancellationToken))
+                .Where(package => package.IsSecurity)
+                .ToLookup(package => package.ServerId);
+
         foreach (var server in inventory)
         {
+            if (scansByServer is not null && securityPackagesByServer is not null
+                && scansByServer.TryGetValue(server.Id, out var latestScan))
+            {
+                if (!string.IsNullOrWhiteSpace(latestScan.Error))
+                {
+                    // Latest update scan failed: hold any open security-update alert instead of resolving from a failed scan.
+                    heldScopes.Add(new HeldRuleScope(server.Id, SecurityUpdatesRule));
+                }
+                else
+                {
+                    var pendingSecurity = securityPackagesByServer[server.Id].Select(pkg => pkg.Name).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+                    if (pendingSecurity.Length > 0)
+                    {
+                        var sampleNames = string.Join(", ", pendingSecurity.Take(5));
+                        var overflow = pendingSecurity.Length > 5 ? $" (+{pendingSecurity.Length - 5} more)" : string.Empty;
+                        result.Add(Condition(SecurityUpdatesRule, server.Id.ToString("N"), AlertSeverity.Medium, server.Id, server.Name,
+                            $"{server.Name}: {pendingSecurity.Length} security update(s) available",
+                            $"Latest update scan ({latestScan.CheckedAtUtc:yyyy-MM-dd HH:mm} UTC) found {pendingSecurity.Length} pending security package(s): {sampleNames}{overflow}. Review and apply them on the Updates page."));
+                    }
+                }
+            }
+
             // Read from the stored state, not from a probe, so it neither needs nor waits for SSH: open from the rejection until
             // a password sudo succeeds again or the password is removed (an edit alone is not proof). Fixed text only; never
             // the password, a command or server output.

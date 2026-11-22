@@ -3,6 +3,7 @@
 @inject ProviderService Providers
 @inject ProviderStatusState ProviderStatus
 @inject DiscoveryScheduleService DiscoverySchedule
+@inject DevOpsAgent.Application.Updates.UpdateScheduleService UpdateSchedule
 @inject ExecutionModeService ExecutionModes
 @inject NotificationService Notifications
 @inject ToolCallLimitService ToolLimits
@@ -88,6 +89,31 @@
             </div>
             <button class="ui-button primary" type="button" disabled="@_savingDiscovery" @onclick="SaveDiscoveryIntervalAsync">
                 @(_savingDiscovery ? "Saving…" : "Save interval")
+            </button>
+        </section>
+
+        <section class="ui-card discovery-settings-card" aria-labelledby="update-schedule-title">
+            <h2 id="update-schedule-title">Scheduled update scans</h2>
+            <p class="muted">Check inventoried servers automatically for OS updates and alert when security updates are pending. Read-only groups remain cache-only.</p>
+            @if (!string.IsNullOrWhiteSpace(_updateScheduleMessage))
+            {
+                <div class="settings-message success" role="status">@_updateScheduleMessage</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(_updateScheduleError))
+            {
+                <div class="settings-message error" role="alert">@_updateScheduleError</div>
+            }
+            <div class="field discovery-interval-field">
+                <label for="update-scan-interval">Scan for updates every</label>
+                <div class="discovery-interval-input">
+                    <input id="update-scan-interval" class="mono" type="number" min="@DevOpsAgent.Application.Updates.UpdateScheduleService.MinimumIntervalHours"
+                           max="@DevOpsAgent.Application.Updates.UpdateScheduleService.MaximumIntervalHours" value="@_updateScanIntervalHours" @oninput="UpdateScanIntervalChanged" />
+                    <span>hours (0 = disabled)</span>
+                </div>
+                <span class="field-helper">Choose 0 to disable, or between 1 and 168 hours. Default is 24 hours.</span>
+            </div>
+            <button class="ui-button primary" type="button" disabled="@_savingUpdateSchedule" @onclick="SaveUpdateScanIntervalAsync">
+                @(_savingUpdateSchedule ? "Saving…" : "Save update schedule")
             </button>
         </section>
     }
@@ -356,6 +382,10 @@
     private bool _savingDiscovery;
     private string? _discoveryMessage;
     private string? _discoveryError;
+    private int _updateScanIntervalHours = DevOpsAgent.Application.Updates.UpdateScheduleService.DefaultIntervalHours;
+    private bool _savingUpdateSchedule;
+    private string? _updateScheduleMessage;
+    private string? _updateScheduleError;
     private readonly List<ExecutionModePolicy> _executionPolicies = [];
     private bool _executionLoaded;
     private bool _executionUnreadable;
@@ -479,6 +509,7 @@
         if (section == "Discovery" && !_discoveryLoaded)
         {
             _discoveryIntervalHours = await DiscoverySchedule.GetIntervalHoursAsync(CancellationToken.None);
+            _updateScanIntervalHours = await UpdateSchedule.GetIntervalHoursAsync(CancellationToken.None);
             _discoveryLoaded = true;
         }
         if (section == "Execution modes" && !_executionLoaded)
@@ -615,6 +646,36 @@
         finally
         {
             _savingDiscovery = false;
+        }
+    }
+
+    private void UpdateScanIntervalChanged(ChangeEventArgs args)
+    {
+        if (int.TryParse(args.Value?.ToString(), out var hours))
+        {
+            _updateScanIntervalHours = hours;
+        }
+    }
+
+    private async Task SaveUpdateScanIntervalAsync()
+    {
+        _savingUpdateSchedule = true;
+        _updateScheduleMessage = null;
+        _updateScheduleError = null;
+        try
+        {
+            await UpdateSchedule.SaveIntervalHoursAsync(_updateScanIntervalHours, CancellationToken.None);
+            _updateScheduleMessage = _updateScanIntervalHours == 0
+                ? "Scheduled update scans disabled."
+                : $"Scheduled update scans set to every {_updateScanIntervalHours} hour(s).";
+        }
+        catch (ArgumentOutOfRangeException exception)
+        {
+            _updateScheduleError = exception.Message;
+        }
+        finally
+        {
+            _savingUpdateSchedule = false;
         }
     }
 
