@@ -160,7 +160,9 @@ public sealed class ContainerRestartMonitor(IAppSettingRepository settings, Time
                 previousCycleAt = cycle.AtUtc;
                 if (status is null) { previous = null; continue; }
                 var sameContainer = previous is not null && previous.Id == status.Id;
-                var increase = sameContainer ? Math.Max(0, status.RestartCount - previous!.RestartCount) : 0;
+                // A restart-count increase across an unsampled gap (outage/app stopped) could have happened hours ago,
+                // not inside the last 10 minutes; never open a fresh restart-loop alert from an unobserved gap (T7.R20).
+                var increase = sameContainer && !afterGap ? Math.Max(0, status.RestartCount - previous!.RestartCount) : 0;
                 var restarting = sameContainer && IsRestarting(status) && IsRestarting(previous!);
                 // The server was not sampled for a while (outage, app stopped). A loop that was open before the gap stays
                 // open until 10 quiet minutes have been seen in fresh samples after it, not until the old restarts age out.

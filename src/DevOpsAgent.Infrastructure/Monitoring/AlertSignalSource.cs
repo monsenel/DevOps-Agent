@@ -29,10 +29,14 @@ public sealed class AlertSignalSource(
 
     private readonly MonitoringCycleOptions _cycle = cycleOptions ?? new MonitoringCycleOptions();
 
-    public async Task<IReadOnlyList<AlertCondition>> GetActiveConditionsAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<AlertCondition>> GetActiveConditionsAsync(CancellationToken cancellationToken) =>
+        (await EvaluateSignalsAsync(cancellationToken)).Conditions;
+
+    public async Task<AlertEvaluationSnapshot> EvaluateSignalsAsync(CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
         var result = new List<AlertCondition>();
+        var heldScopes = new List<HeldRuleScope>();
         var inventory = await servers.ListAsync(cancellationToken);
 
         // SSH phase, bounded in parallel (T7.R1): a host in backoff fails immediately, so one dead server never delays the
@@ -78,6 +82,16 @@ public sealed class AlertSignalSource(
             // case this server is merely unreachable (the jump host raises its own mismatch alert).
             var mismatchIsOwn = hostKeyMismatch is not null && hostKeyMismatch.Port == server.Port
                 && string.Equals(hostKeyMismatch.Host, server.Host, StringComparison.OrdinalIgnoreCase);
+            if (remoteStatus is null)
+            {
+                // T7.R20 / D-061: the live status probe did not return a complete result (unreachable, auth failed,
+                // host-key mismatch, cycle deadline, or truncated output). Hold already-open probe-driven alerts
+                // instead of resolving them from missing data.
+                heldScopes.Add(new HeldRuleScope(server.Id, "container-state"));
+                heldScopes.Add(new HeldRuleScope(server.Id, "docker-status-unavailable"));
+                heldScopes.Add(new HeldRuleScope(server.Id, "unit-failed"));
+            }
+
             if (hostKeyMismatch is not null && !mismatchIsOwn)
             {
                 result.Add(Condition("server-unreachable", server.Id.ToString("N"), AlertSeverity.High, server.Id, server.Host,
@@ -113,6 +127,14 @@ public sealed class AlertSignalSource(
                     $"{server.Name} is unreachable", unreachable?.Message
                         ?? $"The scheduled read-only SSH status probe failed: {probeFailure ?? "no usable answer"}."));
             }
+            else if (!remoteStatus.IsComplete)
+            {
+                // Exit 0 without both probe markers (truncated output): the host answered, so do not call it unreachable,
+                // but hold existing container/unit alerts rather than treating missing markers as "no containers / no failures" (T7.R20).
+                heldScopes.Add(new HeldRuleScope(server.Id, "container-state"));
+                heldScopes.Add(new HeldRuleScope(server.Id, "docker-status-unavailable"));
+                heldScopes.Add(new HeldRuleScope(server.Id, "unit-failed"));
+            }
             else
             {
                 // A Docker permission failure must not look like "no containers" (T7.R18). The message is fixed text: no
@@ -132,10 +154,13 @@ public sealed class AlertSignalSource(
                 foreach (var unit in remoteStatus.FailedUnits)
                     result.Add(Condition("unit-failed", $"{server.Id:N}:{unit}", AlertSeverity.High, server.Id,
                         unit, $"Service {unit} failed", "systemctl reports this service in its failed state."));
+            }
 
-                var latest = await metrics.GetLatestAsync(server.Id, cancellationToken);
-                if (latest.Count > 0)
-                {
+            // T7.R20: disk, memory and load thresholds read stored metric samples and do not need the SSH status probe.
+            // When the latest sample is stale or absent (e.g. outage), hold existing threshold alerts instead of resolving them.
+            var latest = await metrics.GetLatestAsync(server.Id, cancellationToken);
+            if (latest.Count > 0 && now - latest.Max(item => item.AtUtc) <= ContainerRestartMonitor.MaxSampleAge)
+            {
                 var recent = await metrics.GetRecentAsync(server.Id, now - TimeSpan.FromMinutes(5) - SustainedThreshold.LookbackSlack, cancellationToken);
                 AddThreshold(recent, "disk_percent", "disk", 90, TimeSpan.Zero, AlertSeverity.High, "Disk usage is at least 90%", result, server.Id, server.Name);
                 AddThreshold(recent, "memory_percent", "memory", 90, TimeSpan.FromMinutes(5), AlertSeverity.High, "Memory usage has stayed at least 90% for 5 minutes", result, server.Id, server.Name);
@@ -143,7 +168,12 @@ public sealed class AlertSignalSource(
                 if (cpuCores is > 0)
                     AddThreshold(recent, "load_1m", "load", cpuCores.Value * 2, TimeSpan.FromMinutes(5), AlertSeverity.Medium,
                         $"Load has stayed above {cpuCores.Value * 2:0} for 5 minutes", result, server.Id, server.Name, strict: true);
-                }
+            }
+            else
+            {
+                heldScopes.Add(new HeldRuleScope(server.Id, "threshold-disk"));
+                heldScopes.Add(new HeldRuleScope(server.Id, "threshold-memory"));
+                heldScopes.Add(new HeldRuleScope(server.Id, "threshold-load"));
             }
         }
 
@@ -183,7 +213,7 @@ public sealed class AlertSignalSource(
             }
         }
 
-        return result;
+        return new AlertEvaluationSnapshot(result, heldScopes);
     }
 
     // Fixed text only (D-028 for the notification; the alert details never hold the password, a command or server output).
@@ -241,14 +271,18 @@ public sealed class AlertSignalSource(
             var status = RemoteServiceStatusParser.Parse(response.StandardOutput);
             // Same non-interactive sudo fallback as the metric cycle's container query, only when Docker refused the user
             // and the server is known to allow sudo. It is the same read-only command, so no server write happens.
-            if (status.Docker == DockerFailure.PermissionDenied && server.CanUseSudo)
+            if (status.IsComplete && status.Docker == DockerFailure.PermissionDenied && server.CanUseSudo)
             {
                 try
                 {
                     // Bounded by the cycle, not by the probe timeout, so a password sudo (which needs 20 s left, T7.R25) can run.
                     var retry = await sshRunner.RunAsync(serverId, StatusCommand,
                         options with { Timeout = _cycle.AlertCycleDeadline, UseSudo = true, NotAfterUtc = cycleEnd }, cycleToken);
-                    if (retry.ExitCode == 0) status = RemoteServiceStatusParser.Parse(retry.StandardOutput);
+                    if (retry.ExitCode == 0)
+                    {
+                        var retriedStatus = RemoteServiceStatusParser.Parse(retry.StandardOutput);
+                        if (retriedStatus.IsComplete) status = retriedStatus;
+                    }
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException and not HostUnreachableException
                     and not SshHostKeyMismatchException) { /* keep the refused result: it is reported below */ }

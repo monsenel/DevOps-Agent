@@ -8,6 +8,12 @@ namespace DevOpsAgent.Application.Monitoring;
 public sealed class AlertService(IAlertRepository alerts, IAlertSignalSource signals, TimeProvider timeProvider,
     IAlertNotificationService notifications, ILogger<AlertService> logger, IKnownSecrets? knownSecrets = null)
 {
+    /// <summary>
+    /// Maximum time an open/acknowledged alert is held without a fresh observation before expiring (T7.R20, D-058/D-061).
+    /// Matches <see cref="ContainerRestartMonitor.HistoryLimit"/> so a permanently retired host never holds stale alerts forever.
+    /// </summary>
+    public static readonly TimeSpan MaxHoldDuration = TimeSpan.FromHours(24);
+
     public async Task<IReadOnlyList<AlertDto>> ListAsync(AlertState? state, CancellationToken cancellationToken) =>
         (await alerts.ListAsync(state, cancellationToken)).Select(ToDto).ToArray();
 
@@ -17,8 +23,12 @@ public sealed class AlertService(IAlertRepository alerts, IAlertSignalSource sig
     public async Task EvaluateAsync(CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
+        var evaluation = await signals.EvaluateSignalsAsync(cancellationToken);
         // Duplicate keys must never break an evaluation cycle: keep the first condition/alert per key and log the rest.
-        var conditions = Distinct(await signals.GetActiveConditionsAsync(cancellationToken), item => item.Key, "condition");
+        var conditions = Distinct(evaluation.Conditions, item => item.Key, "condition");
+        var heldScopes = evaluation.HeldScopes
+            .Select(scope => (scope.ServerId, scope.Rule))
+            .ToHashSet();
         // Alert text can quote server output: no stored sudo password of any server is kept in it or notified (T7.R26).
         var secrets = knownSecrets is null ? [] : await knownSecrets.GetAsync(cancellationToken);
         if (secrets.Count > 0)
@@ -53,6 +63,13 @@ public sealed class AlertService(IAlertRepository alerts, IAlertSignalSource sig
 
         foreach (var item in existing.Where(item => !activeByKey.ContainsKey(item.Key) && item.State != AlertState.Resolved))
         {
+            if (item.ServerId is Guid serverId
+                && heldScopes.Contains((serverId, item.Rule))
+                && now - item.LastSeenAtUtc <= MaxHoldDuration)
+            {
+                continue;
+            }
+
             item.Resolve(now);
             resolved.Add(item);
         }

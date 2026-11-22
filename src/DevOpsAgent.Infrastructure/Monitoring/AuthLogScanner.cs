@@ -81,9 +81,9 @@ public sealed class AuthLogScanner(ISshRunner sshRunner, IAppSettingRepository s
                 new SshRunOptions(CommandTimeout, UseSudo: true, NotAfterUtc: notAfterUtc), cancellationToken);
         }
         catch (OperationCanceledException exception) when (exception is SshShutdownException || cancellationToken.IsCancellationRequested) { throw; }
-        catch (Exception) { return BuildConditions(server, ActiveWindow(state.RecentEvents, now), state.NewLoginIps, [], "Scan unavailable."); }
+        catch (Exception) { return BuildConditions(server, ActiveWindow(state.RecentEvents, state.CursorUtc), state.NewLoginIps, [], "Scan unavailable."); }
         if (response.ExitCode is not 0)
-            return BuildConditions(server, ActiveWindow(state.RecentEvents, now), state.NewLoginIps, [], "Scan unavailable.");
+            return BuildConditions(server, ActiveWindow(state.RecentEvents, state.CursorUtc), state.NewLoginIps, [], "Scan unavailable.");
 
         var (rawLog, banTools, banState) = SplitOutput(response.StandardOutput);
         var journalFailed = false;
@@ -96,9 +96,9 @@ public sealed class AuthLogScanner(ISshRunner sshRunner, IAppSettingRepository s
             else logLines.Add(line);
         }
         // The journal could not be read and there is no auth.log to fall back on: report the scan as unavailable and keep the
-        // cursor, so the next scan reads the same window again instead of skipping it.
+        // cursor, so the next scan reads the same window again instead of skipping it (and age by CursorUtc, not wall clock, T7.R20).
         if (journalFailed)
-            return BuildConditions(server, ActiveWindow(state.RecentEvents, now), state.NewLoginIps, [], "Scan unavailable.");
+            return BuildConditions(server, ActiveWindow(state.RecentEvents, state.CursorUtc), state.NewLoginIps, [], "Scan unavailable.");
         var log = string.Join('\n', logLines);
         var banSummary = FormatBanSummary(banTools, banState);
         var parsed = AuthLogParser.Parse(log, now, serverOffset)

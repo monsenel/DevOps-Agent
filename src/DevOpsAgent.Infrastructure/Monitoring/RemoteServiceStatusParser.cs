@@ -15,7 +15,7 @@ public enum DockerFailure
 
 public sealed record RemoteContainerStatus(string Name, string State);
 public sealed record RemoteServiceStatus(IReadOnlyList<RemoteContainerStatus> Containers, IReadOnlyList<string> FailedUnits,
-    DockerFailure Docker = DockerFailure.None);
+    DockerFailure Docker = DockerFailure.None, bool IsComplete = true);
 
 public static class RemoteServiceStatusParser
 {
@@ -28,6 +28,7 @@ public static class RemoteServiceStatusParser
     {
         var dockerStart = output.IndexOf(DockerMarker, StringComparison.Ordinal);
         var systemdStart = output.IndexOf(SystemdMarker, StringComparison.Ordinal);
+        var isComplete = dockerStart >= 0 && systemdStart >= 0 && systemdStart > dockerStart;
         var dockerText = dockerStart < 0 ? string.Empty : output[(dockerStart + DockerMarker.Length)..(systemdStart < 0 ? output.Length : systemdStart)];
         var systemdText = systemdStart < 0 ? string.Empty : output[(systemdStart + SystemdMarker.Length)..];
         var failure = dockerText.Contains(DockerDeniedMarker, StringComparison.Ordinal) ? DockerFailure.PermissionDenied
@@ -42,6 +43,6 @@ public static class RemoteServiceStatusParser
             .Select(line => line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
             .Select(parts => parts.FirstOrDefault(part => part.EndsWith(".service", StringComparison.Ordinal)))
             .Where(name => name is not null).Select(name => name!).Distinct(StringComparer.Ordinal).ToArray();
-        return new RemoteServiceStatus(containers, units, failure);
+        return new RemoteServiceStatus(containers, units, failure, isComplete);
     }
 }
