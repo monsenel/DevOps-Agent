@@ -1,6 +1,7 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JavaScript
 @inject DiscoveryTriggerState DiscoveryTrigger
+@inject DevOpsAgent.Application.Discovery.IDiscoveryCoordinator DiscoveryCoordinator
 @implements IDisposable
 
 <header class="top-bar">
@@ -26,7 +27,7 @@
     </button>
     @if (IsOverview)
     {
-        <Button Disabled="@DiscoveryTrigger.IsRunning" OnClick="RequestDiscovery">@(DiscoveryTrigger.IsRunning ? "Discovering…" : "Run discovery")</Button>
+        <Button Disabled="@IsDiscovering" OnClick="RequestDiscovery">@(IsDiscovering ? "Discovering…" : "Run discovery")</Button>
     }
 </header>
 
@@ -39,11 +40,13 @@
     private string ThemeToggleLabel => ToggleLabel(ThemeName);
 
     private bool IsOverview => Navigation.ToBaseRelativePath(Navigation.Uri).TrimEnd('/') is "";
+    private bool IsDiscovering => DiscoveryTrigger.IsRunning || DiscoveryCoordinator.IsRunning;
 
     protected override void OnInitialized()
     {
         Navigation.LocationChanged += OnLocationChanged;
         DiscoveryTrigger.Changed += OnDiscoveryChanged;
+        DiscoveryCoordinator.StateChanged += OnDiscoveryChanged;
     }
 
     // The path only: a query (search deep links such as /topology?node=…) does not change the title.
@@ -91,5 +94,6 @@
     {
         Navigation.LocationChanged -= OnLocationChanged;
         DiscoveryTrigger.Changed -= OnDiscoveryChanged;
+        DiscoveryCoordinator.StateChanged -= OnDiscoveryChanged;
     }
 }

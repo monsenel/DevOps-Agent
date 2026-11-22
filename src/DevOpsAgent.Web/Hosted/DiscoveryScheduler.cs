@@ -5,6 +5,7 @@ namespace DevOpsAgent.Web.Hosted;
 
 public sealed class DiscoveryScheduler(
     IServiceScopeFactory scopeFactory,
+    IDiscoveryCoordinator discoveryCoordinator,
     TimeProvider timeProvider,
     IHostApplicationLifetime lifetime,
     ILogger<DiscoveryScheduler> logger) : BackgroundService
@@ -45,14 +46,13 @@ public sealed class DiscoveryScheduler(
                 using var scope = scopeFactory.CreateScope();
                 var schedule = scope.ServiceProvider.GetRequiredService<DiscoveryScheduleService>();
                 var snapshots = scope.ServiceProvider.GetRequiredService<ISnapshotRepository>();
-                var discovery = scope.ServiceProvider.GetRequiredService<DiscoveryService>();
                 var intervalHours = await schedule.GetIntervalHoursAsync(stoppingToken);
                 var latest = await snapshots.GetLatestRunAsync(stoppingToken);
                 var referenceTime = latest?.StartedAtUtc > lastAttemptAt ? latest.StartedAtUtc : lastAttemptAt;
                 if (timeProvider.GetUtcNow() < referenceTime.AddHours(intervalHours)) continue;
 
                 lastAttemptAt = timeProvider.GetUtcNow();
-                var snapshot = await discovery.RunAsync(progress: null, stoppingToken);
+                var snapshot = await discoveryCoordinator.RunAsync(progress: null, stoppingToken);
                 logger.LogInformation("Scheduled discovery {SnapshotId} completed with {SucceededServers} succeeded and {FailedServers} failed servers.",
                     snapshot.Id, snapshot.SucceededServerCount, snapshot.FailedServerCount);
             }

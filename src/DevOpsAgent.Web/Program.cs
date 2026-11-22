@@ -42,6 +42,8 @@ builder.Services.AddScoped<IAlertNotificationService>(provider => provider.GetRe
 builder.Services.AddScoped<ServerService>();
 builder.Services.AddScoped<ServerCapabilityService>();
 builder.Services.AddScoped<DiscoveryService>();
+builder.Services.AddSingleton<IDiscoveryScopeRunner, HostDiscoveryScopeRunner>();
+builder.Services.AddSingleton<IDiscoveryCoordinator, DiscoveryCoordinator>();
 builder.Services.AddScoped<DriftService>();
 builder.Services.AddScoped<DiscoveryScheduleService>();
 builder.Services.AddSingleton<ToolRegistry>();

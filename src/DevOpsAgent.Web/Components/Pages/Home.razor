@@ -17,7 +17,7 @@
 @inject MetricService Metrics
 @inject DriftService DriftManager
 @inject ProviderService Providers
-@inject DiscoveryService Discovery
+@inject IDiscoveryCoordinator Discovery
 @inject DiscoveryTriggerState DiscoveryTrigger
 @inject NavigationManager Navigation
 
@@ -224,12 +224,14 @@
     private int _highAlerts;
     private bool _updatesChecked;
 
+    private readonly CancellationTokenSource _disposeCts = new();
     private string LastDiscoverySummary => DiscoveryStatusText.Describe(_latestRun, _latestSnapshot, _driftChanges.Count);
 
     protected override async Task OnInitializedAsync()
     {
         DiscoveryTrigger.RunRequested += HandleRunRequested;
         DiscoveryTrigger.Changed += HandleDiscoveryChanged;
+        Discovery.StateChanged += HandleDiscoveryChanged;
         await LoadOverviewAsync(CancellationToken.None);
     }
 
@@ -332,13 +334,17 @@
 
     private async Task RunDiscoveryAsync()
     {
-        if (DiscoveryTrigger.IsRunning || _servers.Count == 0) return;
+        if (DiscoveryTrigger.IsRunning || Discovery.IsRunning || _servers.Count == 0) return;
         DiscoveryTrigger.SetRunning(true);
         _pageError = null;
         try
         {
-            _ = await Discovery.RunAsync(null, CancellationToken.None);
-            await LoadOverviewAsync(CancellationToken.None);
+            _ = await Discovery.RunAsync(null, _disposeCts.Token);
+            await LoadOverviewAsync(_disposeCts.Token);
+        }
+        catch (OperationCanceledException) when (_disposeCts.IsCancellationRequested)
+        {
+            // The tab closed; the host-owned discovery run continues to completion.
         }
         catch (Exception exception)
         {
@@ -382,8 +388,11 @@
 
     public void Dispose()
     {
+        _disposeCts.Cancel();
+        _disposeCts.Dispose();
         DiscoveryTrigger.RunRequested -= HandleRunRequested;
         DiscoveryTrigger.Changed -= HandleDiscoveryChanged;
+        Discovery.StateChanged -= HandleDiscoveryChanged;
     }
 
     private sealed record LoadRow(string Name, int Percent, string Value);

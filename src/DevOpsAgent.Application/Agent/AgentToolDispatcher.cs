@@ -18,7 +18,8 @@ public sealed class AgentToolDispatcher(
     ISnapshotRepository snapshots,
     DiscoveryService discovery,
     ISshRunner sshRunner,
-    ConfigEditService? configEdits = null)
+    ConfigEditService? configEdits = null,
+    IDiscoveryCoordinator? discoveryCoordinator = null)
 {
     public async Task<AgentToolResult> DispatchAsync(
         string name,
@@ -54,11 +55,23 @@ public sealed class AgentToolDispatcher(
         {
             var request = (RunDiscoveryArgs)validated;
             if (request.ServerIds is null || request.ServerIds.Count == 0)
-                return new(name, $"Discovery completed. Snapshot { (await discovery.RunAsync(null, cancellationToken)).Id}.",
+            {
+                var snapshot = discoveryCoordinator is not null
+                    ? await discoveryCoordinator.RunAsync(null, cancellationToken)
+                    : await discovery.RunAsync(null, cancellationToken);
+                return new(name, $"Discovery completed. Snapshot {snapshot.Id}.",
                     ReadOnlyServerIds: (await servers.ListAsync(cancellationToken)).Select(server => server.Id).ToArray());
+            }
+
             var snapshotsCreated = new List<Guid>();
             foreach (var serverId in request.ServerIds)
-                snapshotsCreated.Add((await discovery.RunServerAndMergeAsync(serverId, null, cancellationToken)).Id);
+            {
+                var merged = discoveryCoordinator is not null
+                    ? await discoveryCoordinator.RunServerAndMergeAsync(serverId, null, cancellationToken)
+                    : await discovery.RunServerAndMergeAsync(serverId, null, cancellationToken);
+                snapshotsCreated.Add(merged.Id);
+            }
+
             return new(name, $"Discovery completed for {snapshotsCreated.Count} server(s). Snapshot {snapshotsCreated.Last()}.",
                 ReadOnlyServerIds: request.ServerIds.Distinct().ToArray());
         }

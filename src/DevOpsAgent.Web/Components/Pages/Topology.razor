@@ -3,7 +3,7 @@
 @inject IJSRuntime JavaScript
 @inject IGraphRepository GraphRepository
 @inject ISnapshotRepository SnapshotRepository
-@inject DiscoveryService Discovery
+@inject IDiscoveryCoordinator Discovery
 @inject ServerService ServersService
 @inject NavigationManager Navigation
 @inject AlertService AlertManager
@@ -302,9 +302,10 @@
     private string? _traceMessage;
     private IReadOnlySet<string> _tracedNodeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     private IReadOnlySet<string> _tracedEdgeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    private readonly CancellationTokenSource _disposeCts = new();
     private string? _pageError;
     private string? _progressMessage;
-    private bool _discovering;
+    private bool _discovering => Discovery.IsRunning;
     private int _completedServers;
     // The Servers view draws the Service-view data as one card per server; the Application GraphView has no value for it.
     private enum TopologyView { Servers, Service, Network }
@@ -376,6 +377,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        Discovery.StateChanged += HandleDiscoveryStateChanged;
         _servers = await ServersService.ListAsync(CancellationToken.None);
         var activeAlerts = await AlertManager.ListAsync(null, CancellationToken.None);
         _serverAlertStatuses = activeAlerts.Where(alert => alert.ServerId is not null && alert.State != AlertState.Resolved)
@@ -459,8 +461,7 @@
 
     private async Task RunDiscoveryAsync()
     {
-        if (_discovering) return;
-        _discovering = true;
+        if (Discovery.IsRunning) return;
         _pageError = null;
         _completedServers = 0;
         _progressMessage = "Preparing discovery…";
@@ -468,6 +469,7 @@
         {
             var progress = new Progress<DiscoveryProgress>(item =>
             {
+                if (_disposeCts.IsCancellationRequested) return;
                 if (item.Stage == DiscoveryProgressStage.ServerCompleted) _completedServers++;
                 _progressMessage = item.Message ?? item.Stage switch
                 {
@@ -480,20 +482,26 @@
                 };
                 _ = InvokeAsync(StateHasChanged);
             });
-            _snapshot = await Discovery.RunAsync(progress, CancellationToken.None);
+            _snapshot = await Discovery.RunAsync(progress, _disposeCts.Token);
             _latestRun = _snapshot;
             await LoadGraphAsync(_snapshot.Id);
             _progressMessage = $"Discovery finished: {_snapshot.SucceededServerCount} succeeded, {_snapshot.FailedServerCount} failed.";
             await PushGraphAsync();
         }
+        catch (OperationCanceledException) when (_disposeCts.IsCancellationRequested)
+        {
+            // The tab closed; the host-owned discovery run continues to completion.
+        }
         catch (Exception exception)
         {
             _pageError = $"Discovery failed: {exception.Message}";
         }
-        finally
-        {
-            _discovering = false;
-        }
+    }
+
+    private void HandleDiscoveryStateChanged()
+    {
+        if (_disposeCts.IsCancellationRequested) return;
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private async Task SearchChanged(ChangeEventArgs args)
@@ -1084,6 +1092,9 @@
 
     public async ValueTask DisposeAsync()
     {
+        Discovery.StateChanged -= HandleDiscoveryStateChanged;
+        _disposeCts.Cancel();
+        _disposeCts.Dispose();
         _dotNetReference?.Dispose();
         if (_graphModule is not null)
         {
