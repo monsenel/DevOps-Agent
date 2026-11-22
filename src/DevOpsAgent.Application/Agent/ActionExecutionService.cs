@@ -1,9 +1,12 @@
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Chat;
+using DevOpsAgent.Application.Monitoring;
 using DevOpsAgent.Domain.Agent;
+using DevOpsAgent.Domain.Monitoring;
 using DevOpsAgent.Domain.Servers;
 
 namespace DevOpsAgent.Application.Agent;
@@ -44,7 +47,8 @@ public sealed class ActionExecutionService(
     ISshRunner sshRunner,
     BanTargetGuard banGuard,
     TimeProvider timeProvider,
-    ConfigEditService? configEdits = null)
+    ConfigEditService? configEdits = null,
+    HealthCheckService? healthChecks = null)
 {
     private const int MaxParallelServers = 4;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -219,9 +223,16 @@ public sealed class ActionExecutionService(
 
             var result = await sshRunner.RunAsync(server.Id, plan.Command,
                 new SshRunOptions(TimeSpan.FromMinutes(10), plan.UseSudo), cancellationToken);
+            var stdout = ChatContentRedactor.Redact(result.StandardOutput);
+            var stderr = ChatContentRedactor.Redact(result.StandardError);
+            if (action.ToolName == "apply_updates" && result.ExitCode == 0 && healthChecks is not null)
+            {
+                stdout = await AppendPostUpdateHealthChecksAsync(server.Id, stdout, cancellationToken);
+            }
+
             // Output is masked before it is stored, so the Action log, chat and model never see raw secrets.
             return new(server.Id, server.Name, plan.Command, result.ExitCode,
-                ChatContentRedactor.Redact(result.StandardOutput), ChatContentRedactor.Redact(result.StandardError),
+                stdout, stderr,
                 (long)result.Duration.TotalMilliseconds, null, Endpoint(server), plan.UseSudo, server.HasSudoPassword);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -235,6 +246,32 @@ public sealed class ActionExecutionService(
         finally
         {
             if (acquired) throttle.Release();
+        }
+    }
+
+    private async Task<string> AppendPostUpdateHealthChecksAsync(Guid serverId, string stdout, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var checkedItems = await healthChecks!.RunForServerAsync(serverId, cancellationToken);
+            if (checkedItems.Count == 0) return stdout;
+            var report = new StringBuilder(stdout);
+            if (report.Length > 0 && !stdout.EndsWith('\n')) report.Append('\n');
+            report.AppendLine("Post-update health checks:");
+            foreach (var check in checkedItems)
+            {
+                var status = check.Status == HealthCheckStatus.Healthy ? "ok" : "failed";
+                var detail = check.StatusCode is { } code ? $" · {code}" : !string.IsNullOrWhiteSpace(check.Error) ? $" · {check.Error}" : string.Empty;
+                report.AppendLine($"  {check.Name} ({check.Target}): {status}{detail}");
+            }
+
+            return ChatContentRedactor.Redact(report.ToString().TrimEnd());
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception exception)
+        {
+            var suffix = $"\nPost-update health checks could not run: {exception.Message}";
+            return stdout + suffix;
         }
     }
 }

@@ -2,6 +2,8 @@
 @inject ProviderService Providers
 @inject ProviderStatusState ProviderStatus
 @inject AlertStatusState AlertStatus
+@inject DevOpsAgent.Application.Servers.ServerService Servers
+@inject DevOpsAgent.Application.Abstractions.ServerStateEvents ServerEvents
 
 <aside class="sidebar-card" aria-label="Application sidebar">
     <a class="brand-row" href="/" aria-label="DevOps Agent home">
@@ -25,7 +27,22 @@
 
     <section class="nav-group" aria-label="Server groups">
         <h2 class="nav-section-label">Groups</h2>
-        <p class="muted">No groups yet</p>
+        @if (_groups.Count == 0)
+        {
+            <p class="muted">No groups yet</p>
+        }
+        else
+        {
+            <nav class="sidebar-nav" aria-label="Server groups">
+                @foreach (var group in _groups)
+                {
+                    <a class="nav-link" href="/servers?group=@Uri.EscapeDataString(group.Name)" @key="group.Name">
+                        <span>@group.Name</span>
+                        <span class="nav-badge">@group.Count</span>
+                    </a>
+                }
+            </nav>
+        }
     </section>
 
     <div class="sidebar-spacer"></div>
@@ -56,16 +73,36 @@
 </aside>
 
 @code {
+    private IReadOnlyList<(string Name, int Count)> _groups = [];
+
     protected override async Task OnInitializedAsync()
     {
         ProviderStatus.Changed += OnProviderStatusChanged;
         AlertStatus.Changed += OnAlertStatusChanged;
+        ServerEvents.Changed += OnServersChanged;
         var providers = await Providers.ListAsync(CancellationToken.None);
         ProviderStatus.Set(providers.FirstOrDefault(provider => provider.IsDefault));
+        await LoadGroupsAsync();
+    }
+
+    private async Task LoadGroupsAsync()
+    {
+        var list = await Servers.ListAsync(CancellationToken.None);
+        _groups = list
+            .Where(server => !string.IsNullOrWhiteSpace(server.Group))
+            .GroupBy(server => server.Group.Trim(), StringComparer.OrdinalIgnoreCase)
+            .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(group => (group.Key, group.Count()))
+            .ToArray();
     }
 
     private void OnProviderStatusChanged() => _ = InvokeAsync(StateHasChanged);
     private void OnAlertStatusChanged() => _ = InvokeAsync(StateHasChanged);
+    private void OnServersChanged(Guid serverId) => _ = InvokeAsync(async () =>
+    {
+        await LoadGroupsAsync();
+        StateHasChanged();
+    });
 
     private static string ModelStatus(LlmProviderSummary provider) => provider.LastTestSucceeded switch
     {
@@ -78,5 +115,6 @@
     {
         ProviderStatus.Changed -= OnProviderStatusChanged;
         AlertStatus.Changed -= OnAlertStatusChanged;
+        ServerEvents.Changed -= OnServersChanged;
     }
 }

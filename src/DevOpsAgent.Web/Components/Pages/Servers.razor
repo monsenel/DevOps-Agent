@@ -33,12 +33,27 @@
             <div class="settings-message success sources-saved-message" role="status">@_sourcesMessage</div>
         }
 
+        @if (!string.IsNullOrWhiteSpace(GroupFilter))
+        {
+            <div class="settings-message" role="status">
+                Showing group <strong>@GroupFilter</strong> (@VisibleServers.Count of @_servers.Count).
+                <a href="/servers">Show all groups</a>
+            </div>
+        }
+
         @if (_servers.Count == 0)
         {
             <div class="servers-empty">
                 <h3>No servers yet</h3>
                 <p class="muted">Add a host to start building your inventory.</p>
                 <button class="ui-button primary" type="button" @onclick="OpenCreate">Add server</button>
+            </div>
+        }
+        else if (VisibleServers.Count == 0)
+        {
+            <div class="servers-empty">
+                <h3>No servers in group "@GroupFilter"</h3>
+                <p class="muted"><a href="/servers">Show all servers</a></p>
             </div>
         }
         else
@@ -59,7 +74,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var server in _servers)
+                        @foreach (var server in VisibleServers)
                         {
                             <tr @key="server.Id">
                                 <th scope="row"><a href="/servers/@server.Id">@server.Name</a></th>
@@ -347,8 +362,10 @@
                 <label for="ssh-import-group">Group for imported servers</label>
                 <select id="ssh-import-group" @bind="_importGroup">
                     <option value="">Select a group</option>
-                    <option value="prod">Production</option>
-                    <option value="staging">Staging</option>
+                    @foreach (var option in ServerGroupOptions.Build(_servers.Select(server => server.Group), _importGroup))
+                    {
+                        <option value="@option.Value">@option.Label</option>
+                    }
                 </select>
             </div>
             @if (!string.IsNullOrWhiteSpace(_importError))
@@ -477,6 +494,14 @@
     /// <summary>A server id (N format): opens that server's allowed SSH sources dialog on load (linked from the map, T8.18).</summary>
     [SupplyParameterFromQuery(Name = "sshSources")]
     public Guid? SshSources { get; set; }
+
+    /// <summary>Optional server group filter linked from the sidebar Groups list (T7.R10).</summary>
+    [SupplyParameterFromQuery(Name = "group")]
+    public string? GroupFilter { get; set; }
+
+    private IReadOnlyList<ServerSummary> VisibleServers => string.IsNullOrWhiteSpace(GroupFilter)
+        ? _servers
+        : _servers.Where(server => string.Equals(server.Group, GroupFilter.Trim(), StringComparison.OrdinalIgnoreCase)).ToArray();
 
     [SupplyParameterFromQuery(Name = "unknownHost")]
     public string? UnknownHost { get; set; }

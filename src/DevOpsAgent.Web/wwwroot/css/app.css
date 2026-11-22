@@ -3509,3 +3509,29 @@ p {
 .action-impact-source {
     font-size: 12px;
 }
+
+.loading-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.skeleton-line {
+    height: 16px;
+    border-radius: 8px;
+    background: var(--dva-surface-muted);
+    animation: dva-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.skeleton-line.short {
+    width: 45%;
+}
+
+.skeleton-line.medium {
+    width: 72%;
+}
+
+@keyframes dva-skeleton-pulse {
+    0%, 100% { opacity: 0.45; }
+    50% { opacity: 0.9; }
+}

@@ -36,6 +36,13 @@ public sealed class GraphBuilder
                     Hostname = data.Host?.Hostname,
                     Tags = ParseTags(server.TagsJson),
                     Addresses = hostAddresses.Select(address => address.Address).Distinct(StringComparer.Ordinal).ToArray(),
+                    Subnets = hostAddresses
+                        .Where(address => string.Equals(address.Scope, "global", StringComparison.OrdinalIgnoreCase))
+                        .Select(address => address.SubnetCidr)
+                        .Where(cidr => !string.IsNullOrWhiteSpace(cidr))
+                        .Distinct(StringComparer.Ordinal)
+                        .Order(StringComparer.Ordinal)
+                        .ToArray(),
                     // Inbound SSH sessions are host data, not edges or Unknown nodes (T8.18).
                     SshSessions = sshSessions.Select(session => new
                     {

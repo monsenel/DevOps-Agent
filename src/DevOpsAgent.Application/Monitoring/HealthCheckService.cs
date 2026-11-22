@@ -97,6 +97,35 @@ public sealed class HealthCheckService(
         return suggestions.Values.OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
+    public async Task<IReadOnlyList<HealthCheckDto>> RunForServerAsync(Guid serverId, CancellationToken cancellationToken)
+    {
+        var now = timeProvider.GetUtcNow();
+        var enabled = (await checks.ListAsync(serverId, cancellationToken)).Where(item => item.IsEnabled).ToArray();
+        if (enabled.Length == 0) return [];
+
+        using var semaphore = new SemaphoreSlim(MaxParallelProbes);
+        var results = await Task.WhenAll(enabled.Select(async item =>
+        {
+            await semaphore.WaitAsync(cancellationToken);
+            try
+            {
+                try { return (Item: item, Result: await probe.ProbeAsync(item.Type, item.Target, cancellationToken)); }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+                catch (Exception exception) { return (Item: item, Result: new HealthProbeResult(false, null, null, exception.Message)); }
+            }
+            finally { semaphore.Release(); }
+        }));
+
+        foreach (var result in results)
+        {
+            result.Item.RecordResult(result.Result.IsHealthy, result.Result.StatusCode, result.Result.TlsDaysRemaining,
+                result.Result.Error, now);
+        }
+
+        await checks.SaveAsync(cancellationToken);
+        return results.Select(result => ToDto(result.Item)).ToArray();
+    }
+
     public async Task RunDueAsync(CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();

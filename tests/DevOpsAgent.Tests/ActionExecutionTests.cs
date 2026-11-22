@@ -2,7 +2,9 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using DevOpsAgent.Application.Agent;
 using DevOpsAgent.Application.Abstractions;
+using DevOpsAgent.Application.Monitoring;
 using DevOpsAgent.Domain.Agent;
+using DevOpsAgent.Domain.Monitoring;
 using DevOpsAgent.Domain.Servers;
 using DevOpsAgent.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
@@ -47,6 +49,58 @@ public sealed class ActionExecutionTests
             Assert.EndsWith(":22", result.Endpoint, StringComparison.Ordinal);
         });
         Assert.Contains("nginx.service", completed.CommandsJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ApplyUpdatesReRunsServersEnabledHealthChecksAndAppendsSummary()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var servers = await AddServersAsync(database.Context, 1, "staging");
+        var server = servers[0];
+        var check = new HealthCheck(server.Id, "Web HTTPS", HealthCheckType.Https, "https://app.example.test/", 60);
+        database.Context.HealthChecks.Add(check);
+        await database.Context.SaveChangesAsync();
+
+        var action = AddProposedAction(database.Context, "apply_updates", servers,
+            JsonSerializer.Serialize(new { packages = new[] { "nginx" }, serverIds = new[] { server.Id } }));
+        var runner = new TestSshRunner(output: "RESTARTED_SERVICES_BEGIN\nnginx.service\nRESTARTED_SERVICES_END\nREBOOT_REQUIRED=false\n");
+        var probe = new StubHealthProbe(new HealthProbeResult(true, 200, 45, null));
+        var healthService = new HealthCheckService(
+            new HealthCheckRepository(database.Context),
+            new ServerRepository(database.Context),
+            new SnapshotRepository(database.Context),
+            new GraphRepository(database.Context),
+            probe,
+            new DevOpsAgent.Application.Servers.HostReachabilityTracker(TimeProvider.System),
+            TimeProvider.System);
+        var executionModes = new ExecutionModeService(new AppSettingRepository(database.Context), new ServerRepository(database.Context), NullLogger<ExecutionModeService>.Instance);
+        await executionModes.SaveAsync(new ExecutionModePolicy("staging", ExecutionMode.Confirm), CancellationToken.None);
+        var registry = new ToolRegistry();
+        var execution = new ActionExecutionService(new ActionRecordRepository(database.Context), new ServerRepository(database.Context),
+            registry, executionModes, new ToolCommandBuilder(registry), runner, TestBanGuard.Create(), TimeProvider.System,
+            healthChecks: healthService);
+
+        var completed = await execution.ApproveAndRunAsync(action.Id, "admin", CancellationToken.None);
+        var entry = Assert.Single(await execution.ListAsync(CancellationToken.None));
+        var updatedCheck = await database.Context.HealthChecks.SingleAsync();
+
+        Assert.Equal(ActionRecordStatus.Succeeded, completed.Status);
+        Assert.Equal(1, probe.Calls);
+        Assert.Equal(HealthCheckStatus.Healthy, updatedCheck.LastStatus);
+        Assert.Equal(200, updatedCheck.LastStatusCode);
+        Assert.Contains("Post-update health checks:", entry.Results[0].StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("Web HTTPS (https://app.example.test/): ok · 200", entry.Results[0].StandardOutput, StringComparison.Ordinal);
+    }
+
+    private sealed class StubHealthProbe(HealthProbeResult result) : IHealthProbe
+    {
+        public int Calls { get; private set; }
+
+        public Task<HealthProbeResult> ProbeAsync(HealthCheckType type, string target, CancellationToken cancellationToken)
+        {
+            Calls++;
+            return Task.FromResult(result);
+        }
     }
 
     [Fact]

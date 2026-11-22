@@ -55,6 +55,16 @@
                 }
             </select>
         </label>
+        <label class="topology-filter">
+            <span class="visually-hidden">Filter by subnet</span>
+            <select value="@_selectedSubnet" @onchange="SubnetChanged">
+                <option value="">All subnets</option>
+                @foreach (var subnet in _subnets)
+                {
+                    <option value="@subnet">Subnet: @subnet</option>
+                }
+            </select>
+        </label>
         <button class="ui-button primary" type="button" disabled="@_discovering" @onclick="RunDiscoveryAsync">
             @(_discovering ? "Discovering…" : "Run discovery")
         </button>
@@ -298,6 +308,7 @@
     private string _search = string.Empty;
     private string _selectedTag = string.Empty;
     private string _selectedProject = string.Empty;
+    private string _selectedSubnet = string.Empty;
     private string _traceQuery = string.Empty;
     private string? _traceMessage;
     private IReadOnlySet<string> _tracedNodeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -314,6 +325,7 @@
     private GraphView CurrentGraphView => CurrentView == TopologyView.Network ? GraphView.Network : GraphView.Service;
     private IReadOnlyList<string> _tags = [];
     private IReadOnlyList<string> _projects = [];
+    private IReadOnlyList<string> _subnets = [];
     private IReadOnlyList<GraphListenerDto> _selectedListeners = [];
     private IReadOnlyList<GraphEvidenceDto> _selectedEvidence = [];
     private IReadOnlyDictionary<string, string> _serverAlertStatuses = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -528,12 +540,20 @@
         await PushGraphAsync();
     }
 
+    private async Task SubnetChanged(ChangeEventArgs args)
+    {
+        _selectedSubnet = args.Value?.ToString() ?? string.Empty;
+        UpdateVisibleNodes();
+        await PushGraphAsync();
+    }
+
     private void UpdateOptions()
     {
         if (_graph is null)
         {
             _tags = [];
             _projects = [];
+            _subnets = [];
             return;
         }
 
@@ -547,6 +567,18 @@
             .Select(data => TryGetProperty(data, "attributes", out var attributes) ? ReadString(attributes, "composeProject") : null)
             .Where(project => !string.IsNullOrWhiteSpace(project))
             .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).Select(project => project!).ToArray();
+        var hostSubnets = _graph.Nodes.Select(element => element.Data)
+            .Where(data => ReadString(data, "kind") == "Host" && TryGetProperty(data, "attributes", out _))
+            .SelectMany(data => TryGetProperty(data.GetProperty("attributes"), "subnets", out var subnets) && subnets.ValueKind == JsonValueKind.Array
+                ? subnets.EnumerateArray().Where(subnet => subnet.ValueKind == JsonValueKind.String).Select(subnet => subnet.GetString()!)
+                : []);
+        var subnetNodes = _graph.Nodes.Select(element => element.Data)
+            .Where(data => ReadString(data, "kind") == "Subnet")
+            .Select(data => ReadString(data, "label"))
+            .Where(label => !string.IsNullOrWhiteSpace(label))
+            .Select(label => label!);
+        _subnets = hostSubnets.Concat(subnetNodes)
+            .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     private void UpdateVisibleNodes()
@@ -566,20 +598,46 @@
             ? null
             : nodes.Where(node => HasProject(node, _selectedProject))
                 .Select(node => ReadString(node, "serverId")).Where(id => id is not null).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        HashSet<string>? subnetServerIds = null;
+        if (!string.IsNullOrEmpty(_selectedSubnet))
+        {
+            subnetServerIds = nodes.Where(node => ReadString(node, "kind") == "Host" && HasSubnet(node, _selectedSubnet))
+                .Select(node => ReadString(node, "serverId")).Where(id => id is not null).Select(id => id!).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var matchingSubnetNodeIds = nodes.Where(node => ReadString(node, "kind") == "Subnet"
+                    && string.Equals(ReadString(node, "label"), _selectedSubnet, StringComparison.OrdinalIgnoreCase))
+                .Select(node => ReadString(node, "id")).Where(id => id is not null).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (matchingSubnetNodeIds.Count > 0)
+            {
+                var nodeById = nodes.Where(node => ReadString(node, "id") is not null)
+                    .ToDictionary(node => ReadString(node, "id")!, StringComparer.OrdinalIgnoreCase);
+                foreach (var edge in _graph.Edges.Select(element => element.Data))
+                {
+                    var source = ReadString(edge, "source");
+                    var target = ReadString(edge, "target");
+                    if (source is not null && target is not null && matchingSubnetNodeIds.Contains(target)
+                        && nodeById.TryGetValue(source, out var connected) && ReadString(connected, "serverId") is { } connectedServerId)
+                    {
+                        subnetServerIds.Add(connectedServerId);
+                    }
+                }
+            }
+        }
 
         bool ServerMatches(JsonElement node)
         {
             var serverId = ReadString(node, "serverId");
             return serverId is not null && (taggedServerIds is null || taggedServerIds.Contains(serverId))
-                && (projectServerIds is null || projectServerIds.Contains(serverId));
+                && (projectServerIds is null || projectServerIds.Contains(serverId))
+                && (subnetServerIds is null || subnetServerIds.Contains(serverId));
         }
 
+        var hasFilter = taggedServerIds is not null || projectServerIds is not null || subnetServerIds is not null;
         var allowedIds = nodes.Where(node =>
                 (ReadString(node, "kind") == "Host" && ServerMatches(node))
                 || (ReadString(node, "kind") != "Host" && ReadString(node, "kind") != "Subnet" && ServerMatches(node)
                     && (string.IsNullOrEmpty(_selectedProject) || HasProject(node, _selectedProject))))
             .Select(node => ReadString(node, "id")).Where(id => id is not null).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (taggedServerIds is not null || projectServerIds is not null)
+        if (hasFilter)
         {
             foreach (var edge in _graph.Edges.Select(element => element.Data))
             {
@@ -587,13 +645,17 @@
                 var target = ReadString(edge, "target");
                 if (source is not null && target is not null && (allowedIds.Contains(source) || allowedIds.Contains(target)))
                 {
-                    if (nodes.Any(node => ReadString(node, "id") == source && ReadString(node, "kind") == "Subnet")) allowedIds.Add(source);
-                    if (nodes.Any(node => ReadString(node, "id") == target && ReadString(node, "kind") == "Subnet")) allowedIds.Add(target);
+                    if (nodes.Any(node => ReadString(node, "id") == source && ReadString(node, "kind") == "Subnet"
+                            && (string.IsNullOrEmpty(_selectedSubnet) || string.Equals(ReadString(node, "label"), _selectedSubnet, StringComparison.OrdinalIgnoreCase))))
+                        allowedIds.Add(source);
+                    if (nodes.Any(node => ReadString(node, "id") == target && ReadString(node, "kind") == "Subnet"
+                            && (string.IsNullOrEmpty(_selectedSubnet) || string.Equals(ReadString(node, "label"), _selectedSubnet, StringComparison.OrdinalIgnoreCase))))
+                        allowedIds.Add(target);
                 }
             }
         }
 
-        _visibleNodes = nodes.Where(node => taggedServerIds is null && projectServerIds is null
+        _visibleNodes = nodes.Where(node => !hasFilter
                 || ReadString(node, "id") is string id && allowedIds.Contains(id))
             .ToArray();
         if (_selectedId is not null && !_visibleNodes.Any(node => string.Equals(ReadString(node, "id"), _selectedId, StringComparison.OrdinalIgnoreCase)))
@@ -1017,6 +1079,11 @@
         && TryGetProperty(attributes, "tags", out var tags) && tags.ValueKind == JsonValueKind.Array
         && tags.EnumerateArray().Any(value => value.ValueKind == JsonValueKind.String
             && string.Equals(value.GetString(), tag, StringComparison.OrdinalIgnoreCase));
+
+    private static bool HasSubnet(JsonElement node, string subnet) => TryGetProperty(node, "attributes", out var attributes)
+        && TryGetProperty(attributes, "subnets", out var subnets) && subnets.ValueKind == JsonValueKind.Array
+        && subnets.EnumerateArray().Any(value => value.ValueKind == JsonValueKind.String
+            && string.Equals(value.GetString(), subnet, StringComparison.OrdinalIgnoreCase));
 
     private static bool HasProject(JsonElement node, string project) => TryGetProperty(node, "attributes", out var attributes)
         && string.Equals(ReadString(attributes, "composeProject"), project, StringComparison.OrdinalIgnoreCase);
