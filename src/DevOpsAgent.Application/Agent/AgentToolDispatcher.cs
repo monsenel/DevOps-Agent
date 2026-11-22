@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Discovery;
+using DevOpsAgent.Application.Security;
 
 namespace DevOpsAgent.Application.Agent;
 
@@ -19,7 +20,8 @@ public sealed class AgentToolDispatcher(
     DiscoveryService discovery,
     ISshRunner sshRunner,
     ConfigEditService? configEdits = null,
-    IDiscoveryCoordinator? discoveryCoordinator = null)
+    IDiscoveryCoordinator? discoveryCoordinator = null,
+    SecurityAuditService? securityAudit = null)
 {
     public async Task<AgentToolResult> DispatchAsync(
         string name,
@@ -114,6 +116,28 @@ public sealed class AgentToolDispatcher(
 
         var targetServers = await servers.ListAsync(cancellationToken);
         var selected = targetServers.Where(server => serverIds.Contains(server.Id)).ToArray();
+        if (name == "security_audit")
+        {
+            if (securityAudit is null) return new(name, "security_audit is not available.");
+            var summaries = new List<string>(selected.Length);
+            foreach (var server in selected)
+            {
+                var report = await securityAudit.RunAsync(server.Id, cancellationToken);
+                if (!string.IsNullOrWhiteSpace(report.Error))
+                {
+                    summaries.Add($"[{server.Name}] error: {report.Error}");
+                    continue;
+                }
+
+                var lines = report.Findings.Select(item =>
+                    $"  - [{item.Severity}] {item.Category}: {item.Title} — {item.Detail}"
+                    + (string.IsNullOrWhiteSpace(item.Recommendation) ? string.Empty : $" Recommendation: {item.Recommendation}"));
+                summaries.Add($"[{server.Name}] high={report.HighCount}, warnings={report.WarningCount}, passed={report.PassCount}\n{string.Join("\n", lines)}");
+            }
+
+            return new(name, string.Join("\n\n", summaries), ReadOnlyServerIds: selected.Select(server => server.Id).ToArray());
+        }
+
         var readOnly = commands.BuildReadOnly(name, approval.ValidatedArguments!);
         using var throttle = new SemaphoreSlim(4);
         var output = await Task.WhenAll(selected.Select(async server =>

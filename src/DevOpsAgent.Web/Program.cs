@@ -27,6 +27,7 @@ builder.Services.AddScoped<AgentContextBuilder>();
 builder.Services.AddScoped<AgentToolDispatcher>();
 builder.Services.AddScoped<UpdatesService>();
 builder.Services.AddScoped<UpdateScheduleService>();
+builder.Services.AddScoped<DevOpsAgent.Application.Security.SecurityAuditService>();
 builder.Services.AddScoped<ImpactService>();
 builder.Services.AddSingleton(builder.Configuration.GetSection(ConfigEditOptions.SectionName).Get<ConfigEditOptions>() ?? new ConfigEditOptions());
 builder.Services.AddScoped<ConfigEditService>();

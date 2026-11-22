@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using DevOpsAgent.Application.Agent;
+using DevOpsAgent.Application.Security;
 using DevOpsAgent.Domain.Agent;
 using DevOpsAgent.Infrastructure.Collectors;
 
@@ -127,6 +128,8 @@ public static class AppSudoCommands
             Mutating("block_ip", new { address = SentinelIpv6 }),
             Mutating("unblock_ip", new { address = SentinelIpv4 }),
             Mutating("unblock_ip", new { address = SentinelIpv6 }),
+            // Read-only security hardening audit (T9.3)
+            SecurityAuditParser.AuditCommand,
             // edit_config (T8.8 / T7.R28) with the built-in nginx rule: the sudo read fallback, the apply step, lost-apply verify and rollback.
             ConfigEditService.ReadCommand(SentinelConfigPath, SentinelNumber),
             ConfigEditService.ApplyCommand(SentinelConfigPath, SentinelStagedPath, SentinelNumber, "dvasentinelids", ConfigServiceRule.Nginx, "dvasentinelids"),

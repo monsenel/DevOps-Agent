@@ -1,0 +1,26 @@
+__DVA_SSHD__
+port 22
+permitrootlogin no
+passwordauthentication no
+permitemptypasswords no
+maxauthtries 3
+pubkeyauthentication yes
+__DVA_FIREWALL__
+TOOL=ufw
+Status: active
+
+To                         Action      From
+--                         ------      ----
+22/tcp                     ALLOW       10.88.10.0/24
+443/tcp                    ALLOW       Anywhere
+__DVA_FAIL2BAN__
+Status for the jail: sshd
+|- Filter
+|  |- Currently failed:	0
+|  `- Total failed:	12
+`- Actions
+   |- Currently banned:	1
+   `- Banned IP list:	203.0.113.42
+__DVA_UNATTENDED__
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";

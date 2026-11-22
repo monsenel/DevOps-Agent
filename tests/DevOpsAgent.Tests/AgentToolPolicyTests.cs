@@ -17,7 +17,7 @@ public sealed class AgentToolPolicyTests
     {
         var registry = new ToolRegistry();
 
-        Assert.Equal(19, registry.Tools.Count);
+        Assert.Equal(20, registry.Tools.Count);
         Assert.Equal(
             new[] { "apply_updates", "block_ip", "edit_config", "restart_container", "restart_service", "run_shell", "unblock_ip" },
             registry.Tools.Where(tool => tool.Access == ToolAccess.Mutating).Select(tool => tool.Name).Order().ToArray());

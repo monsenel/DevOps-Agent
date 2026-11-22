@@ -1,0 +1,13 @@
+__DVA_SSHD__
+# OpenSSH server configuration
+Port 22
+PermitRootLogin yes
+PasswordAuthentication yes
+PermitEmptyPasswords yes
+MaxAuthTries 10
+__DVA_FIREWALL__
+TOOL=none
+__DVA_FAIL2BAN__
+F2B_NONE
+__DVA_UNATTENDED__
+UNATTENDED_NONE

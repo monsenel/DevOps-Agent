@@ -49,6 +49,7 @@ public sealed class ToolRegistry
             Define<BlockIpArgs>("block_ip", "Block an IP address using the supported host firewall.", ToolAccess.Mutating),
             Define<UnblockIpArgs>("unblock_ip", "Remove an IP address firewall block.", ToolAccess.Mutating),
             Define<ListBansArgs>("list_bans", "List addresses currently blocked by host security tools.", ToolAccess.ReadOnly),
+            Define<SecurityAuditArgs>("security_audit", "Run a read-only security hardening audit (SSH daemon config, host firewall, fail2ban, unattended updates) on one or more servers.", ToolAccess.ReadOnly),
             Define<RunShellArgs>("run_shell", "Run a shell command. Always requires explicit approval.", ToolAccess.Mutating),
             Define<EditConfigArgs>("edit_config", "Create (with create: true) or update a configuration file on one server "
                 + "(allowlisted paths: /etc/nginx/**, /etc/systemd/system/*.service, /opt/**/compose.yml, /opt/**/docker-compose.yml, "
@@ -202,6 +203,7 @@ public sealed record UnblockIpArgs(
 }
 
 public sealed record ListBansArgs([property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
+public sealed record SecurityAuditArgs([property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 
 /// <summary>
 /// edit_config (T8.8). Proposed with <see cref="Content"/> or <see cref="Diff"/>; before approval the app reads the file and
