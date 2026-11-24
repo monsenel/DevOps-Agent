@@ -71,7 +71,7 @@ public sealed class ToolCommandBuilder(ToolRegistry tools, ConfigEditOptions? co
         return "set -eu; before=$(mktemp); after=$(mktemp); trap 'rm -f \"$before\" \"$after\"' EXIT; "
             + "units=$(systemctl list-units --type=service --state=running --no-legend --plain 2>/dev/null | awk '{print $1}' || true); "
             + "for unit in $units; do printf '%s %s\\n' \"$unit\" \"$(systemctl show -p MainPID --value \"$unit\" 2>/dev/null || true)\"; done > \"$before\"; "
-            + "if command -v apt-get >/dev/null 2>&1; then apt-get install -y -- " + packages
+            + "if command -v apt-get >/dev/null 2>&1; then DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l apt-get install -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -- " + packages
             + "; elif command -v dnf >/dev/null 2>&1; then dnf upgrade -y -- " + packages
             + "; elif command -v apk >/dev/null 2>&1; then apk add --upgrade --no-cache -- " + packages
             + "; else printf '%s\\n' 'No supported package manager found.' >&2; exit 127; fi; "

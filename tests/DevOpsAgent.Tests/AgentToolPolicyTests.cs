@@ -202,7 +202,12 @@ public sealed class AgentToolPolicyTests
             "[\"c4d7d14f-897d-4b31-8d33-455cc6e926d6\"]", args.GetRawText(), null, DateTimeOffset.UtcNow));
 
         Assert.True(command.UseSudo);
+        Assert.Contains("DEBIAN_FRONTEND=noninteractive", command.Command, StringComparison.Ordinal);
+        Assert.Contains("NEEDRESTART_MODE=l", command.Command, StringComparison.Ordinal);
         Assert.Contains("apt-get install -y", command.Command, StringComparison.Ordinal);
+        Assert.Contains("Dpkg::Options::=--force-confdef", command.Command, StringComparison.Ordinal);
+        Assert.Contains("Dpkg::Options::=--force-confold", command.Command, StringComparison.Ordinal);
+        Assert.Contains("apk add --upgrade --no-cache --", command.Command, StringComparison.Ordinal);
         Assert.Contains("RESTARTED_SERVICES_BEGIN", command.Command, StringComparison.Ordinal);
         // dnf's `needs-restarting -r` exits 1 when a reboot IS required, so only status 1 may report it (and set -e must not abort).
         Assert.Contains("needs-restarting -r >/dev/null 2>&1 || rc=$?", command.Command, StringComparison.Ordinal);
