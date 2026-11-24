@@ -50,6 +50,10 @@ public sealed class ToolRegistry
             Define<UnblockIpArgs>("unblock_ip", "Remove an IP address firewall block.", ToolAccess.Mutating),
             Define<ListBansArgs>("list_bans", "List addresses currently blocked by host security tools.", ToolAccess.ReadOnly),
             Define<SecurityAuditArgs>("security_audit", "Run a read-only security hardening audit (SSH daemon config, host firewall, fail2ban, unattended updates) on one or more servers.", ToolAccess.ReadOnly),
+            Define<ScanCveArgs>("scan_cve", "Run a read-only Trivy or Grype CVE vulnerability scan on one or more servers and return the parsed findings.", ToolAccess.ReadOnly),
+            Define<CheckFileIntegrityArgs>("check_file_integrity", "Check SHA-256 file integrity baselines for critical host files (/etc/ssh/sshd_config, /etc/passwd, /etc/group, /etc/sudoers, /root/.ssh/authorized_keys) on one or more servers.", ToolAccess.ReadOnly),
+            Define<ListRunbooksArgs>("list_runbooks", "List built-in operational runbooks with step-by-step checklists and guidance.", ToolAccess.ReadOnly, requiresServer: false),
+            Define<QueryObservabilityArgs>("query_observability", "Run a read-only PromQL query against Prometheus or LogsQL query against VictoriaLogs when configured.", ToolAccess.ReadOnly, requiresServer: false),
             Define<RunShellArgs>("run_shell", "Run a shell command. Always requires explicit approval.", ToolAccess.Mutating),
             Define<EditConfigArgs>("edit_config", "Create (with create: true) or update a configuration file on one server "
                 + "(allowlisted paths: /etc/nginx/**, /etc/systemd/system/*.service, /opt/**/compose.yml, /opt/**/docker-compose.yml, "
@@ -204,6 +208,15 @@ public sealed record UnblockIpArgs(
 
 public sealed record ListBansArgs([property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
 public sealed record SecurityAuditArgs([property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
+public sealed record ScanCveArgs([property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null) : IServerTargetArgs;
+public sealed record CheckFileIntegrityArgs(
+    [property: MinLength(1), MaxLength(50)] IReadOnlyList<Guid>? ServerIds = null,
+    bool ResetBaseline = false) : IServerTargetArgs;
+public sealed record ListRunbooksArgs([property: StringLength(200)] string? Query = null);
+public sealed record QueryObservabilityArgs(
+    [property: Required, RegularExpression("\\A(prometheus|victorialogs)\\z", ErrorMessage = "Source must be prometheus or victorialogs.")] string Source,
+    [property: Required, StringLength(2000, MinimumLength = 1)] string Query,
+    [property: Range(1, 200)] int Limit = 50);
 
 /// <summary>
 /// edit_config (T8.8). Proposed with <see cref="Content"/> or <see cref="Diff"/>; before approval the app reads the file and

@@ -4,6 +4,7 @@
 @using DevOpsAgent.Domain.Updates
 @inject UpdatesService UpdateService
 @inject UpdateScheduleService UpdateSchedule
+@inject RollingUpdatePlanner RollingPlanner
 @inject ApprovalService Approvals
 @inject ActionExecutionService ActionExecution
 @inject ToolCommandBuilder CommandBuilder
@@ -45,6 +46,74 @@
     }
     else
     {
+        @if (_rollingPlan is { Waves.Count: > 0 } plan)
+        {
+            <section class="rolling-plan-panel" aria-labelledby="rolling-plan-title">
+                <header class="rolling-plan-header">
+                    <div>
+                        <h3 id="rolling-plan-title">Rolling patch plan</h3>
+                        <p class="muted">
+                            @if (plan.BasedOnDiscoveryGraph)
+                            {
+                                <span>Ordered from the latest discovery graph: leaf backends first, application tier next, reverse proxies last.</span>
+                            }
+                            else
+                            {
+                                <span>No discovery graph snapshot yet — run discovery to order waves by live service dependencies.</span>
+                            }
+                            @if (plan.HasCycleWarning)
+                            {
+                                <span> Cyclic dependencies detected; verify each wave carefully.</span>
+                            }
+                        </p>
+                    </div>
+                    <span class="ui-badge soft">@plan.Waves.Count wave(s)</span>
+                </header>
+                <ol class="rolling-wave-list">
+                    @foreach (var wave in plan.Waves)
+                    {
+                        <li class="rolling-wave-card" @key="wave.WaveNumber">
+                            <div class="rolling-wave-head">
+                                <strong>@wave.Label</strong>
+                                <span class="ui-badge neutral">@wave.Servers.Count server(s)</span>
+                            </div>
+                            <div class="rolling-wave-servers">
+                                @foreach (var target in wave.Servers)
+                                {
+                                    <span class="rolling-wave-chip" @key="target.ServerId">
+                                        <span class="mono">@target.ServerName</span>
+                                        <span class="muted">@target.TierRole</span>
+                                        @if (target.SecurityUpdateCount > 0)
+                                        {
+                                            <span class="ui-badge warn">@target.SecurityUpdateCount security</span>
+                                        }
+                                        else if (target.PendingUpdateCount > 0)
+                                        {
+                                            <span class="ui-badge neutral">@target.PendingUpdateCount pending</span>
+                                        }
+                                        @if (target.ReadOnly)
+                                        {
+                                            <span class="ui-badge neutral">Read-only</span>
+                                        }
+                                    </span>
+                                }
+                            </div>
+                            <div class="rolling-wave-gate">
+                                <span class="micro-label">Verification gate</span>
+                                <p class="muted">@wave.VerificationGate.Summary</p>
+                                <ul>
+                                    @foreach (var check in wave.VerificationGate.Checks)
+                                    {
+                                        <li>@check</li>
+                                    }
+                                </ul>
+                            </div>
+                        </li>
+                    }
+                </ol>
+            </section>
+        }
+
         @foreach (var group in _servers.GroupBy(item => item.Group).OrderBy(group => group.Key))
         {
             var selectable = group.Where(item => !item.ReadOnly && item.Error is null && item.Packages.Count > 0).ToArray();
@@ -189,6 +258,7 @@
     private bool _busy;
     private Guid? _pendingId;
     private int _scheduleIntervalHours = UpdateScheduleService.DefaultIntervalHours;
+    private RollingUpdatePlan? _rollingPlan;
 
     protected override Task OnInitializedAsync() => LoadAsync();
 
@@ -200,6 +270,7 @@
             _scheduleIntervalHours = await UpdateSchedule.GetIntervalHoursAsync(CancellationToken.None);
             _servers.Clear();
             _servers.AddRange(await UpdateService.ListAsync(CancellationToken.None));
+            _rollingPlan = await RollingPlanner.BuildPlanAsync(CancellationToken.None);
         }
         catch (Exception exception) { _message = exception.Message; _isError = true; }
         finally { _loading = false; }
@@ -212,6 +283,7 @@
         {
             _servers.Clear();
             _servers.AddRange(await UpdateService.ScanAsync(CancellationToken.None));
+            _rollingPlan = await RollingPlanner.BuildPlanAsync(CancellationToken.None);
             _selected.Clear();
             var failures = _servers.Count(server => server.Error is not null);
             _message = failures == 0 ? "Update scan completed." : $"Update scan completed with {failures} server error(s).";

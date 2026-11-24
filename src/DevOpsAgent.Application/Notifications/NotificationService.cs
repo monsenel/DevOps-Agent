@@ -7,7 +7,7 @@ using DevOpsAgent.Domain.Monitoring;
 namespace DevOpsAgent.Application.Notifications;
 
 public sealed class NotificationService(IAppSettingRepository settings, ISecretProtector protector, INotifier notifier,
-    IServerRepository servers) : IAlertNotificationService
+    IServerRepository servers, IncidentModeService? incidentMode = null) : IAlertNotificationService
 {
     private const string SettingKey = "notifications.v1";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -43,6 +43,12 @@ public sealed class NotificationService(IAppSettingRepository settings, ISecretP
         await SendToAllAsync(destinations, "DevOps Agent test notification. Your notification settings are working.", cancellationToken);
     }
 
+    public async Task<IReadOnlyList<NotificationEndpoint>> GetActiveDestinationsAsync(CancellationToken cancellationToken)
+    {
+        var stored = await ReadAsync(cancellationToken);
+        return GetDestinations(stored);
+    }
+
     public async Task NotifyOpenedAsync(AlertDto alert, CancellationToken cancellationToken) =>
         await NotifyAlertAsync(alert, resolved: false, cancellationToken);
 
@@ -60,6 +66,11 @@ public sealed class NotificationService(IAppSettingRepository settings, ISecretP
     {
         var stored = await ReadAsync(cancellationToken);
         if (alert.Severity < stored.MinimumSeverity) return;
+        if (incidentMode is not null)
+        {
+            var incident = await incidentMode.GetAsync(cancellationToken);
+            if (IncidentModeService.ShouldSuppressNotification(alert.Severity, incident.Active)) return;
+        }
         var destinations = GetDestinations(stored);
         if (destinations.Count == 0) return;
         var server = alert.ServerId is { } serverId ? await servers.GetAsync(serverId, cancellationToken) : null;

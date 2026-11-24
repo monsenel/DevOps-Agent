@@ -6,6 +6,7 @@
 @inject DevOpsAgent.Application.Updates.UpdateScheduleService UpdateSchedule
 @inject ExecutionModeService ExecutionModes
 @inject NotificationService Notifications
+@inject DailyDigestService DailyDigest
 @inject ToolCallLimitService ToolLimits
 @inject IJSRuntime JavaScript
 
@@ -174,6 +175,39 @@
             <div class="connection-actions">
                 <Button Disabled="_savingNotifications || _testingNotifications" OnClick="SaveNotificationsAsync">@(_savingNotifications ? "Saving…" : "Save notifications")</Button>
                 <Button Variant="secondary" Disabled="_savingNotifications || _testingNotifications" OnClick="TestNotificationsAsync">@(_testingNotifications ? "Sending…" : "Send test message")</Button>
+            </div>
+        </section>
+
+        <section class="ui-card notification-settings-card" aria-labelledby="daily-digest-title">
+            <header class="ui-card-header"><h2 id="daily-digest-title">Daily digest</h2></header>
+            <p class="muted">Send a concise daily status summary (server counts, open alerts by severity, pending security updates, and 24h SSH security event count) via your enabled Telegram/ntfy channels. No secrets or host details leave the app.</p>
+            @if (!string.IsNullOrWhiteSpace(_digestError))
+            {
+                <div class="settings-message error" role="alert">@_digestError</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(_digestMessage))
+            {
+                <div class="settings-message success" role="status">@_digestMessage</div>
+            }
+            <SwitchRow Title="Enable daily digest" Helper="Deliver once per UTC day at the configured hour" @bind-Value="_digestEnabled" />
+            <div class="field discovery-interval-field">
+                <label for="daily-digest-hour">Delivery hour (UTC)</label>
+                <div class="discovery-interval-input">
+                    <input id="daily-digest-hour" class="mono" type="number" min="@DailyDigestService.MinimumUtcHour"
+                           max="@DailyDigestService.MaximumUtcHour" value="@_digestUtcHour" @oninput="UpdateDigestHour" />
+                    <span>:00 UTC</span>
+                </div>
+                <span class="field-helper">
+                    Choose an hour from 0 to 23 UTC.
+                    @if (_digestLastSentAtUtc is { } lastSent)
+                    {
+                        <span> Last sent @lastSent.ToUniversalTime().ToString("yyyy-MM-dd HH:mm") UTC.</span>
+                    }
+                </span>
+            </div>
+            <div class="connection-actions">
+                <Button Disabled="_savingDigest || _sendingDigest" OnClick="SaveDailyDigestAsync">@(_savingDigest ? "Saving…" : "Save daily digest")</Button>
+                <Button Variant="secondary" Disabled="_savingDigest || _sendingDigest" OnClick="SendDailyDigestNowAsync">@(_sendingDigest ? "Sending…" : "Send digest now")</Button>
             </div>
         </section>
     }
@@ -408,6 +442,13 @@
     private bool _testingNotifications;
     private string? _notificationMessage;
     private string? _notificationError;
+    private bool _digestEnabled;
+    private int _digestUtcHour = DailyDigestService.DefaultUtcHour;
+    private DateTimeOffset? _digestLastSentAtUtc;
+    private bool _savingDigest;
+    private bool _sendingDigest;
+    private string? _digestMessage;
+    private string? _digestError;
     private LlmProviderSummary? _selectedProvider => _editor.Selected;
     private int _toolLimit = ToolCallLimitService.DefaultLimit;
     private bool _savingToolLimit;
@@ -528,12 +569,18 @@
             _hasNtfyTopic = saved.HasNtfyTopic;
             _hasNtfyToken = saved.HasNtfyToken;
             _minimumSeverity = saved.MinimumSeverity;
+            var digest = await DailyDigest.GetSettingsAsync(CancellationToken.None);
+            _digestEnabled = digest.Enabled;
+            _digestUtcHour = digest.UtcHour;
+            _digestLastSentAtUtc = digest.LastSentAtUtc;
             _notificationsLoaded = true;
         }
         _executionMessage = null;
         _executionError = null;
         _notificationMessage = null;
         _notificationError = null;
+        _digestMessage = null;
+        _digestError = null;
     }
 
     private async Task SaveNotificationsAsync()
@@ -582,6 +629,67 @@
             _notificationError = exception.Message;
         }
         finally { _testingNotifications = false; }
+    }
+
+    private void UpdateDigestHour(ChangeEventArgs args)
+    {
+        if (int.TryParse(args.Value?.ToString(), out var hour))
+        {
+            _digestUtcHour = hour;
+        }
+    }
+
+    private async Task SaveDailyDigestAsync()
+    {
+        _savingDigest = true;
+        _digestMessage = null;
+        _digestError = null;
+        try
+        {
+            var saved = await DailyDigest.SaveSettingsAsync(_digestEnabled, _digestUtcHour, CancellationToken.None);
+            _digestEnabled = saved.Enabled;
+            _digestUtcHour = saved.UtcHour;
+            _digestLastSentAtUtc = saved.LastSentAtUtc;
+            _digestMessage = saved.Enabled
+                ? $"Daily digest enabled for {saved.UtcHour:00}:00 UTC."
+                : "Daily digest disabled.";
+        }
+        catch (ArgumentOutOfRangeException exception)
+        {
+            _digestError = exception.Message.Split(" (Parameter")[0];
+        }
+        finally
+        {
+            _savingDigest = false;
+        }
+    }
+
+    private async Task SendDailyDigestNowAsync()
+    {
+        _sendingDigest = true;
+        _digestMessage = null;
+        _digestError = null;
+        try
+        {
+            var result = await DailyDigest.SendNowAsync(CancellationToken.None);
+            if (result.Sent)
+            {
+                _digestLastSentAtUtc = result.Summary.GeneratedAtUtc;
+                _digestMessage = $"Daily digest sent to {result.DeliveredEndpoints} destination(s).";
+            }
+            else
+            {
+                _digestError = result.SkippedReason ?? "Daily digest could not be sent.";
+            }
+        }
+        catch (Exception exception)
+        {
+            _digestError = exception.Message;
+        }
+        finally
+        {
+            _sendingDigest = false;
+        }
     }
 
     private void UpdateExecutionModeForGroup(ExecutionModePolicy policy, ChangeEventArgs args)

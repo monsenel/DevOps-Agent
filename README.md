@@ -88,6 +88,48 @@ On a server's first successful SSH connection, the app records the presented hos
 
 New server groups default to **Read-only**. In **Confirm** mode, changes still require review and approval in the app. Start with read-only access and review the discovered inventory before enabling actions. The app stores SSH and model-provider credentials, so keep it behind a private network or a properly configured TLS proxy; do not expose the built-in HTTP endpoint directly to the public internet.
 
+## Sudo on managed servers
+
+The recommended setup for managed Linux hosts is a dedicated SSH user (for example `devops`) with a restricted `NOPASSWD` sudoers drop-in at `/etc/sudoers.d/devops-agent` instead of unrestricted `ALL` access. DevOps Agent's built-in sudo monitor (`AppSudoCommands`) exempts only the app's own commands and still raises an alert for any unexpected sudo invocation by that user.
+
+For read-only discovery, monitoring, and security audits, start with the minimal pinned profile below (replace `devops` with your SSH user):
+
+```sudoers
+# /etc/sudoers.d/devops-agent
+Defaults:devops !requiretty, use_pty
+
+Cmnd_Alias DVA_DISCOVERY = /usr/bin/true, \
+    /usr/bin/ss -tulpnH, \
+    /usr/bin/ss -tnpH, \
+    /usr/bin/netstat -tulpn, \
+    /usr/sbin/nginx -T, \
+    /usr/bin/docker info --format *, \
+    /usr/bin/docker ps -a *, \
+    /usr/bin/docker network ls *, \
+    /usr/bin/docker inspect *, \
+    /usr/bin/nsenter -t [0-9]* -n /usr/bin/ss -tnpH
+
+Cmnd_Alias DVA_MONITORING = /usr/bin/journalctl -u ssh*, \
+    /usr/bin/systemctl --failed --type=service --no-legend --plain, \
+    /usr/bin/df -P *, \
+    /usr/bin/du -x -h --max-depth=1 *
+
+Cmnd_Alias DVA_SECURITY = /usr/sbin/sshd -T, \
+    /usr/sbin/ufw status, \
+    /usr/sbin/nft list ruleset, \
+    /usr/sbin/iptables -S, \
+    /usr/bin/fail2ban-client status*
+
+devops ALL=(root) NOPASSWD: DVA_DISCOVERY, DVA_MONITORING, DVA_SECURITY
+```
+
+To allow approved mutating actions (package updates, service restarts, firewall bans, or validated config edits via a root-owned helper script `/usr/local/sbin/dva-sudo-helper`), generate an extended profile with `SudoersProfileGenerator` and add only the command aliases needed by that server's group. Always validate before saving:
+
+```bash
+sudo chmod 0440 /etc/sudoers.d/devops-agent
+sudo visudo -cf /etc/sudoers.d/devops-agent
+```
+
 ## Local development
 
 Requirements: .NET 10 SDK. The development launch profile uses `http://localhost:5154` and stores local app data under `src/DevOpsAgent.Web/data`.

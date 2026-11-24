@@ -77,4 +77,12 @@ public sealed class MetricRepository(AppDbContext dbContext) : IMetricRepository
         dbContext.MetricRollups.RemoveRange(staleRollups);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<MetricRollup>> GetRollupsAsync(Guid serverId, DateTimeOffset sinceUtc, CancellationToken cancellationToken)
+    {
+        return await dbContext.MetricRollups.AsNoTracking()
+            .Where(item => item.ServerId == serverId && item.BucketStartUtc >= sinceUtc)
+            .OrderBy(item => item.BucketStartUtc)
+            .ToArrayAsync(cancellationToken);
+    }
 }

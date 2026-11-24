@@ -27,7 +27,11 @@ builder.Services.AddScoped<AgentContextBuilder>();
 builder.Services.AddScoped<AgentToolDispatcher>();
 builder.Services.AddScoped<UpdatesService>();
 builder.Services.AddScoped<UpdateScheduleService>();
+builder.Services.AddScoped<RollingUpdatePlanner>();
 builder.Services.AddScoped<DevOpsAgent.Application.Security.SecurityAuditService>();
+builder.Services.AddScoped<DevOpsAgent.Application.Security.CveScanService>();
+builder.Services.AddScoped<DevOpsAgent.Application.Security.FileIntegrityService>();
+builder.Services.AddSingleton<RunbookService>();
 builder.Services.AddScoped<ImpactService>();
 builder.Services.AddSingleton(builder.Configuration.GetSection(ConfigEditOptions.SectionName).Get<ConfigEditOptions>() ?? new ConfigEditOptions());
 builder.Services.AddScoped<ConfigEditService>();
@@ -35,9 +39,13 @@ builder.Services.AddScoped<DevOpsAgent.Application.Search.GlobalSearchService>()
 builder.Services.AddScoped<MetricService>();
 builder.Services.AddScoped<ContainerRestartMonitor>();
 builder.Services.AddScoped<RollupService>();
+builder.Services.AddScoped<AnomalyBaselineService>();
+builder.Services.AddScoped<IncidentModeService>();
+builder.Services.AddHttpClient<ExternalObservabilityService>(client => client.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddScoped<HealthCheckService>();
 builder.Services.AddScoped<AlertService>();
 builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<DailyDigestService>();
 builder.Services.AddSingleton<AlertNotificationQueue>();
 // Alert evaluation only queues notifications; AlertNotificationDispatcher sends them, so a slow endpoint never stalls it (T7.R7).
 builder.Services.AddScoped<IAlertNotificationService>(provider => provider.GetRequiredService<AlertNotificationQueue>());
@@ -69,6 +77,7 @@ builder.Services.AddHostedService<MetricRollupHostedService>();
 builder.Services.AddHostedService<HealthCheckHostedService>();
 builder.Services.AddHostedService<AlertEngineHostedService>();
 builder.Services.AddHostedService<AlertNotificationDispatcher>();
+builder.Services.AddHostedService<DailyDigestHostedService>();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddRazorPages();
