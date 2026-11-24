@@ -143,6 +143,10 @@ public sealed class AppSudoCommandsTests
         var context = new ServerContext(server, runner);
         await new ListenerCollector().CollectAsync(context, CancellationToken.None);
         await new NginxCollector().CollectAsync(context, CancellationToken.None);
+        await new FirewallCollector().CollectAsync(context, CancellationToken.None);
+        await new TlsCollector().CollectAsync(context, CancellationToken.None);
+        await new ReverseProxyCollector().CollectAsync(context, CancellationToken.None);
+        await new AppConfigCollector().CollectAsync(context, CancellationToken.None);
         var docker = new DockerCollector();
         await docker.IsApplicableAsync(new ServerContext(server, new CapturingRunner(failUnprivilegedDocker: true, sink: runner)), CancellationToken.None);
         await docker.CollectAsync(context, CancellationToken.None);

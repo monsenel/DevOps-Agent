@@ -1,0 +1,42 @@
+__DVA_CFG__:env:/opt/billing/.env
+DATABASE_URL=postgres://billing_user:CANARY_PG_SECRET_991@10.88.20.30:5432/billing_db?sslmode=require
+REDIS_URL=rediss://default:CANARY_REDIS_SECRET_882@10.88.20.30:6379/0
+NEXUS_URL=https://deploy:CANARY_NEXUS_PASS_773@10.88.20.40:8081/repository/maven-releases/
+API_SECRET_KEY=CANARY_API_KEY_664
+__DVA_CFG__:appsettings:/opt/orders/appsettings.Production.json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=10.88.20.30;Port=5432;Database=orders;Username=orders_svc;Password=CANARY_NPGSQL_PWD_555",
+    "Cache": "10.88.20.30:6379,password=CANARY_SE_REDIS_446,ssl=true"
+  }
+}
+__DVA_CFG__:redis-conf:/etc/redis/redis.conf
+bind 0.0.0.0
+port 6379
+requirepass CANARY_REDIS_CONF_337
+masterauth CANARY_MASTER_AUTH_228
+replicaof 10.88.20.31 6379
+__DVA_CFG__:postgres-conf:/var/lib/postgresql/16/main/postgresql.auto.conf
+primary_conninfo = 'host=10.88.20.31 port=5432 user=replicator password=CANARY_REPL_PASS_119 application_name=standby1'
+__DVA_CFG__:maven:/etc/maven/settings.xml
+<settings>
+  <servers>
+    <server>
+      <id>nexus</id>
+      <username>ci-bot</username>
+      <password>CANARY_MAVEN_PASS_101</password>
+    </server>
+  </servers>
+  <mirrors>
+    <mirror>
+      <id>nexus-mirror</id>
+      <url>https://10.88.20.40:8081/repository/maven-public/</url>
+    </mirror>
+  </mirrors>
+</settings>
+__DVA_CFG__:npm:/opt/web/.npmrc
+registry=https://10.88.20.40:8081/repository/npm-group/
+//10.88.20.40:8081/repository/npm-group/:_authToken=CANARY_NPM_TOKEN_202
+__DVA_CFG__:pip:/etc/pip.conf
+[global]
+index-url = https://ci:CANARY_PIP_PASS_303@10.88.20.40:8081/repository/pypi-all/simple

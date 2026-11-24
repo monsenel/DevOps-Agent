@@ -104,6 +104,8 @@ public sealed class StaleCarryForwardTests
         var discovery = CreateDiscovery(database.Context, runner);
 
         var seen = await discovery.RunAsync(null, CancellationToken.None);
+        var hostRun = await database.Context.CollectorRuns
+            .SingleAsync(run => run.SnapshotId == seen.Id && run.ServerId == db.Id && run.CollectorName == "host");
         runner.Unreachable.Add(db.Id);
         await discovery.RunAsync(null, CancellationToken.None);
         var third = await discovery.RunAsync(null, CancellationToken.None);
@@ -112,7 +114,8 @@ public sealed class StaleCarryForwardTests
         var host = graph.Nodes.Select(element => element.Data).Single(node => node.GetProperty("kind").GetString() == "Host");
         var lastSeen = DateTimeOffset.Parse(host.GetProperty("attributes").GetProperty(StaleCarryForward.LastSeenAttribute).GetString()!,
             System.Globalization.CultureInfo.InvariantCulture);
-        Assert.Equal(seen.StartedAtUtc.UtcDateTime, lastSeen.UtcDateTime, TimeSpan.FromMilliseconds(1));
+        Assert.Equal(hostRun.CreatedAtUtc.UtcDateTime, lastSeen.UtcDateTime, TimeSpan.FromMilliseconds(1));
+        Assert.Equal(StaleCarryForward.Badge(host.GetProperty("attributes")), host.GetProperty("staleBadge").GetString());
     }
 
     [Fact]
@@ -153,6 +156,162 @@ public sealed class StaleCarryForwardTests
             "{\"Addresses\":[\"10.0.0.2\"],\"Stale\":true}"));
     }
 
+    [Fact]
+    public async Task MultiAddressStaleHostSeedsIpIndexAndRemovedFreshProxyIsNotHidden()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var edge = AddServer(database.Context, "srv-edge", "10.88.20.10");
+        var db = AddServer(database.Context, "srv-db", "10.88.20.30");
+        ExtraAddresses[db.Id] = ["10.88.20.31"];
+        var runner = new SwitchableRunner();
+        var nginxCollector = new ConfigurableNginxCollector(edge.Id, "http://10.88.20.31:5432");
+        var discovery = new DiscoveryService(
+            new ServerRepository(database.Context),
+            new SnapshotRepository(database.Context),
+            new GraphRepository(database.Context),
+            new GraphBuilder(),
+            runner,
+            [new HostCollector(), new ListenerCollector(), nginxCollector],
+            TimeProvider.System);
+        var drift = new DriftService(new SnapshotRepository(database.Context), new GraphRepository(database.Context));
+
+        var before = await discovery.RunAsync(null, CancellationToken.None);
+        runner.Unreachable.Add(db.Id);
+        var during = await discovery.RunAsync(null, CancellationToken.None);
+
+        var duringGraph = (await new GraphRepository(database.Context).GetAsync(during.Id, GraphView.All, CancellationToken.None))!;
+        // T7.R16a: second IP 10.88.20.31 resolves to stale srv-db, NEVER to a new Unknown node!
+        Assert.DoesNotContain(duringGraph.Nodes, node => node.Data.GetProperty("kind").GetString() == "Unknown");
+        Assert.Empty((await drift.CompareAsync(before.Id, during.Id, CancellationToken.None)).Changes);
+
+        // T7.R16a: removing proxy_pass on reachable srv-edge while srv-db is stale MUST NOT be hidden by carry-forward.
+        nginxCollector.ProxyTarget = null;
+        var afterRemoval = await discovery.RunAsync(null, CancellationToken.None);
+        var removalDrift = await drift.CompareAsync(during.Id, afterRemoval.Id, CancellationToken.None);
+        Assert.Contains(removalDrift.Changes, change =>
+            change.ChangeType == DriftChangeType.Removed && change.EntityType == DriftEntityType.Edge);
+
+        // Restoring proxy_pass and recovering srv-db produces no Unknown nodes and no new-listener alerts.
+        nginxCollector.ProxyTarget = "http://10.88.20.31:5432";
+        runner.Unreachable.Clear();
+        var recovered = await discovery.RunAsync(null, CancellationToken.None);
+        var recoveredGraph = (await new GraphRepository(database.Context).GetAsync(recovered.Id, GraphView.All, CancellationToken.None))!;
+        Assert.DoesNotContain(recoveredGraph.Nodes, node => node.Data.GetProperty("kind").GetString() == "Unknown");
+        Assert.Empty((await drift.CompareAsync(during.Id, recovered.Id, CancellationToken.None)).NewListeners);
+    }
+
+    [Fact]
+    public async Task StaleToStaleEdgesAreCarriedAndMarkedStaleInGraphDto()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var edge = AddServer(database.Context, "srv-edge", "10.88.20.10");
+        var db = AddServer(database.Context, "srv-db", "10.88.20.30");
+        var runner = new SwitchableRunner();
+        var nginxCollector = new ConfigurableNginxCollector(edge.Id, "http://10.88.20.30:5432");
+        var discovery = new DiscoveryService(
+            new ServerRepository(database.Context),
+            new SnapshotRepository(database.Context),
+            new GraphRepository(database.Context),
+            new GraphBuilder(),
+            runner,
+            [new HostCollector(), new ListenerCollector(), nginxCollector],
+            TimeProvider.System);
+
+        await discovery.RunAsync(null, CancellationToken.None);
+        runner.Unreachable.Add(edge.Id);
+        runner.Unreachable.Add(db.Id);
+        var bothStale = await discovery.RunAsync(null, CancellationToken.None);
+
+        var graph = (await new GraphRepository(database.Context).GetAsync(bothStale.Id, GraphView.All, CancellationToken.None))!;
+        var carriedDeclared = graph.Edges.Select(e => e.Data)
+            .FirstOrDefault(e => e.GetProperty("kind").GetString() == "Declared"
+                && e.TryGetProperty("port", out var p) && p.ValueKind == JsonValueKind.Number && p.GetInt32() == 5432);
+        Assert.Equal(JsonValueKind.Object, carriedDeclared.ValueKind);
+        Assert.True(carriedDeclared.GetProperty("stale").GetBoolean());
+        Assert.Equal(StaleCarryForward.StaleEdgeBadge, carriedDeclared.GetProperty("staleText").GetString());
+        var edgeId = Guid.ParseExact(carriedDeclared.GetProperty("id").GetString()!, "N");
+        Assert.Contains(graph.Evidence, item => item.EdgeId == edgeId && item.Collector == StaleCarryForward.StaleEvidenceCollector);
+    }
+
+    [Fact]
+    public async Task MergeBaseLastSeenUsesServersOwnHostCollectorTimeNotMergeSnapshotStart()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var app = AddServer(database.Context, "srv-app", "10.88.20.20");
+        var db = AddServer(database.Context, "srv-db", "10.88.20.30");
+        var runner = new SwitchableRunner();
+        var clock = new SteppingTimeProvider(new DateTimeOffset(2026, 11, 16, 10, 0, 0, TimeSpan.Zero));
+        var discovery = new DiscoveryService(
+            new ServerRepository(database.Context),
+            new SnapshotRepository(database.Context),
+            new GraphRepository(database.Context),
+            new GraphBuilder(),
+            runner,
+            [new HostCollector(), new ListenerCollector()],
+            clock);
+
+        var first = await discovery.RunAsync(null, CancellationToken.None);
+        var dbHostRun = await database.Context.CollectorRuns
+            .SingleAsync(run => run.SnapshotId == first.Id && run.ServerId == db.Id && run.CollectorName == "host");
+
+        // Advance 30 minutes and merge ONLY srv-app: srv-db is untouched since `first`.
+        clock.Advance(TimeSpan.FromMinutes(30));
+        await discovery.RunServerAndMergeAsync(app.Id, null, CancellationToken.None);
+
+        // Advance another 30 minutes and take srv-db offline.
+        clock.Advance(TimeSpan.FromMinutes(30));
+        runner.Unreachable.Add(db.Id);
+        var outage = await discovery.RunAsync(null, CancellationToken.None);
+
+        var graph = (await new GraphRepository(database.Context).GetAsync(outage.Id, GraphView.All, CancellationToken.None))!;
+        var dbHost = graph.Nodes.Select(e => e.Data)
+            .Single(node => node.GetProperty("kind").GetString() == "Host" && ServerId(node) == db.Id);
+        var lastSeen = DateTimeOffset.Parse(dbHost.GetProperty("attributes").GetProperty(StaleCarryForward.LastSeenAttribute).GetString()!,
+            System.Globalization.CultureInfo.InvariantCulture);
+
+        // T7.R16b: must equal db's own host collector run time from `first`, NOT the merge snapshot start time 30 min later.
+        Assert.Equal(dbHostRun.CreatedAtUtc.UtcDateTime, lastSeen.UtcDateTime, TimeSpan.FromMilliseconds(1));
+    }
+
+    [Fact]
+    public async Task NewListenerDriftExcludesNeverDiscoveredRecoveryAndFailedListenerCollectorRuns()
+    {
+        await using var database = await CreateDatabaseAsync();
+        AddServer(database.Context, "srv-ok", "10.88.20.10");
+        var app = AddServer(database.Context, "srv-app", "10.88.20.20");
+        var db = AddServer(database.Context, "srv-db", "10.88.20.30");
+        var runner = new SwitchableRunner();
+        var failListenersFor = new HashSet<Guid> { app.Id };
+        runner.Unreachable.Add(db.Id);
+        var discovery = new DiscoveryService(
+            new ServerRepository(database.Context),
+            new SnapshotRepository(database.Context),
+            new GraphRepository(database.Context),
+            new GraphBuilder(),
+            runner,
+            [new HostCollector(), new FailableListenerCollector(failListenersFor)],
+            TimeProvider.System);
+        var drift = new DriftService(new SnapshotRepository(database.Context), new GraphRepository(database.Context));
+
+        // Snapshot 1: db is unreachable ("never discovered"), app's listener collector fails.
+        var first = await discovery.RunAsync(null, CancellationToken.None);
+
+        // Snapshot 2: db recovers for the first time, app's listener collector now succeeds.
+        runner.Unreachable.Clear();
+        failListenersFor.Clear();
+        var second = await discovery.RunAsync(null, CancellationToken.None);
+
+        // T7.R16c: neither never-discovered recovery nor failed-listener recovery may raise new-listener alerts.
+        var recoveryReport = await drift.CompareAsync(first.Id, second.Id, CancellationToken.None);
+        Assert.Empty(recoveryReport.NewListeners);
+
+        // Snapshot 3: both servers succeeded in Snapshot 2 and Snapshot 3; a genuinely new listener on app IS reported.
+        ExtraListeners[app.Id] = [new ListenerInfo("tcp", "LISTEN", "0.0.0.0", 9090, null, "metrics", 88)];
+        var third = await discovery.RunAsync(null, CancellationToken.None);
+        var realChange = await drift.CompareAsync(second.Id, third.Id, CancellationToken.None);
+        Assert.Contains(realChange.NewListeners, change => change.Description.Contains(":9090", StringComparison.Ordinal));
+    }
+
     private static Guid? ServerId(JsonElement node) =>
         Guid.TryParse(node.TryGetProperty("serverId", out var value) ? value.GetString() : null, out var id) ? id : null;
 
@@ -170,6 +329,8 @@ public sealed class StaleCarryForwardTests
     }
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, string> Addresses = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, string[]> ExtraAddresses = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, ListenerInfo[]> ExtraListeners = new();
 
     /// <summary>"SSH": answers host and listener collection, or reports the server unreachable like the pool does.</summary>
     private sealed class SwitchableRunner : ISshRunner
@@ -208,8 +369,10 @@ public sealed class StaleCarryForwardTests
         {
             await context.SshRunner.RunAsync(context.Server.Id, "ip -j addr", new SshRunOptions(TimeSpan.FromSeconds(5)), cancellationToken);
             var address = Addresses[context.Server.Id];
+            var allAddresses = new[] { address }.Concat(ExtraAddresses.GetValueOrDefault(context.Server.Id) ?? [])
+                .Select(ip => new HostAddress("inet", ip, 24, "10.88.20.0/24", "global", null)).ToArray();
             var result = new HostDiscoveryResult(context.Server.Name,
-                [new HostInterface(2, "eth0", null, "UP", 1500, [new HostAddress("inet", address, 24, "10.88.20.0/24", "global", null)])],
+                [new HostInterface(2, "eth0", null, "UP", 1500, allAddresses)],
                 [], []);
             return new CollectorOutput(JsonSerializer.Serialize(result), string.Empty, 0, TimeSpan.Zero);
         }
@@ -258,5 +421,61 @@ public sealed class StaleCarryForwardTests
             await Context.DisposeAsync();
             await connection.DisposeAsync();
         }
+    }
+
+    private sealed class ConfigurableNginxCollector(Guid serverId, string? proxyTarget) : ICollector
+    {
+        public string? ProxyTarget { get; set; } = proxyTarget;
+        public string Name => "nginx";
+        public Task<bool> IsApplicableAsync(ServerContext context, CancellationToken cancellationToken) =>
+            Task.FromResult(context.Server.Id == serverId);
+
+        public async Task<CollectorOutput> CollectAsync(ServerContext context, CancellationToken cancellationToken)
+        {
+            await context.SshRunner.RunAsync(context.Server.Id, "nginx -T", new SshRunOptions(TimeSpan.FromSeconds(5)), cancellationToken);
+            var proxies = ProxyTarget is null
+                ? Array.Empty<NginxProxyInfo>()
+                : [new NginxProxyInfo("proxy_pass", ProxyTarget, false, "/etc/nginx/conf.d/app.conf", 10)];
+            var result = new NginxDiscoveryResult(
+                [new NginxServerInfo("http", [new NginxSourceValue("80", "/etc/nginx/conf.d/app.conf", 2)],
+                    [new NginxSourceValue("db.example.test", "/etc/nginx/conf.d/app.conf", 3)], [], proxies, "/etc/nginx/conf.d/app.conf", 1)],
+                []);
+            return new CollectorOutput(JsonSerializer.Serialize(result), string.Empty, 0, TimeSpan.Zero);
+        }
+
+        public CollectorResult Parse(CollectorOutput raw) => new(JsonDocument.Parse(raw.StandardOutput).RootElement.Clone());
+    }
+
+    private sealed class FailableListenerCollector(HashSet<Guid> failingServers) : ICollector
+    {
+        public string Name => "listeners";
+        public Task<bool> IsApplicableAsync(ServerContext context, CancellationToken cancellationToken) => Task.FromResult(true);
+
+        public async Task<CollectorOutput> CollectAsync(ServerContext context, CancellationToken cancellationToken)
+        {
+            await context.SshRunner.RunAsync(context.Server.Id, "ss -tulpnH", new SshRunOptions(TimeSpan.FromSeconds(5)), cancellationToken);
+            if (failingServers.Contains(context.Server.Id))
+            {
+                return new CollectorOutput(string.Empty, "permission denied", 1, TimeSpan.Zero);
+            }
+
+            ListenerInfo[] baseListeners = context.Server.Name == "srv-db"
+                ? [new("tcp", "LISTEN", "0.0.0.0", 5432, null, "postgres", 23), new("tcp", "LISTEN", "0.0.0.0", 6379, null, "redis-server", 45)]
+                : [new("tcp", "LISTEN", "0.0.0.0", 5000, null, "docker-proxy", 77)];
+            var all = baseListeners.Concat(ExtraListeners.GetValueOrDefault(context.Server.Id) ?? []).ToArray();
+            return new CollectorOutput(JsonSerializer.Serialize(new ListenerDiscoveryResult(all)), string.Empty, 0, TimeSpan.Zero);
+        }
+
+        public CollectorResult Parse(CollectorOutput raw) => new(JsonDocument.Parse(raw.StandardOutput).RootElement.Clone());
+    }
+
+    private sealed class SteppingTimeProvider(DateTimeOffset start) : TimeProvider
+    {
+        private long _ticks = start.UtcTicks;
+
+        public override DateTimeOffset GetUtcNow() =>
+            new(Interlocked.Add(ref _ticks, TimeSpan.FromSeconds(1).Ticks), TimeSpan.Zero);
+
+        public void Advance(TimeSpan delta) => Interlocked.Add(ref _ticks, delta.Ticks);
     }
 }

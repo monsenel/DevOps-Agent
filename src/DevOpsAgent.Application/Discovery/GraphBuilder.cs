@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using DevOpsAgent.Domain.Discovery;
 using DevOpsAgent.Domain.Graph;
 
@@ -6,7 +7,10 @@ namespace DevOpsAgent.Application.Discovery;
 
 public sealed class GraphBuilder
 {
-    public GraphBuildResult Build(Guid snapshotId, IReadOnlyCollection<ServerDiscoveryData> serverData)
+    public GraphBuildResult Build(
+        Guid snapshotId,
+        IReadOnlyCollection<ServerDiscoveryData> serverData,
+        StaleSeedData? staleSeed = null)
     {
         var nodes = new List<GraphNode>();
         var edges = new List<GraphEdge>();
@@ -26,17 +30,16 @@ public sealed class GraphBuilder
                 ? hostResult.Interfaces.SelectMany(iface => iface.Addresses).ToArray()
                 : [];
             var host = AddNode(hostKey, GraphNodeKind.Host, server.Name, null, server.Id,
-                new
-                {
+                new HostNodeAttributes(
                     server.Host,
                     server.Port,
                     server.User,
                     server.Group,
                     // The machine's own name from host discovery (the Servers view shows it next to the inventory name); null when the host collector did not run.
-                    Hostname = data.Host?.Hostname,
-                    Tags = ParseTags(server.TagsJson),
-                    Addresses = hostAddresses.Select(address => address.Address).Distinct(StringComparer.Ordinal).ToArray(),
-                    Subnets = hostAddresses
+                    data.Host?.Hostname,
+                    ParseTags(server.TagsJson),
+                    hostAddresses.Select(address => address.Address).Distinct(StringComparer.Ordinal).ToArray(),
+                    hostAddresses
                         .Where(address => string.Equals(address.Scope, "global", StringComparison.OrdinalIgnoreCase))
                         .Select(address => address.SubnetCidr)
                         .Where(cidr => !string.IsNullOrWhiteSpace(cidr))
@@ -44,17 +47,46 @@ public sealed class GraphBuilder
                         .Order(StringComparer.Ordinal)
                         .ToArray(),
                     // Inbound SSH sessions are host data, not edges or Unknown nodes (T8.18).
-                    SshSessions = sshSessions.Select(session => new
-                    {
-                        Address = session.SourceAddress,
-                        Port = session.ServerPort,
+                    sshSessions.Select(session => new HostSshSessionAttribute(
+                        session.SourceAddress,
+                        session.ServerPort,
                         session.Count,
-                        session.IsAgent
-                    }).ToArray()
-                });
+                        session.IsAgent)).ToArray(),
+                    data.Firewall is null
+                        ? null
+                        : new HostFirewallAttribute(
+                            data.Firewall.Backend,
+                            data.Firewall.Enabled,
+                            data.Firewall.DefaultInbound,
+                            data.Firewall.DefaultOutbound,
+                            data.Firewall.Rules.Count),
+                    data.Tls is { Certificates.Count: > 0 }
+                        ? data.Tls.Certificates.Select(cert => new HostTlsCertificateAttribute(
+                            cert.Path,
+                            cert.Subject,
+                            cert.Issuer,
+                            cert.NotAfterUtc,
+                            cert.SubjectAlternativeNames,
+                            cert.IsSelfSigned)).ToArray()
+                        : null));
             if (data.Host is not null)
             {
                 evidence.Add(new GraphEvidence(snapshotId, host.Id, null, "host", "Host identity and interface inventory."));
+            }
+
+            if (data.Firewall is { } firewall)
+            {
+                evidence.Add(new GraphEvidence(snapshotId, host.Id, null, "firewall",
+                    $"Firewall ({firewall.Backend}): {(firewall.Enabled ? "enabled" : "disabled")}, default inbound {firewall.DefaultInbound ?? "unknown"}, {firewall.Rules.Count} rule(s)."));
+            }
+
+            if (data.Tls is { Certificates.Count: > 0 } tls)
+            {
+                foreach (var cert in tls.Certificates)
+                {
+                    evidence.Add(new GraphEvidence(snapshotId, host.Id, null, "tls",
+                        $"TLS certificate {cert.Path}: {cert.Subject} (issuer {cert.Issuer}, valid until {cert.NotAfterUtc:yyyy-MM-dd} UTC{(cert.IsSelfSigned ? ", self-signed" : string.Empty)})."));
+                }
             }
 
             if (sshSessions.Count > 0)
@@ -193,7 +225,15 @@ public sealed class GraphBuilder
                     var service = AddNode(serviceKey, GraphNodeKind.Service, unit.Name,
                         parent.Id, server.Id,
                         new { unit.MainPid, unit.ExecStart, unit.FragmentPath, unit.ListenerPids });
-                    systemdServiceByPid[unit.MainPid] = service;
+                    if (unit.MainPid > 0)
+                    {
+                        systemdServiceByPid[unit.MainPid] = service;
+                    }
+
+                    foreach (var listenerPid in unit.ListenerPids.Where(pid => pid > 0))
+                    {
+                        systemdServiceByPid[listenerPid] = service;
+                    }
                     evidence.Add(new GraphEvidence(snapshotId, service.Id, null, "systemd", "Running unit owns one or more listener PIDs."));
                 }
             }
@@ -241,6 +281,31 @@ public sealed class GraphBuilder
 
             serverStates.Add(new ServerGraphState(data, host, containerByMainPid, containerById, composeServiceByContainerId,
                 systemdServiceByPid));
+        }
+
+        // T7.R16a: seed the IP index with stale hosts' last-known addresses (and container IPs) so reachable servers
+        // resolve fresh edges against all of a stale server's addresses instead of creating Unknown nodes.
+        if (staleSeed is not null)
+        {
+            foreach (var (staleServerId, addresses) in staleSeed.HostAddresses)
+            {
+                var staleHostKey = $"host:{staleServerId:N}";
+                foreach (var address in addresses)
+                {
+                    ipIndex.Add(address, staleHostKey);
+                }
+            }
+
+            foreach (var (_, staleContainers) in staleSeed.Containers)
+            {
+                foreach (var container in staleContainers)
+                {
+                    foreach (var address in container.Addresses)
+                    {
+                        ipIndex.Add(address, container.ContainerNodeKey);
+                    }
+                }
+            }
         }
 
         var edgeResolver = new EdgeResolver();
@@ -293,8 +358,9 @@ public sealed class GraphBuilder
 
                     foreach (var (endpoint, upstreamServer) in targets)
                     {
-                        var resolution = edgeResolver.Resolve(endpoint, state.Data, serverData, ipIndex);
-                        if (!nodeByKey.TryGetValue(resolution.NodeKey, out var targetNode))
+                        var resolution = edgeResolver.Resolve(endpoint, state.Data, serverData, ipIndex, staleSeed);
+                        var targetNode = GetOrStubTargetNode(resolution.NodeKey);
+                        if (targetNode is null)
                         {
                             targetNode = resolution.IsUnknown
                                 ? AddNode(resolution.NodeKey, GraphNodeKind.Unknown, "Unknown", null, state.Data.Server.Id,
@@ -313,6 +379,112 @@ public sealed class GraphBuilder
                                 $"{DescribeProxy(proxy)}{upstreamEvidence} {resolution.Reason}")));
                     }
                 }
+            }
+        }
+
+        foreach (var state in serverStates.Where(state => state.Data.ReverseProxy is { Routes.Count: > 0 }))
+        {
+            var reverseProxy = state.Data.ReverseProxy!;
+            foreach (var route in reverseProxy.Routes)
+            {
+                var proxyNode = GetProxyNode(state, route.ProxyType);
+                var routeLabel = route.Domains.FirstOrDefault() ?? route.FrontendName ?? route.BackendName ?? "route";
+                var routeKey = $"service:{state.Data.Server.Id:N}:{route.ProxyType}-route:{route.FilePath}:{route.Line}:{route.BackendName ?? route.FrontendName ?? "default"}";
+                var routeNode = AddNode(routeKey, GraphNodeKind.Service, $"{route.ProxyType} · {routeLabel}",
+                    proxyNode.Id, state.Data.Server.Id,
+                    new
+                    {
+                        route.ProxyType,
+                        route.FrontendName,
+                        route.BackendName,
+                        route.FilePath,
+                        route.Line,
+                        route.Domains
+                    });
+
+                foreach (var domainName in route.Domains.Where(IsDomainName))
+                {
+                    var normalizedDomain = domainName.Trim().ToLowerInvariant();
+                    var domain = AddNode($"domain:{normalizedDomain}", GraphNodeKind.Domain, domainName,
+                        null, null, new { Domain = domainName });
+                    var domainEdge = AddDeclaredEdge(domain, routeNode, route.ListenPort, route.ListenProtocol);
+                    evidence.Add(new GraphEvidence(snapshotId, null, domainEdge.Id, "reverse-proxy",
+                        $"{route.ProxyType} {route.FilePath ?? "config"}:{route.Line}: {domainName} → {route.BackendName ?? route.FrontendName ?? "backend"}"));
+                }
+
+                foreach (var target in route.Targets)
+                {
+                    var endpoint = NginxEndpointParser.Parse(target.Address);
+                    var resolution = edgeResolver.Resolve(endpoint, state.Data, serverData, ipIndex, staleSeed, reverseProxy.NameResolutions);
+                    var targetNode = GetOrStubTargetNode(resolution.NodeKey);
+                    if (targetNode is null)
+                    {
+                        targetNode = resolution.IsUnknown
+                            ? AddNode(resolution.NodeKey, GraphNodeKind.Unknown, "Unknown", null, state.Data.Server.Id,
+                                new { Address = resolution.TargetName, endpoint.Port, endpoint.Protocol, resolution.Reason, endpoint.IsUnresolved })
+                            : AddNode($"unknown:{state.Data.Server.Id:N}:{endpoint.Address}:{endpoint.Port?.ToString() ?? "none"}",
+                                GraphNodeKind.Unknown, "Unknown", null, state.Data.Server.Id,
+                                new { Address = endpoint.Address, endpoint.Port, endpoint.Protocol, resolution.Reason, endpoint.IsUnresolved });
+                    }
+
+                    var edge = AddDeclaredEdge(routeNode, targetNode, endpoint.Port, endpoint.Protocol);
+                    evidence.Add(new GraphEvidence(snapshotId, null, edge.Id, "reverse-proxy",
+                        $"{route.ProxyType} {route.FilePath ?? "config"}:{(target.Line > 0 ? target.Line : route.Line)}: {UrlUserInfo.Strip(target.Address)} ({resolution.Reason})"));
+                }
+            }
+        }
+
+        // Attach TLS certificate evidence to matching Domain nodes discovered by nginx or other reverse proxies.
+        foreach (var state in serverStates.Where(state => state.Data.Tls is { Certificates.Count: > 0 }))
+        {
+            foreach (var cert in state.Data.Tls!.Certificates)
+            {
+                foreach (var san in cert.SubjectAlternativeNames)
+                {
+                    var normalizedSan = san.Trim().ToLowerInvariant();
+                    if (nodeByKey.TryGetValue($"domain:{normalizedSan}", out var domainNode))
+                    {
+                        evidence.Add(new GraphEvidence(snapshotId, domainNode.Id, null, "tls",
+                            $"TLS certificate {cert.Path} on {state.Data.Server.Name} (issuer {cert.Issuer}, valid until {cert.NotAfterUtc:yyyy-MM-dd} UTC)."));
+                    }
+                }
+            }
+        }
+
+        // Declared dependency edges from application configs, PostgreSQL/Redis client configs, and Nexus registry references.
+        foreach (var state in serverStates.Where(state => state.Data.AppConfig is { References.Count: > 0 }))
+        {
+            var appConfig = state.Data.AppConfig!;
+            foreach (var reference in appConfig.References)
+            {
+                var sourceNode = FindAppConfigSourceNode(state, reference);
+                var endpoint = new NginxEndpoint(reference.Host, reference.Port, reference.Protocol, false);
+                var resolution = edgeResolver.Resolve(endpoint, state.Data, serverData, ipIndex, staleSeed, appConfig.NameResolutions);
+                var targetNode = GetOrStubTargetNode(resolution.NodeKey);
+                if (targetNode is null)
+                {
+                    if (IsLoopbackHost(reference.Host)) continue;
+                    var normalizedHost = reference.Host.Trim().ToLowerInvariant();
+                    var portPart = reference.Port?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none";
+                    targetNode = AddNode($"unknown:app-config:{state.Data.Server.Id:N}:{normalizedHost}:{portPart}",
+                        GraphNodeKind.Unknown, "Unknown", null, state.Data.Server.Id,
+                        new
+                        {
+                            Address = reference.Host,
+                            reference.Port,
+                            reference.Protocol,
+                            reference.DependencyType,
+                            reference.DatabaseName,
+                            resolution.Reason
+                        });
+                }
+
+                var edge = AddDeclaredEdge(sourceNode, targetNode, reference.Port, reference.Protocol);
+                var location = reference.Line is int lineNumber ? $"{reference.SourcePath}:{lineNumber}" : reference.SourcePath;
+                var dbSuffix = string.IsNullOrWhiteSpace(reference.DatabaseName) ? string.Empty : $"/{reference.DatabaseName}";
+                var portSuffix = reference.Port is int portNumber ? $":{portNumber}" : string.Empty;
+                evidence.Add(new GraphEvidence(snapshotId, null, edge.Id, "app-config",
+                    $"{location}: {reference.DependencyType} ({reference.SettingKey ?? reference.SourceKind}) → {reference.Host}{portSuffix}{dbSuffix} ({resolution.Reason})"));
             }
         }
 
@@ -402,13 +574,34 @@ public sealed class GraphBuilder
             return edge;
         }
 
-        GraphNode GetNginxNode(ServerGraphState state) =>
-            state.SystemdServiceByPid.Values.FirstOrDefault(node => node.Name.Contains("nginx", StringComparison.OrdinalIgnoreCase))
-            ?? state.ComposeServiceByContainerId.Values.FirstOrDefault(node => node.Name.Contains("nginx", StringComparison.OrdinalIgnoreCase)
+        GraphNode GetNginxNode(ServerGraphState state) => GetProxyNode(state, "nginx");
+
+        GraphNode GetProxyNode(ServerGraphState state, string proxyType) =>
+            state.SystemdServiceByPid.Values.FirstOrDefault(node => node.Name.Contains(proxyType, StringComparison.OrdinalIgnoreCase))
+            ?? state.ComposeServiceByContainerId.Values.FirstOrDefault(node => node.Name.Contains(proxyType, StringComparison.OrdinalIgnoreCase)
                 || node.Name.Contains("proxy", StringComparison.OrdinalIgnoreCase))
             ?? nodeByKey.Values.FirstOrDefault(node => node.ServerId == state.Data.Server.Id
-                && node.Kind == GraphNodeKind.Service && node.Name.Contains("nginx", StringComparison.OrdinalIgnoreCase))
+                && node.Kind == GraphNodeKind.Service && node.Name.Contains(proxyType, StringComparison.OrdinalIgnoreCase))
             ?? state.Host;
+
+        GraphNode FindAppConfigSourceNode(ServerGraphState state, AppDependencyReference reference)
+        {
+            if (!string.IsNullOrWhiteSpace(reference.ContainerName)
+                && state.Data.Docker?.Containers.FirstOrDefault(item =>
+                    string.Equals(item.Name, reference.ContainerName, StringComparison.OrdinalIgnoreCase)) is { } container)
+            {
+                return nodeByKey.GetValueOrDefault(GetComposeServiceNodeKey(state.Data, container))
+                    ?? nodeByKey.GetValueOrDefault(GetContainerNodeKey(state.Data, container))
+                    ?? state.Host;
+            }
+
+            return state.Host;
+        }
+
+        static bool IsLoopbackHost(string host) =>
+            host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+            || host == "127.0.0.1"
+            || host == "::1";
 
         GraphNode FindConnectionSourceNode(ServerGraphState state, EstablishedConnectionInfo connection)
         {
@@ -442,29 +635,57 @@ public sealed class GraphBuilder
             {
                 if (!TryGetOwnerServerId(ownerKey, out var ownerServerId)) continue;
                 var targetState = serverStates.FirstOrDefault(item => item.Data.Server.Id == ownerServerId);
-                if (targetState is null) continue;
-                var listener = targetState.Data.Listeners?.Listeners.FirstOrDefault(item => item.Port == port
-                    && ListenerAddressMatches(item.Address, address));
-                if (listener is not null)
+                if (targetState is not null)
                 {
-                    matchingServers.Add(FindListenerNode(targetState.Data, listener));
-                    continue;
+                    var listener = targetState.Data.Listeners?.Listeners.FirstOrDefault(item => item.Port == port
+                        && ListenerAddressMatches(item.Address, address));
+                    if (listener is not null)
+                    {
+                        matchingServers.Add(FindListenerNode(targetState.Data, listener));
+                        continue;
+                    }
+
+                    if (ownerKey.StartsWith("host:", StringComparison.Ordinal))
+                    {
+                        var published = targetState.Data.Docker?.Containers
+                            .Where(item => item.PublishedPorts.Any(value => value.HostPort == port && value.Protocol == "tcp"))
+                            .ToArray() ?? [];
+                        matchingServers.AddRange(published.Select(item => nodeByKey.GetValueOrDefault(GetComposeServiceNodeKey(targetState.Data, item))
+                            ?? nodeByKey.GetValueOrDefault(GetContainerNodeKey(targetState.Data, item))).OfType<GraphNode>());
+                    }
+                    else if (TryGetContainer(targetState.Data, ownerKey) is { } container
+                        && container.PublishedPorts.Any(value => value.ContainerPort == port && value.Protocol == "tcp"))
+                    {
+                        var serviceNode = nodeByKey.GetValueOrDefault(GetComposeServiceNodeKey(targetState.Data, container))
+                            ?? nodeByKey.GetValueOrDefault(GetContainerNodeKey(targetState.Data, container));
+                        if (serviceNode is not null) matchingServers.Add(serviceNode);
+                    }
                 }
 
-                if (ownerKey.StartsWith("host:", StringComparison.Ordinal))
+                if (staleSeed is not null && staleSeed.StaleServerIds.Contains(ownerServerId))
                 {
-                    var published = targetState.Data.Docker?.Containers
-                        .Where(item => item.PublishedPorts.Any(value => value.HostPort == port && value.Protocol == "tcp"))
-                        .ToArray() ?? [];
-                    matchingServers.AddRange(published.Select(item => nodeByKey.GetValueOrDefault(GetComposeServiceNodeKey(targetState.Data, item))
-                        ?? nodeByKey.GetValueOrDefault(GetContainerNodeKey(targetState.Data, item))).OfType<GraphNode>());
-                }
-                else if (TryGetContainer(targetState.Data, ownerKey) is { } container
-                    && container.PublishedPorts.Any(value => value.ContainerPort == port && value.Protocol == "tcp"))
-                {
-                    var serviceNode = nodeByKey.GetValueOrDefault(GetComposeServiceNodeKey(targetState.Data, container))
-                        ?? nodeByKey.GetValueOrDefault(GetContainerNodeKey(targetState.Data, container));
-                    if (serviceNode is not null) matchingServers.Add(serviceNode);
+                    var staleListener = (staleSeed.Listeners.GetValueOrDefault(ownerServerId) ?? [])
+                        .FirstOrDefault(item => item.Port == port && ListenerAddressMatches(item.Address, address));
+                    if (staleListener is not null && GetOrStubTargetNode(staleListener.NodeKey) is { } staleListenerNode)
+                    {
+                        matchingServers.Add(staleListenerNode);
+                        continue;
+                    }
+
+                    var staleContainers = staleSeed.Containers.GetValueOrDefault(ownerServerId) ?? [];
+                    if (ownerKey.StartsWith("host:", StringComparison.Ordinal))
+                    {
+                        matchingServers.AddRange(staleContainers
+                            .Where(item => item.PublishedPorts.Any(value => value.HostPort == port && value.Protocol == "tcp"))
+                            .Select(item => GetOrStubTargetNode(item.TargetNodeKey))
+                            .OfType<GraphNode>());
+                    }
+                    else if (staleContainers.FirstOrDefault(item => item.ContainerNodeKey == ownerKey) is { } staleContainer
+                        && staleContainer.PublishedPorts.Any(value => value.ContainerPort == port && value.Protocol == "tcp")
+                        && GetOrStubTargetNode(staleContainer.TargetNodeKey) is { } staleContainerNode)
+                    {
+                        matchingServers.Add(staleContainerNode);
+                    }
                 }
             }
 
@@ -476,8 +697,23 @@ public sealed class GraphBuilder
         GraphNode? FindUniqueOwnerNode(string address)
         {
             var owners = ipIndex.Find(address).Where(key => !key.StartsWith("subnet:", StringComparison.Ordinal))
-                .Select(key => nodeByKey.GetValueOrDefault(key)).Where(node => node is not null).DistinctBy(node => node!.Id).ToArray();
+                .Select(GetOrStubTargetNode).Where(node => node is not null).DistinctBy(node => node!.Id).ToArray();
             return owners.Length == 1 ? owners[0] : null;
+        }
+
+        GraphNode? GetOrStubTargetNode(string nodeKey)
+        {
+            if (nodeByKey.TryGetValue(nodeKey, out var existing))
+            {
+                return existing;
+            }
+
+            if (staleSeed is not null && staleSeed.NodesByKey.TryGetValue(nodeKey, out var previousNode))
+            {
+                return AddNode(previousNode.Key, previousNode.Kind, previousNode.Name, null, previousNode.ServerId, new { });
+            }
+
+            return null;
         }
 
         GraphNode FindListenerNode(ServerDiscoveryData data, ListenerInfo listener)
@@ -491,7 +727,8 @@ public sealed class GraphBuilder
                         ?? nodeByKey.GetValueOrDefault(GetContainerNodeKey(data, container))!;
                 }
 
-                var unit = data.Systemd?.Units.FirstOrDefault(item => item.MainPid == listener.ProcessId.Value);
+                var unit = data.Systemd?.Units.FirstOrDefault(item => item.MainPid == listener.ProcessId.Value
+                    || item.ListenerPids.Contains(listener.ProcessId.Value));
                 if (unit is not null && nodeByKey.TryGetValue($"service:{data.Server.Id:N}:systemd:{unit.Name}", out var systemdNode))
                 {
                     return systemdNode;
@@ -584,6 +821,36 @@ public sealed class GraphBuilder
         static string FormatEvidence(string? filePath, int line, string snippet) =>
             $"{filePath ?? "nginx configuration"}:{line}: {UrlUserInfo.Strip(snippet)}";
     }
+
+    private sealed record HostNodeAttributes(
+        string Host,
+        int Port,
+        string User,
+        string Group,
+        string? Hostname,
+        IReadOnlyList<string> Tags,
+        string[] Addresses,
+        string[] Subnets,
+        HostSshSessionAttribute[] SshSessions,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] HostFirewallAttribute? Firewall,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] HostTlsCertificateAttribute[]? TlsCertificates);
+
+    private sealed record HostSshSessionAttribute(string Address, int Port, int Count, bool IsAgent);
+
+    private sealed record HostFirewallAttribute(
+        string Backend,
+        bool Enabled,
+        string? DefaultInbound,
+        string? DefaultOutbound,
+        int RuleCount);
+
+    private sealed record HostTlsCertificateAttribute(
+        string Path,
+        string Subject,
+        string Issuer,
+        DateTimeOffset NotAfterUtc,
+        IReadOnlyList<string> SubjectAlternativeNames,
+        bool IsSelfSigned);
 
     private sealed record ServerGraphState(
         ServerDiscoveryData Data,

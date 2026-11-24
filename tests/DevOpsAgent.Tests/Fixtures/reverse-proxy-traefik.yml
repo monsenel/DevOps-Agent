@@ -1,0 +1,26 @@
+__DVA_PROXY__:traefik:/etc/traefik/dynamic/routes.yml
+http:
+  routers:
+    api-router:
+      entryPoints:
+        - websecure
+      rule: "Host(`api.example.test`) || Host(`alt.example.test`)"
+      service: api-svc
+  services:
+    api-svc:
+      loadBalancer:
+        servers:
+          - url: "http://10.88.20.20:5000"
+          - url: "http://10.88.20.21:5000"
+tcp:
+  routers:
+    pg-router:
+      entryPoints:
+        - postgres
+      rule: "HostSNI(`db.example.test`)"
+      service: pg-svc
+  services:
+    pg-svc:
+      loadBalancer:
+        servers:
+          - address: "10.88.20.30:5432"

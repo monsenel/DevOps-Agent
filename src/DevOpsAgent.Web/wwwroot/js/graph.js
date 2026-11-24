@@ -138,7 +138,8 @@ function applyStyles() {
             "shape": "round-rectangle", "border-width": 1, "border-color": c.line,
             "padding": 12, "text-halign": "center", "text-valign": "center"
         } },
-        { selector: 'node[stale = "stale"]', style: { "opacity": 0.55, "border-style": "dashed" } },
+        // NFR-10: keep text-opacity at 1 so stale labels maintain full WCAG AA contrast in both themes while dimming card chrome.
+        { selector: 'node[stale = "stale"]', style: { "background-opacity": 0.65, "border-opacity": 0.75, "border-style": "dashed", "text-opacity": 1 } },
         { selector: 'node[alertSeverity = "Critical"]', style: { "border-width": 3, "border-color": c.danger } },
         { selector: 'node[alertSeverity = "High"]', style: { "border-width": 2, "border-color": c.danger } },
         { selector: 'node[alertSeverity = "Medium"]', style: { "border-width": 2, "border-color": c.warn } },
@@ -148,9 +149,11 @@ function applyStyles() {
             "font-family": c.mono, "font-size": 10, "color": c.muted, "text-background-opacity": 0,
             "text-rotation": "autorotate"
         } },
-        { selector: "edge[kind = 'Declared']", style: { "line-style": "dashed", "line-dash-pattern": [2, 4], "opacity": 0.5 } },
+        { selector: "edge[kind = 'Declared']", style: { "line-style": "dashed", "line-dash-pattern": [2, 4], "line-opacity": 0.55, "text-opacity": 1 } },
         { selector: "edge[kind = 'Observed']", style: { "line-style": "dashed", "line-dash-pattern": [5, 4], "line-color": c.warn, "target-arrow-color": c.warn } },
         { selector: "edge[kind = 'Both']", style: { "line-style": "solid", "opacity": 1 } },
+        // T7.R16d: carried stale edges render dashed with dimmed stroke while keeping full-contrast labels.
+        { selector: 'edge[stale = "stale"]', style: { "line-style": "dashed", "line-dash-pattern": [4, 4], "line-opacity": 0.65, "text-opacity": 1 } },
         // The Servers rules come after the shared ones so they win on every property they set; selection, trace and dimming
         // come last so they win over the Servers rules.
         ...(viewMode === "servers" ? serversStyles(c) : []),
@@ -242,7 +245,8 @@ function serversStyles(c) {
     rules.push(
         { selector: 'node[kind = "Host"][alertSeverity = "Critical"]', style: { "border-width": 3, "border-color": c.danger, "outline-color": c.danger } },
         { selector: 'node[kind = "Host"][alertSeverity = "High"]', style: { "border-width": 2.5, "border-color": c.danger, "outline-color": c.danger } },
-        { selector: 'node[stale = "stale"]', style: { "opacity": 0.55, "border-style": "dashed" } },
+        // NFR-10: keep text-opacity at 1 so stale card headers, captions and rows keep readable contrast in both themes.
+        { selector: 'node[stale = "stale"]', style: { "background-opacity": 0.65, "border-opacity": 0.75, "border-style": "dashed", "text-opacity": 1 } },
         // One dashed arrow per pair of servers; the colour keeps the legend: observed only is warn, declared only is faded.
         { selector: "edge", style: {
             "width": 1.75, "line-style": "dashed", "line-dash-pattern": [6, 5], "curve-style": "bezier", "opacity": 1,
@@ -255,7 +259,8 @@ function serversStyles(c) {
         } },
         { selector: "edge[?bothWays]", style: { "source-arrow-shape": "triangle" } },
         { selector: "edge[kind = 'Observed']", style: { "line-color": c.warn, "target-arrow-color": c.warn, "source-arrow-color": c.warn } },
-        { selector: "edge[kind = 'Declared']", style: { "opacity": 0.55 } }
+        { selector: "edge[kind = 'Declared']", style: { "line-opacity": 0.55, "text-opacity": 1 } },
+        { selector: 'edge[stale = "stale"]', style: { "line-style": "dashed", "line-dash-pattern": [3, 4], "line-opacity": 0.65, "text-opacity": 1 } }
     );
     return rules;
 }
@@ -357,20 +362,25 @@ export async function setData(elements, view, alertStatuses = {}, serverInfo = {
         // Status is never color-only: the border colour is backed by a text marker in the label.
         const alertSeverity = alertStatuses[data.serverId] || "";
         if (alertSeverity) displayLabel = `${displayLabel}\n· ${alertSeverity} alert`;
-        // NFR-3: a stale node (server unreachable at the last discovery) is dimmed and says so in text.
-        const stale = attributes.Stale === true ? "stale" : "";
-        if (stale) displayLabel = `${displayLabel}\n${staleText(attributes.LastSeenUtc)}`;
-        return { data: { ...data, displayLabel, edgeLabel: data.port ? `:${data.port}` : "", alertSeverity, stale } };
+        // NFR-3 / T7.R16d: stale nodes and carried stale edges use C#-formatted badge text without parsing dates in JS.
+        const isEdge = data.source !== undefined && data.target !== undefined;
+        const stale = isEdge
+            ? (data.stale === true ? "stale" : "")
+            : (attributes.Stale === true || Boolean(data.staleBadge) ? "stale" : "");
+        if (!isEdge && stale) displayLabel = `${displayLabel}\n${staleBadgeText(data)}`;
+        const edgePortLabel = data.port ? `:${data.port}` : "";
+        const edgeLabel = isEdge && stale ? (edgePortLabel ? `${edgePortLabel} · stale` : "stale") : edgePortLabel;
+        return { data: { ...data, displayLabel, edgeLabel, alertSeverity, stale } };
     }));
     applyStyles();
     runLayout(view, true);
 }
 
-function staleText(lastSeenUtc) {
-    const seen = lastSeenUtc ? new Date(lastSeenUtc) : null;
-    if (!seen || Number.isNaN(seen.getTime())) return "stale · never discovered";
-    const pad = value => String(value).padStart(2, "0");
-    return `stale · last seen ${seen.getUTCFullYear()}-${pad(seen.getUTCMonth() + 1)}-${pad(seen.getUTCDate())} ${pad(seen.getUTCHours())}:${pad(seen.getUTCMinutes())} UTC`;
+// T7.R16d: use the C#-formatted stale badge text directly instead of re-parsing timestamps in JavaScript.
+function staleBadgeText(node) {
+    return typeof node?.staleBadge === "string" && node.staleBadge.trim()
+        ? node.staleBadge.trim()
+        : "stale · never discovered";
 }
 
 // ---- Servers view: model, layout, elements ----
@@ -597,12 +607,16 @@ function buildServers(elements, alertStatuses, serverInfo, c, listenerPorts, inv
         const id = `servers-view:edge:${first}|${second}`;
         let group = groups.get(id);
         if (!group) {
-            group = { id, first, second, firstSource: source, forward: 0, backward: 0, members: [], ports: new Set(), kinds: new Set() };
+            group = { id, first, second, firstSource: source, forward: 0, backward: 0, members: [], ports: new Set(), kinds: new Set(), staleCount: 0, staleText: "" };
             groups.set(id, group);
         }
         if (source === first) group.forward++; else group.backward++;
         group.members.push(edge.id);
         group.kinds.add(edge.kind);
+        if (edge.stale === true) {
+            group.staleCount++;
+            if (typeof edge.staleText === "string" && edge.staleText && !group.staleText) group.staleText = edge.staleText;
+        }
         if (edge.port !== undefined && edge.port !== null && edge.port !== "") {
             group.ports.add(String(edge.port));
             incomingPorts.set(target, [...(incomingPorts.get(target) || []), String(edge.port)]);
@@ -615,9 +629,11 @@ function buildServers(elements, alertStatuses, serverInfo, c, listenerPorts, inv
     const aggregated = [...groups.values()].map(group => {
         const source = group.forward > group.backward ? group.first : group.backward > group.forward ? group.second : group.firstSource;
         const ports = [...group.ports].sort((a, b) => Number(a) - Number(b) || a.localeCompare(b)).join(", ");
+        const allStale = group.staleCount > 0 && group.staleCount === group.members.length;
         return {
             id: group.id, source, target: source === group.first ? group.second : group.first, kind: aggregateKind(group.kinds),
-            ports, memberEdgeIds: group.members, bothWays: group.forward > 0 && group.backward > 0
+            ports, memberEdgeIds: group.members, bothWays: group.forward > 0 && group.backward > 0,
+            stale: allStale ? "stale" : "", staleText: allStale ? (group.staleText || "stale · carried forward") : ""
         };
     });
     // Roles use the edges, so they are known only now.
@@ -650,7 +666,7 @@ function buildServers(elements, alertStatuses, serverInfo, c, listenerPorts, inv
             const parts = box.kind === "host" ? [ROLES[box.role].title, knownAs, address, info.os]
                 : box.kind === "unknownHost" ? [box.inventory ? "In inventory, not discovered yet" : "Not in inventory", box.address] : [];
             if (alert) parts.push(`${alert} alert`);
-            if (stale) parts.push(staleText(attributes.LastSeenUtc));
+            if (stale) parts.push(staleBadgeText(box.node));
             // The colour and the badge are backed by text: "SSH from 2 sources", "SSH from a source that is not allowed".
             if (box.sshSummary) parts.push(box.sshSummary);
             box.caption = parts.filter(Boolean).join(" • ");
@@ -679,7 +695,7 @@ function buildServers(elements, alertStatuses, serverInfo, c, listenerPorts, inv
             box.slotH = box.h + (box.caption ? CARD.captionH : 0);
         } else if (box.kind === "unknown") {
             box.lines = ["Unknown", attributes.Address || "unknown endpoint"];
-            if (stale) box.lines.push(staleText(attributes.LastSeenUtc));
+            if (stale) box.lines.push(staleBadgeText(box.node));
             box.w = Math.max(...box.lines.map(line => textWidth(line, font.row))) + CARD.unknownPadX;
             box.h = box.lines.length * 18 + 16;
             box.slotW = box.w;
@@ -799,7 +815,8 @@ function serversElements(built, layout) {
     for (const edge of built.aggregated) {
         const route = segmentRoute(centres.get(edge.source), centres.get(edge.target), bends.get(edge.id) || []);
         if (route) built.model.segments.set(edge.id, route);
-        result.push({ data: { ...edge, edgeLabel: edge.ports } });
+        const label = edge.stale ? (edge.ports ? `${edge.ports} · stale` : "stale") : edge.ports;
+        result.push({ data: { ...edge, edgeLabel: label } });
     }
     return result;
 }

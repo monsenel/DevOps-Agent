@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DevOpsAgent.Application.Abstractions;
+using DevOpsAgent.Domain.Discovery;
 using DevOpsAgent.Domain.Graph;
 
 namespace DevOpsAgent.Application.Discovery;
@@ -23,8 +24,9 @@ public sealed class DriftService(ISnapshotRepository snapshots, IGraphRepository
             throw new ArgumentException("Choose two different snapshots to compare.", nameof(toSnapshotId));
         }
 
-        var availableIds = (await snapshots.ListAsync(cancellationToken)).Select(snapshot => snapshot.Id).ToHashSet();
-        if (!availableIds.Contains(fromSnapshotId) || !availableIds.Contains(toSnapshotId))
+        var snapshotList = await snapshots.ListAsync(cancellationToken);
+        var byId = snapshotList.ToDictionary(snapshot => snapshot.Id);
+        if (!byId.TryGetValue(fromSnapshotId, out var fromSnapshot) || !byId.TryGetValue(toSnapshotId, out var toSnapshot))
         {
             throw new ArgumentException("Both snapshots must exist and be complete.");
         }
@@ -33,10 +35,15 @@ public sealed class DriftService(ISnapshotRepository snapshots, IGraphRepository
             ?? throw new InvalidOperationException("The earlier snapshot graph is unavailable.");
         var after = await graphs.GetAsync(toSnapshotId, GraphView.All, cancellationToken)
             ?? throw new InvalidOperationException("The later snapshot graph is unavailable.");
+        var fromRuns = await snapshots.ListCollectorRunsAsync(fromSnapshotId, cancellationToken);
+        var toRuns = await snapshots.ListCollectorRunsAsync(toSnapshotId, cancellationToken);
+
+        var eligibleListenerServers = await ComputeEligibleListenerServersAsync(
+            before, after, fromSnapshot, toSnapshot, fromRuns, toRuns, cancellationToken);
         var changes = new List<DriftChange>();
 
         CompareNodes(before, after, changes);
-        CompareListeners(before, after, changes);
+        CompareListeners(before, after, eligibleListenerServers, changes);
         CompareEdges(before, after, changes);
 
         return new DriftReport(fromSnapshotId, toSnapshotId, changes
@@ -45,6 +52,106 @@ public sealed class DriftService(ISnapshotRepository snapshots, IGraphRepository
             .ThenBy(change => change.Key, StringComparer.OrdinalIgnoreCase)
             .ToArray());
     }
+
+    /// <summary>
+    /// T7.R16c: listener comparison includes only servers that exist in both snapshots, are not stale in either,
+    /// and whose listener collector succeeded in both (including across merge snapshots).
+    /// </summary>
+    private async Task<HashSet<Guid>> ComputeEligibleListenerServersAsync(
+        GraphSnapshotDto before,
+        GraphSnapshotDto after,
+        Snapshot fromSnapshot,
+        Snapshot toSnapshot,
+        IReadOnlyList<CollectorRun> fromRuns,
+        IReadOnlyList<CollectorRun> toRuns,
+        CancellationToken cancellationToken)
+    {
+        var beforeServers = ServerIdsIn(before);
+        var afterServers = ServerIdsIn(after);
+        var staleServers = StaleServerIdsIn(before);
+        staleServers.UnionWith(StaleServerIdsIn(after));
+
+        var candidates = beforeServers.Intersect(afterServers).Where(id => !staleServers.Contains(id)).ToHashSet();
+        if (candidates.Count == 0) return candidates;
+
+        // If a snapshot recorded collector runs for a server, require a succeeded "listeners" run in that snapshot.
+        var fromRunsByServer = fromRuns.GroupBy(run => run.ServerId).ToDictionary(group => group.Key, group => group.ToArray());
+        var toRunsByServer = toRuns.GroupBy(run => run.ServerId).ToDictionary(group => group.Key, group => group.ToArray());
+
+        var needBeforeHistorical = new List<Guid>();
+        var needAfterHistorical = new List<Guid>();
+
+        foreach (var serverId in candidates.ToArray())
+        {
+            if (fromRunsByServer.TryGetValue(serverId, out var serverFromRuns))
+            {
+                if (!serverFromRuns.Any(run => run.CollectorName == "listeners" && run.Status == CollectorRunStatus.Succeeded))
+                {
+                    candidates.Remove(serverId);
+                    continue;
+                }
+            }
+            else if (fromRuns.Count > 0)
+            {
+                // Merge snapshot: other servers ran here, so check this server's last listener status at/before the merge.
+                needBeforeHistorical.Add(serverId);
+            }
+
+            if (toRunsByServer.TryGetValue(serverId, out var serverToRuns))
+            {
+                if (!serverToRuns.Any(run => run.CollectorName == "listeners" && run.Status == CollectorRunStatus.Succeeded))
+                {
+                    candidates.Remove(serverId);
+                }
+            }
+            else if (toRuns.Count > 0)
+            {
+                needAfterHistorical.Add(serverId);
+            }
+        }
+
+        if (needBeforeHistorical.Count > 0)
+        {
+            var latestBefore = await snapshots.GetLatestCollectorStatusAtOrBeforeAsync(
+                "listeners", fromSnapshot.StartedAtUtc, needBeforeHistorical, cancellationToken);
+            foreach (var serverId in needBeforeHistorical)
+            {
+                if (!latestBefore.TryGetValue(serverId, out var status) || status != CollectorRunStatus.Succeeded)
+                {
+                    candidates.Remove(serverId);
+                }
+            }
+        }
+
+        if (needAfterHistorical.Count > 0)
+        {
+            var latestAfter = await snapshots.GetLatestCollectorStatusAtOrBeforeAsync(
+                "listeners", toSnapshot.StartedAtUtc, needAfterHistorical, cancellationToken);
+            foreach (var serverId in needAfterHistorical)
+            {
+                if (!latestAfter.TryGetValue(serverId, out var status) || status != CollectorRunStatus.Succeeded)
+                {
+                    candidates.Remove(serverId);
+                }
+            }
+        }
+
+        return candidates;
+    }
+
+    private static HashSet<Guid> ServerIdsIn(GraphSnapshotDto graph) => graph.Nodes
+        .Select(element => ReadGuid(element.Data, "serverId"))
+        .Where(id => id.HasValue)
+        .Select(id => id!.Value)
+        .ToHashSet();
+
+    private static HashSet<Guid> StaleServerIdsIn(GraphSnapshotDto graph) => graph.Nodes
+        .Select(element => element.Data)
+        .Where(node => node.TryGetProperty("attributes", out var attrs) && StaleCarryForward.IsStale(attrs))
+        .Select(node => ReadGuid(node, "serverId"))
+        .Where(id => id.HasValue)
+        .Select(id => id!.Value)
+        .ToHashSet();
 
     private static void CompareNodes(GraphSnapshotDto before, GraphSnapshotDto after, ICollection<DriftChange> changes)
     {
@@ -88,12 +195,18 @@ public sealed class DriftService(ISnapshotRepository snapshots, IGraphRepository
         }
     }
 
-    private static void CompareListeners(GraphSnapshotDto before, GraphSnapshotDto after, ICollection<DriftChange> changes)
+    private static void CompareListeners(
+        GraphSnapshotDto before,
+        GraphSnapshotDto after,
+        IReadOnlySet<Guid> eligibleServerIds,
+        ICollection<DriftChange> changes)
     {
         var beforeNodeKeys = NodeKeys(before);
         var afterNodeKeys = NodeKeys(after);
-        var beforeByKey = ListenersByIdentity(before, beforeNodeKeys);
-        var afterByKey = ListenersByIdentity(after, afterNodeKeys);
+        var beforeNodeServers = NodeServerIds(before);
+        var afterNodeServers = NodeServerIds(after);
+        var beforeByKey = ListenersByIdentity(before, beforeNodeKeys, beforeNodeServers, eligibleServerIds);
+        var afterByKey = ListenersByIdentity(after, afterNodeKeys, afterNodeServers, eligibleServerIds);
 
         foreach (var (identity, current) in afterByKey)
         {
@@ -101,14 +214,14 @@ public sealed class DriftService(ISnapshotRepository snapshots, IGraphRepository
             {
                 changes.Add(new DriftChange(DriftChangeType.Added, DriftEntityType.Listener, identity,
                     $"Added listener :{current.Listener.Port}/{current.Listener.Protocol} on {current.NodeKey}.",
-                    NodeKey: current.NodeKey));
+                    NodeKey: current.NodeKey, ServerId: current.ServerId));
             }
             else if (previous.Listener.ProcessName != current.Listener.ProcessName
                 || previous.Listener.ProcessId != current.Listener.ProcessId)
             {
                 changes.Add(new DriftChange(DriftChangeType.Changed, DriftEntityType.Listener, identity,
                     $"Changed listener :{current.Listener.Port}/{current.Listener.Protocol} on {current.NodeKey}.",
-                    NodeKey: current.NodeKey));
+                    NodeKey: current.NodeKey, ServerId: current.ServerId));
             }
         }
 
@@ -118,7 +231,7 @@ public sealed class DriftService(ISnapshotRepository snapshots, IGraphRepository
             {
                 changes.Add(new DriftChange(DriftChangeType.Removed, DriftEntityType.Listener, identity,
                     $"Removed listener :{previous.Listener.Port}/{previous.Listener.Protocol} from {previous.NodeKey}.",
-                    NodeKey: previous.NodeKey));
+                    NodeKey: previous.NodeKey, ServerId: previous.ServerId));
             }
         }
     }
@@ -178,19 +291,37 @@ public sealed class DriftService(ISnapshotRepository snapshots, IGraphRepository
         }
     }
 
-    // Several listeners can share one identity (Docker's embedded DNS binds more than one random port); the first stands for all.
-    private static Dictionary<string, ListenerState> ListenersByIdentity(GraphSnapshotDto graph, IReadOnlyDictionary<string, string> nodeKeys) =>
-        graph.Listeners.Select(listener => ToListenerState(listener, nodeKeys)).OfType<ListenerState>()
-            .GroupBy(state => state.Identity, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+    private static Dictionary<string, Guid?> NodeServerIds(GraphSnapshotDto graph) => graph.Nodes
+        .Select(element => element.Data)
+        .ToDictionary(node => RequiredString(node, "id"), node => ReadGuid(node, "serverId"), StringComparer.Ordinal);
 
-    private static ListenerState? ToListenerState(GraphListenerDto listener, IReadOnlyDictionary<string, string> nodeKeys)
+    // Several listeners can share one identity (Docker's embedded DNS binds more than one random port); the first stands for all.
+    private static Dictionary<string, ListenerState> ListenersByIdentity(
+        GraphSnapshotDto graph,
+        IReadOnlyDictionary<string, string> nodeKeys,
+        IReadOnlyDictionary<string, Guid?> nodeServerIds,
+        IReadOnlySet<Guid> eligibleServerIds) =>
+        graph.Listeners
+            .Select(listener => ToListenerState(listener, nodeKeys, nodeServerIds, eligibleServerIds))
+            .OfType<ListenerState>()
+            .GroupBy(state => state.Identity, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+
+    private static ListenerState? ToListenerState(
+        GraphListenerDto listener,
+        IReadOnlyDictionary<string, string> nodeKeys,
+        IReadOnlyDictionary<string, Guid?> nodeServerIds,
+        IReadOnlySet<Guid> eligibleServerIds)
     {
-        if (!nodeKeys.TryGetValue(listener.NodeId.ToString("N"), out var nodeKey)) return null;
+        var nodeIdText = listener.NodeId.ToString("N");
+        if (!nodeKeys.TryGetValue(nodeIdText, out var nodeKey)) return null;
+        var serverId = nodeServerIds.GetValueOrDefault(nodeIdText);
+        if (serverId is Guid id && !eligibleServerIds.Contains(id)) return null;
         // Docker's embedded DNS (127.0.0.11, present when the server itself runs in a container on a user-defined network)
         // binds random ports on every start: it is one endpoint per protocol, not a new listener each time.
         var port = listener.Address == DockerEmbeddedDns ? "dns" : listener.Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
         var identity = $"{nodeKey}\u001f{listener.Address}\u001f{port}\u001f{listener.Protocol}";
-        return new ListenerState(identity, nodeKey, listener);
+        return new ListenerState(identity, nodeKey, serverId, listener);
     }
 
     private const string DockerEmbeddedDns = "127.0.0.11";
@@ -216,6 +347,6 @@ public sealed class DriftService(ISnapshotRepository snapshots, IGraphRepository
     private static string Humanize(string value) =>
         System.Text.RegularExpressions.Regex.Replace(value, "([a-z])([A-Z])", "$1 $2").ToLowerInvariant();
 
-    private sealed record ListenerState(string Identity, string NodeKey, GraphListenerDto Listener);
+    private sealed record ListenerState(string Identity, string NodeKey, Guid? ServerId, GraphListenerDto Listener);
     private sealed record EdgeState(string Identity, string SourceKey, string TargetKey, string Kind, string? Port, string Protocol);
 }

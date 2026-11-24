@@ -606,5 +606,6 @@ public sealed class SshAuthFailurePauseTests
         public Task SaveAsync(Guid snapshotId, GraphBuildResult graph, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task MergeAsync(Guid snapshotId, Guid previousSnapshotId, GraphBuildResult graph, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task<GraphSnapshotDto?> GetAsync(Guid snapshotId, GraphView view, CancellationToken cancellationToken) => Task.FromResult<GraphSnapshotDto?>(null);
+        public Task<GraphBuildResult?> GetEntitiesAsync(Guid snapshotId, CancellationToken cancellationToken) => Task.FromResult<GraphBuildResult?>(null);
     }
 }

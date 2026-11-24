@@ -1,0 +1,14 @@
+__DVA_FW__:nft
+table inet filter {
+	chain input {
+		type filter hook input priority filter; policy drop;
+		iif "lo" accept
+		ct state established,related accept
+		tcp dport { 22, 80, 443 } accept
+		ip saddr 10.88.20.0/24 tcp dport 5432 accept
+		udp dport 51820 accept
+	}
+	chain output {
+		type filter hook output priority filter; policy accept;
+	}
+}

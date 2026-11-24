@@ -167,29 +167,43 @@ public sealed class GraphRepository(AppDbContext dbContext) : IGraphRepository
             .ToArrayAsync(cancellationToken);
         var observedEdgeIds = evidenceRows.Where(item => item.EdgeId is not null && item.Collector == "connections")
             .Select(item => item.EdgeId!.Value).ToHashSet();
+        var staleEdgeIds = evidenceRows.Where(item => item.EdgeId is not null && item.Collector == StaleCarryForward.StaleEvidenceCollector)
+            .Select(item => item.EdgeId!.Value).ToHashSet();
 
         return new GraphSnapshotDto(
             snapshotId,
             view.ToString().ToLowerInvariant(),
-            nodeRows.Select(node => new GraphElementDto(JsonSerializer.SerializeToElement(new
+            nodeRows.Select(node =>
             {
-                id = node.Id.ToString("N"),
-                key = node.Key,
-                kind = node.Kind.ToString(),
-                label = node.Name,
-                parent = node.ParentNodeId?.ToString("N"),
-                serverId = node.ServerId?.ToString("N"),
-                attributes = JsonDocument.Parse(node.AttributesJson).RootElement.Clone()
-            }))).ToArray(),
-            edgeRows.Select(edge => new GraphElementDto(JsonSerializer.SerializeToElement(new
+                using var document = JsonDocument.Parse(node.AttributesJson);
+                var attributes = document.RootElement.Clone();
+                return new GraphElementDto(JsonSerializer.SerializeToElement(new
+                {
+                    id = node.Id.ToString("N"),
+                    key = node.Key,
+                    kind = node.Kind.ToString(),
+                    label = node.Name,
+                    parent = node.ParentNodeId?.ToString("N"),
+                    serverId = node.ServerId?.ToString("N"),
+                    staleBadge = StaleCarryForward.Badge(attributes),
+                    attributes
+                }));
+            }).ToArray(),
+            edgeRows.Select(edge =>
             {
-                id = edge.Id.ToString("N"),
-                source = edge.SourceNodeId.ToString("N"),
-                target = edge.TargetNodeId.ToString("N"),
-                kind = edge.Kind == GraphEdgeKind.Declared && observedEdgeIds.Contains(edge.Id) ? "Both" : edge.Kind.ToString(),
-                port = edge.Port,
-                protocol = edge.Protocol
-            }))).ToArray(),
+                var isStale = staleEdgeIds.Contains(edge.Id);
+                return new GraphElementDto(JsonSerializer.SerializeToElement(new
+                {
+                    id = edge.Id.ToString("N"),
+                    source = edge.SourceNodeId.ToString("N"),
+                    target = edge.TargetNodeId.ToString("N"),
+                    kind = edge.Kind == GraphEdgeKind.Declared && observedEdgeIds.Contains(edge.Id) ? "Both" : edge.Kind.ToString(),
+                    port = edge.Port,
+                    protocol = edge.Protocol,
+                    stale = isStale,
+                    staleText = isStale ? StaleCarryForward.StaleEdgeBadge : null
+                }));
+            }).ToArray(),
             listenerRows.Select(listener => new GraphListenerDto(listener.Id, listener.NodeId, listener.Address,
                 listener.Port, listener.Protocol, listener.ProcessName, listener.ProcessId)).ToArray(),
             evidenceRows.Select(item => new GraphEvidenceDto(item.Id, item.NodeId, item.EdgeId,

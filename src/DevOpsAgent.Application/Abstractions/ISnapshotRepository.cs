@@ -30,4 +30,28 @@ public interface ISnapshotRepository
         int succeededServerCount,
         int failedServerCount,
         CancellationToken cancellationToken);
+
+    /// <summary>Collector runs recorded for a specific snapshot.</summary>
+    Task<IReadOnlyList<CollectorRun>> ListCollectorRunsAsync(Guid snapshotId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<CollectorRun>>([]);
+
+    /// <summary>
+    /// The collection time of the most recent succeeded <c>host</c> collector run (falling back to any succeeded collector run)
+    /// for each requested server in a usable snapshot, used as the real "last seen" timestamp when carrying stale nodes forward (T7.R16).
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, DateTimeOffset>> GetLastHostCollectionTimesAsync(
+        IReadOnlyCollection<Guid> serverIds,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyDictionary<Guid, DateTimeOffset>>(new Dictionary<Guid, DateTimeOffset>());
+
+    /// <summary>
+    /// Latest recorded status of the named collector for each requested server in usable snapshots started at or before
+    /// <paramref name="atOrBeforeUtc"/> (used to determine listener eligibility across merge snapshots, T7.R16).
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, CollectorRunStatus>> GetLatestCollectorStatusAtOrBeforeAsync(
+        string collectorName,
+        DateTimeOffset atOrBeforeUtc,
+        IReadOnlyCollection<Guid> serverIds,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyDictionary<Guid, CollectorRunStatus>>(new Dictionary<Guid, CollectorRunStatus>());
 }
