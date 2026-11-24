@@ -33,6 +33,13 @@ public sealed class HostReachabilityTracker(TimeProvider timeProvider) : IHostRe
     private readonly ConcurrentDictionary<Guid, HostReachabilityState> _states = new();
     // Consecutive command timeouts per host. They outlive a recycled client: the count only ends with a successful command.
     private readonly ConcurrentDictionary<Guid, int> _timeouts = new();
+    // Monotonic claim tokens per server (T7.R19 v2): EndAttempt only clears RetryInProgress when the token matches.
+    private readonly Dictionary<Guid, long> _claimTokens = new();
+    // When the current attempt started (T7.R21 i): anchors AuthFailed retries to attempt start so slow logins do not slip to 90 s.
+    private readonly Dictionary<Guid, DateTimeOffset> _attemptStartedUtc = new();
+    // When the current command-timeout backoff was last set/escalated (T7.R21 d).
+    private readonly Dictionary<Guid, DateTimeOffset> _commandBackoffUpdatedUtc = new();
+    private long _nextClaimToken;
     private readonly object _gate = new();
 
     public HostReachabilityState? Get(Guid serverId) => _states.GetValueOrDefault(serverId);
@@ -49,19 +56,34 @@ public sealed class HostReachabilityTracker(TimeProvider timeProvider) : IHostRe
         !state.AutomaticRetriesPaused
         && now >= (state.Kind == HostFailureKind.AuthFailed ? state.NextRetryUtc - AuthFailedRetrySlack : state.NextRetryUtc);
 
-    public bool TryBeginAttempt(Guid serverId, bool bypassBackoff, out HostReachabilityState? blockedBy)
+    public bool TryBeginAttempt(Guid serverId, bool bypassBackoff, out HostReachabilityState? blockedBy) =>
+        TryBeginAttempt(serverId, bypassBackoff, out blockedBy, out _);
+
+    public bool TryBeginAttempt(Guid serverId, bool bypassBackoff, out HostReachabilityState? blockedBy, out long claimToken)
     {
         lock (_gate)
         {
             blockedBy = null;
-            if (!_states.TryGetValue(serverId, out var state)) return true;
-            if (!bypassBackoff && (state.RetryInProgress || !Elapsed(state, timeProvider.GetUtcNow())))
+            var now = timeProvider.GetUtcNow();
+            if (!_states.TryGetValue(serverId, out var state))
             {
+                claimToken = ++_nextClaimToken;
+                _claimTokens[serverId] = claimToken;
+                _attemptStartedUtc[serverId] = now;
+                return true;
+            }
+
+            if (!bypassBackoff && (state.RetryInProgress || !Elapsed(state, now)))
+            {
+                claimToken = 0;
                 blockedBy = state;
                 return false;
             }
 
             // One retry at a time: everyone else is told the host is unreachable instead of queueing behind it.
+            claimToken = ++_nextClaimToken;
+            _claimTokens[serverId] = claimToken;
+            _attemptStartedUtc[serverId] = now;
             _states[serverId] = state with { RetryInProgress = true };
             return true;
         }
@@ -71,12 +93,15 @@ public sealed class HostReachabilityTracker(TimeProvider timeProvider) : IHostRe
     {
         lock (_gate)
         {
+            _attemptStartedUtc.Remove(serverId);
+            _claimTokens.Remove(serverId);
             if (!_states.TryGetValue(serverId, out var state)) return;
             // A connection includes the login, so it ends a connection failure and a login failure alike.
             if (state.Kind is HostFailureKind.Connect or HostFailureKind.AuthFailed)
             {
                 _states.TryRemove(serverId, out _);
                 _timeouts.TryRemove(serverId, out _);
+                _commandBackoffUpdatedUtc.Remove(serverId);
             }
             else if (state.RetryInProgress)
             {
@@ -93,8 +118,41 @@ public sealed class HostReachabilityTracker(TimeProvider timeProvider) : IHostRe
         lock (_gate)
         {
             var now = timeProvider.GetUtcNow();
-            var kind = failure is SshAuthFailedException ? HostFailureKind.AuthFailed : HostFailureKind.Connect;
+            var hasAttemptStart = _attemptStartedUtc.Remove(serverId, out var attemptStarted);
+            _claimTokens.Remove(serverId);
+            var authException = failure as SshAuthFailedException;
+            var kind = authException is not null ? HostFailureKind.AuthFailed : HostFailureKind.Connect;
             _states.TryGetValue(serverId, out var previous);
+
+            // T7.R23 flap policy: keep the 3-failure auth pause across transient connect failures; only Retry now /
+            // Test connection succeeding (RecordSuccess) or a server edit (Reset) lifts the pause.
+            if (previous is { AutomaticRetriesPaused: true } && kind != HostFailureKind.AuthFailed)
+            {
+                return _states[serverId] = previous with
+                {
+                    RetryInProgress = false,
+                    LastError = failure.Message,
+                    LastFailure = failure
+                };
+            }
+
+            // T7.R23: a Data Protection decrypt failure of the stored passphrase never contacted the server, so it does
+            // not increment toward the 3-failure auth pause (unless the host was already paused).
+            if (authException is { Reason: SshAuthFailure.PassphraseUnreadable } && previous is not { AutomaticRetriesPaused: true })
+            {
+                var anchorLocal = AnchorAuthRetry(now, hasAttemptStart, attemptStarted);
+                return _states[serverId] = new HostReachabilityState(
+                    serverId,
+                    previous is { Kind: HostFailureKind.AuthFailed } ? previous.UnreachableSinceUtc : now,
+                    anchorLocal + AuthFailedBackoff,
+                    1,
+                    failure.Message,
+                    RetryInProgress: false,
+                    failure,
+                    HostFailureKind.AuthFailed,
+                    cause ?? SshAuthFailedException.Describe(SshAuthFailure.PassphraseUnreadable));
+            }
+
             // A change between "cannot connect" and "cannot log in" is a new situation: its count and its "since" start over,
             // so a login failure never inherits the long backoff of an outage (and the other way round).
             var continuing = previous is not null && (previous.Kind == HostFailureKind.AuthFailed) == (kind == HostFailureKind.AuthFailed);
@@ -104,14 +162,27 @@ public sealed class HostReachabilityTracker(TimeProvider timeProvider) : IHostRe
             var failures = continuing ? previous!.ConsecutiveFailures + 1 : 1;
             if (kind == HostFailureKind.AuthFailed) failures = Math.Min(failures, IHostReachability.AuthFailedAttemptLimit);
             var paused = kind == HostFailureKind.AuthFailed && failures >= IHostReachability.AuthFailedAttemptLimit;
+            // T7.R21 (i): anchor AuthFailed retry time to when the attempt started so a slow login (> 1 s) still retries
+            // on the next 60 s mark rather than slipping to 90 s.
+            var retryAnchor = kind == HostFailureKind.AuthFailed ? AnchorAuthRetry(now, hasAttemptStart, attemptStarted) : now;
             // A host that cannot even be connected to is now unreachable, whatever it was before.
             return _states[serverId] = new HostReachabilityState(serverId, continuing ? previous!.UnreachableSinceUtc : now,
-                paused ? DateTimeOffset.MaxValue : now + BackoffFor(kind, failures), failures, failure.Message, RetryInProgress: false, failure, kind,
-                cause ?? (failure is SshAuthFailedException auth ? SshAuthFailedException.Describe(auth.Reason) : null));
+                paused ? DateTimeOffset.MaxValue : retryAnchor + BackoffFor(kind, failures), failures, failure.Message, RetryInProgress: false, failure, kind,
+                cause ?? (authException is not null ? SshAuthFailedException.Describe(authException.Reason) : null));
         }
     }
 
-    public HostReachabilityState? RecordCommandTimeout(Guid serverId, Exception failure, bool force = false)
+    private static DateTimeOffset AnchorAuthRetry(DateTimeOffset now, bool hasAttemptStart, DateTimeOffset attemptStarted)
+    {
+        if (!hasAttemptStart || attemptStarted > now) return now;
+        var earliest = now - TimeSpan.FromSeconds(30);
+        return attemptStarted < earliest ? earliest : attemptStarted;
+    }
+
+    public HostReachabilityState? RecordCommandTimeout(Guid serverId, Exception failure, bool force = false) =>
+        RecordCommandTimeout(serverId, failure, force, commandStartedAtUtc: null);
+
+    public HostReachabilityState? RecordCommandTimeout(Guid serverId, Exception failure, bool force, DateTimeOffset? commandStartedAtUtc)
     {
         ArgumentNullException.ThrowIfNull(failure);
         lock (_gate)
@@ -123,8 +194,16 @@ public sealed class HostReachabilityTracker(TimeProvider timeProvider) : IHostRe
                 // backoff began (or when this retry was claimed by another caller) must not escalate it a second time.
                 if (previous.Kind is HostFailureKind.Connect or HostFailureKind.AuthFailed) return null;
                 if (!force && now < previous.NextRetryUtc) return null;
+                // T7.R21 (d): a command that started before the backoff window opened (or before the last escalation for
+                // a forced retry) must not escalate the backoff after its window or clear another caller's claimed retry.
+                if (commandStartedAtUtc is { } started)
+                {
+                    if (!force && started < previous.NextRetryUtc) return null;
+                    if (force && _commandBackoffUpdatedUtc.TryGetValue(serverId, out var updatedAt) && started < updatedAt) return null;
+                }
 
                 var failures = previous.ConsecutiveFailures + 1;
+                _commandBackoffUpdatedUtc[serverId] = now;
                 return _states[serverId] = previous with
                 {
                     NextRetryUtc = now + BackoffFor(failures),
@@ -140,6 +219,7 @@ public sealed class HostReachabilityTracker(TimeProvider timeProvider) : IHostRe
 
             // From here the backoff state carries the escalation; the count starts again once the host answers.
             _timeouts.TryRemove(serverId, out _);
+            _commandBackoffUpdatedUtc[serverId] = now;
             return _states[serverId] = new HostReachabilityState(serverId, now, now + BackoffFor(1), 1, failure.Message,
                 RetryInProgress: false, failure, HostFailureKind.CommandTimeout);
         }
@@ -155,14 +235,25 @@ public sealed class HostReachabilityTracker(TimeProvider timeProvider) : IHostRe
             if (_states.TryGetValue(serverId, out var state) && state.Kind == HostFailureKind.CommandTimeout)
             {
                 _states.TryRemove(serverId, out _);
+                _commandBackoffUpdatedUtc.Remove(serverId);
             }
         }
     }
 
-    public void EndAttempt(Guid serverId)
+    public void EndAttempt(Guid serverId) => EndAttempt(serverId, claimToken: 0);
+
+    public void EndAttempt(Guid serverId, long claimToken)
     {
         lock (_gate)
         {
+            // T7.R19 v2: if a claim token was provided, only the active claimant may clear RetryInProgress.
+            if (claimToken != 0 && (!_claimTokens.TryGetValue(serverId, out var active) || active != claimToken))
+            {
+                return;
+            }
+
+            _claimTokens.Remove(serverId);
+            _attemptStartedUtc.Remove(serverId);
             if (_states.TryGetValue(serverId, out var state) && state.RetryInProgress)
                 _states[serverId] = state with { RetryInProgress = false };
         }
@@ -174,6 +265,9 @@ public sealed class HostReachabilityTracker(TimeProvider timeProvider) : IHostRe
         {
             _states.TryRemove(serverId, out _);
             _timeouts.TryRemove(serverId, out _);
+            _claimTokens.Remove(serverId);
+            _attemptStartedUtc.Remove(serverId);
+            _commandBackoffUpdatedUtc.Remove(serverId);
         }
     }
 

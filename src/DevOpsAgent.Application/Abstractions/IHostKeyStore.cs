@@ -7,8 +7,9 @@ public sealed record HostKeyInfo(string KeyType, string Fingerprint, DateTimeOff
 
 /// <summary>A server presented a key that does not match the stored one; the connection was refused.</summary>
 /// <param name="StoredIsManual">The stored key comes from the owner's known_hosts file, which the app does not change.</param>
+/// <param name="Revoked">The presented key matched a <c>@revoked</c> entry in the owner's known_hosts file (T7.R29).</param>
 public sealed record HostKeyMismatch(string Host, int Port, IReadOnlyList<HostKeyInfo> Stored, string PresentedKeyType,
-    string PresentedFingerprint, DateTimeOffset SeenAtUtc, bool StoredIsManual);
+    string PresentedFingerprint, DateTimeOffset SeenAtUtc, bool StoredIsManual, bool Revoked = false);
 
 /// <summary>
 /// SSH host keys (T8.4, D-041): the owner's known_hosts file is honoured as before; a host it does not list is trusted on its
@@ -23,8 +24,15 @@ public interface IHostKeyStore
     HostKeyMismatch? GetMismatch(string host, int port);
 
     /// <summary>
-    /// Replaces the app-managed key of the host with the refused key whose fingerprint the owner confirmed. Fails when that key
-    /// is no longer the refused one or when the stored key is the owner's own (manual) entry.
+    /// Issues a one-time confirmation token for the currently refused key of <paramref name="host"/>:<paramref name="port"/>
+    /// (T7.R29). The token must be supplied to <see cref="AcceptPresentedKeyAsync"/> and is consumed on first use.
     /// </summary>
-    Task AcceptPresentedKeyAsync(string host, int port, string presentedFingerprint, CancellationToken cancellationToken);
+    string IssueAcceptToken(string host, int port, string presentedFingerprint);
+
+    /// <summary>
+    /// Replaces the app-managed key of the same key type for the host with the refused key whose fingerprint and one-time
+    /// confirmation token the owner confirmed. Fails when that key is no longer the refused one, the token is invalid or
+    /// already used, or when the stored key is the owner's own (manual) entry or revoked.
+    /// </summary>
+    Task AcceptPresentedKeyAsync(string host, int port, string presentedFingerprint, string confirmationToken, CancellationToken cancellationToken);
 }

@@ -13,7 +13,9 @@ namespace DevOpsAgent.Tests;
 /// </summary>
 public sealed partial class SudoPasswordTests
 {
-    public static TheoryData<string> UnconfirmedEndings => ["timeout", "dropped connection", "shutdown", "unknown answer", "no answer"];
+    // T7.R27 (2): completed non-zero exits without the marker now count as rejected; only uncompleted/null-exit/zero-without-marker
+    // endings remain "outcome unknown".
+    public static TheoryData<string> UnconfirmedEndings => ["timeout", "dropped connection", "shutdown", "zero without marker", "no answer"];
 
     [Theory]
     [MemberData(nameof(UnconfirmedEndings))]
@@ -25,7 +27,7 @@ public sealed partial class SudoPasswordTests
             "timeout" => () => throw new SshOperationTimeoutException("The command did not finish within 30 s."),
             "dropped connection" => () => throw new SshConnectionException("An established connection was aborted by the server."),
             "shutdown" => () => throw new SshShutdownException(),
-            "unknown answer" => () => new RemoteCommandResult(1, "", "sudo: PAM account management error: Authentication service cannot retrieve authentication info\n", TimeSpan.Zero),
+            "zero without marker" => () => new RemoteCommandResult(0, "", "", TimeSpan.Zero),
             _ => () => new RemoteCommandResult(null, "", "", TimeSpan.Zero)
         };
 

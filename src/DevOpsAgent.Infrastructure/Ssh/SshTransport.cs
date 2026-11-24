@@ -181,12 +181,24 @@ public sealed class SshNetTransportFactory(
     /// </summary>
     private PrivateKeyFile LoadPrivateKey(Server server)
     {
+        string? passphrase = null;
+        if (!string.IsNullOrEmpty(server.ProtectedKeyPassphrase))
+        {
+            try
+            {
+                passphrase = secretProtector.Unprotect(server.ProtectedKeyPassphrase);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                // T7.R23: a Data Protection decrypt failure is distinct from a wrong passphrase and never contacts the server.
+                logger?.LogWarning("{ServerName}: the stored key passphrase could not be decrypted ({ErrorType})", server.Name, exception.GetType().Name);
+                throw new SshAuthFailedException(SshAuthFailure.PassphraseUnreadable);
+            }
+        }
+
         try
         {
             var keyPath = keyStore.GetFullPath(server.KeyFile);
-            var passphrase = string.IsNullOrEmpty(server.ProtectedKeyPassphrase)
-                ? null
-                : secretProtector.Unprotect(server.ProtectedKeyPassphrase);
             return new PrivateKeyFile(keyPath, passphrase);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
@@ -254,22 +266,29 @@ public sealed class SshNetTransport(
         var reading = marker is null ? null : ReadOutputAsync(sshCommand.OutputStream, marker);
         if (standardInput is not null)
         {
-            // The input goes over the command's own channel and is closed at once, so the command sees EOF after it. Without
-            // input stdin is never opened, exactly as before.
-            var bytes = System.Text.Encoding.UTF8.GetBytes(standardInput);
-            try
+            // T7.R27 (1): explicit armed/sent/abandoned state so a transport task blocked in channel open never writes
+            // the sudo password after the pool has already abandoned this attempt.
+            if (marker is null || marker.TryBeginSendInput())
             {
-                await using var input = sshCommand.CreateInputStream();
-                await input.WriteAsync(bytes, cancellationToken);
-            }
-            catch (Exception exception) when (exception is not OperationCanceledException)
-            {
-                // The command may already have ended (a NOPASSWD rule does not read the password), or the channel failed;
-                // either way the command's own outcome below is what counts.
-            }
-            finally
-            {
-                System.Security.Cryptography.CryptographicOperations.ZeroMemory(bytes);
+                // The input goes over the command's own channel and is closed at once, so the command sees EOF after it. Without
+                // input stdin is never opened, exactly as before.
+                var bytes = System.Text.Encoding.UTF8.GetBytes(standardInput);
+                try
+                {
+                    await using var input = sshCommand.CreateInputStream();
+                    await input.WriteAsync(bytes, cancellationToken);
+                    marker?.MarkInputSent();
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    // The command may already have ended (a NOPASSWD rule does not read the password), or the channel failed;
+                    // either way the command's own outcome below is what counts.
+                    marker?.MarkInputSent();
+                }
+                finally
+                {
+                    System.Security.Cryptography.CryptographicOperations.ZeroMemory(bytes);
+                }
             }
         }
 
@@ -290,12 +309,14 @@ public sealed class SshNetTransport(
         return new RemoteCommandResult(sshCommand.ExitStatus, output, sshCommand.Error, stopwatch.Elapsed);
     }
 
-    // Reads stdout to its end, reporting the marker once the first line is complete; the marker line is not part of the result.
+    // Reads stdout to its end, reporting the checked or unchecked marker once the first line is complete; the marker line
+    // is not part of the result.
     private static async Task<string> ReadOutputAsync(Stream output, OutputMarker marker)
     {
         using var collected = new MemoryStream();
         var buffer = new byte[8192];
         var expected = System.Text.Encoding.UTF8.GetBytes(marker.Value + "\n");
+        var expectedUnchecked = System.Text.Encoding.UTF8.GetBytes(marker.UncheckedValue + "\n");
         var decided = false;
         int read;
         while ((read = await output.ReadAsync(buffer)) > 0)
@@ -303,10 +324,11 @@ public sealed class SshNetTransport(
             collected.Write(buffer, 0, read);
             if (decided) continue;
             var sofar = collected.GetBuffer().AsSpan(0, (int)collected.Length);
-            if (sofar.Length >= expected.Length || sofar.Contains((byte)'\n'))
+            if (sofar.Length >= expectedUnchecked.Length || sofar.Contains((byte)'\n'))
             {
                 decided = true;
-                if (sofar.StartsWith(expected)) marker.MarkSeen();
+                if (sofar.StartsWith(expected)) marker.MarkSeen(passwordChecked: true);
+                else if (sofar.StartsWith(expectedUnchecked)) marker.MarkSeen(passwordChecked: false);
             }
         }
 

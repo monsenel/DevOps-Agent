@@ -48,7 +48,8 @@ public sealed class ActionExecutionService(
     BanTargetGuard banGuard,
     TimeProvider timeProvider,
     ConfigEditService? configEdits = null,
-    HealthCheckService? healthChecks = null)
+    HealthCheckService? healthChecks = null,
+    IKnownSecrets? knownSecrets = null)
 {
     private const int MaxParallelServers = 4;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -235,17 +236,39 @@ public sealed class ActionExecutionService(
                 stdout, stderr,
                 (long)result.Duration.TotalMilliseconds, null, Endpoint(server), plan.UseSudo, server.HasSudoPassword);
         }
+        catch (SshShutdownException)
+        {
+            // T7.R22 (D-037): shutdown is never a failure; leave the action Running so the startup sweep marks it interrupted.
+            throw;
+        }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             return new(server.Id, server.Name, plan.Command, null, string.Empty, string.Empty, 0, "Execution cancelled.", Endpoint(server), plan.UseSudo, server.HasSudoPassword);
         }
         catch (Exception exception)
         {
-            return new(server.Id, server.Name, plan.Command, null, string.Empty, string.Empty, 0, exception.Message, Endpoint(server), plan.UseSudo, server.HasSudoPassword);
+            // T7.R27 (6): redact exception text before persisting it in the action log.
+            var error = await RedactErrorAsync(exception.Message);
+            return new(server.Id, server.Name, plan.Command, null, string.Empty, string.Empty, 0, error, Endpoint(server), plan.UseSudo, server.HasSudoPassword);
         }
         finally
         {
             if (acquired) throttle.Release();
+        }
+    }
+
+    private async Task<string> RedactErrorAsync(string message)
+    {
+        var redacted = ChatContentRedactor.Redact(message);
+        if (knownSecrets is null) return redacted;
+        try
+        {
+            var secrets = await knownSecrets.GetAsync(CancellationToken.None);
+            return KnownSecretRedaction.Redact(redacted, secrets);
+        }
+        catch (Exception)
+        {
+            return redacted;
         }
     }
 
@@ -267,10 +290,11 @@ public sealed class ActionExecutionService(
 
             return ChatContentRedactor.Redact(report.ToString().TrimEnd());
         }
+        catch (SshShutdownException) { throw; }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception exception)
         {
-            var suffix = $"\nPost-update health checks could not run: {exception.Message}";
+            var suffix = $"\nPost-update health checks could not run: {await RedactErrorAsync(exception.Message)}";
             return stdout + suffix;
         }
     }

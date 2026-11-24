@@ -48,13 +48,13 @@ public sealed partial class SudoPasswordTests
         Assert.Equal(0, sudo.ExitCode);
         Assert.Equal(0, plain.ExitCode);
         Assert.Equal(0, probe.ExitCode);
-        Assert.Matches(@"^LC_ALL=C sudo -S -p '' -- sh -c 'exec </dev/null; printf ""%s\\n"" ""dva-sudo-ok-[0-9a-f]{32}""; ss -tulpnH'$",
+        Assert.Matches(@"^LC_ALL=C sudo -S -p '' -- sh -c 'if IFS= read -r _dva_u 2>/dev/null; then unset _dva_u; printf ""%s-unchecked\\n"" ""dva-sudo-ok-[0-9a-f]{32}""; else printf ""%s\\n"" ""dva-sudo-ok-[0-9a-f]{32}""; fi; exec </dev/null; ss -tulpnH'$",
             lab.Session.Calls[0].Command);
         Assert.Equal(Password + "\n", lab.Session.Calls[0].Input);
         Assert.Equal("ok", sudo.StandardOutput); // the marker line is not part of the output
         Assert.Equal("uptime -p", lab.Session.Calls[1].Command);
         Assert.Null(lab.Session.Calls[1].Input);
-        Assert.Matches(@"^LC_ALL=C sudo -S -p '' -- sh -c 'exec </dev/null; printf ""%s\\n"" ""dva-sudo-ok-[0-9a-f]{32}""; true'$",
+        Assert.Matches(@"^LC_ALL=C sudo -S -p '' -- sh -c 'if IFS= read -r _dva_u 2>/dev/null; then unset _dva_u; printf ""%s-unchecked\\n"" ""dva-sudo-ok-[0-9a-f]{32}""; else printf ""%s\\n"" ""dva-sudo-ok-[0-9a-f]{32}""; fi; exec </dev/null; true'$",
             lab.Session.Calls[2].Command);
         Assert.Equal(Password + "\n", lab.Session.Calls[2].Input);
         Assert.NotEqual(Marker(lab.Session.Calls[0].Command), Marker(lab.Session.Calls[2].Command)); // a new marker per call
@@ -423,8 +423,10 @@ public sealed partial class SudoPasswordTests
         var withPassword = new ActionServerResult(Guid.NewGuid(), "db", "systemctl restart -- 'nginx'", null, "", "", 0, null, "db:22", UseSudo: true, SudoPassword: true);
         var without = withPassword with { SudoPassword = false };
 
-        Assert.Equal(@"LC_ALL=C sudo -S -p '' -- sh -c 'exec </dev/null; printf ""%s\n"" ""dva-sudo-ok-<random>""; systemctl restart -- '\''nginx'\'''",
+        Assert.Equal(RemoteCommand.WrapWithSudoPassword("systemctl restart -- 'nginx'", RemoteCommand.DisplayMarker),
             withPassword.DisplayCommand);
+        Assert.Contains("LC_ALL=C sudo -S -p '' -- sh -c '", withPassword.DisplayCommand, StringComparison.Ordinal);
+        Assert.Contains("dva-sudo-ok-<random>", withPassword.DisplayCommand, StringComparison.Ordinal);
         Assert.Equal(@"sudo -n -- sh -c 'systemctl restart -- '\''nginx'\'''", without.DisplayCommand);
     }
 
@@ -434,12 +436,12 @@ public sealed partial class SudoPasswordTests
     [InlineData(1, "sudo: 3 incorrect password attempts", true)]
     [InlineData(1, "sudo: no password was provided", true)]
     [InlineData(1, "The account is locked due to 3 failed logins.\nSorry, try again.\n", true)]
+    [InlineData(1, "sudo: account validation failure, is your account locked?\n", true)]
+    [InlineData(1, "sudo: PAM account management error\n", true)]
+    [InlineData(2, "unexpected failure", true)]
     [InlineData(0, "Sorry, try again.", false)]
-    [InlineData(1, "sudo: a password is required", false)]
-    [InlineData(1, "db is not in the sudoers file.", false)]
-    [InlineData(1, "nginx: [emerg] Sorry, try again. later", false)]
     [InlineData(null, "", false)]
-    public void Rejection_IsRecognisedFromSudosOwnLines(int? exitCode, string stderr, bool rejected) =>
+    public void Rejection_CountsAnyCompletedNonZeroExitWithoutMarker(int? exitCode, string stderr, bool rejected) =>
         Assert.Equal(rejected, SudoPasswordGate.IsPasswordRejected(new RemoteCommandResult(exitCode, "", stderr, TimeSpan.Zero)));
 
     [Theory]

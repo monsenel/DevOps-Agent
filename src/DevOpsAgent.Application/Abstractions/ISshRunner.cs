@@ -79,4 +79,4 @@ public interface ISshCommandSession : IDisposable
 /// </param>
 public sealed record SshRunOptions(TimeSpan Timeout, bool UseSudo = false, bool BypassBackoff = false, DateTimeOffset? NotAfterUtc = null);
 
-public sealed record RemoteCommandResult(int? ExitCode, string StandardOutput, string StandardError, TimeSpan Duration);
+public sealed record RemoteCommandResult(int? ExitCode, string StandardOutput, string StandardError, TimeSpan Duration, bool SudoPasswordNotChecked = false);

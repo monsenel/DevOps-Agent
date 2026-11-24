@@ -100,7 +100,8 @@
                                 <td>
                                     @if (unreachable is null)
                                     {
-                                        <span class="muted">Reachable</span>
+                                        @* T7.R19 v2: never label a never-contacted server as Reachable. *@
+                                        <span class="muted">@(server.LastSeenAtUtc is null ? "Not tested" : "Reachable")</span>
                                     }
                                     else
                                     {
@@ -701,6 +702,7 @@
         { SudoProbeSkipped: true } => "Not tried: the saved password was rejected earlier. " + ServerSudoStatus.RetryBlockedReason,
         { SudoPasswordRejected: true } => "Password rejected — sudo paused until the password is edited or removed",
         { SudoPasswordOutcomeUnknown: true } => "Outcome unknown — sudo did not confirm the password in time; password sudo paused until Retry now or an edit",
+        { SudoPasswordNotChecked: true } => "sudo ran, password not checked (NOPASSWD rule or cached ticket)",
         { SudoCapable: true, SudoPasswordUsed: true } => "Available (password)",
         { SudoCapable: true } => "Available (NOPASSWD)",
         { SudoPasswordUsed: true } => "Unavailable (sudo with the saved password failed, but not because of a wrong password)",

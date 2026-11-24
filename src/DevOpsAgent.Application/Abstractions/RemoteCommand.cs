@@ -27,8 +27,14 @@ public static class RemoteCommand
     /// <summary>The sudo capability probe of a server with a stored sudo password: <c>true</c> in the same wrapper.</summary>
     public static string SudoPasswordProbe(string marker) => WrapWithSudoPassword("true", marker);
 
-    /// <summary>What the shell inside a password sudo runs before the command itself.</summary>
-    public static string SudoPasswordPreamble(string marker) => $"exec </dev/null; printf \"%s\\n\" \"{marker}\"; ";
+    /// <summary>
+    /// What the shell inside a password sudo runs before the command itself (T7.R25, T7.R27): checks whether stdin still
+    /// holds the unread password line (meaning sudo ran via NOPASSWD or a cached ticket without verifying the password),
+    /// discards and unsets it, prints the checked or unchecked marker, and detaches stdin (<c>exec &lt;/dev/null</c>) so
+    /// the command itself never reads from stdin.
+    /// </summary>
+    public static string SudoPasswordPreamble(string marker) =>
+        $"if IFS= read -r _dva_u 2>/dev/null; then unset _dva_u; printf \"%s{OutputMarker.UncheckedSuffix}\\n\" \"{marker}\"; else printf \"%s\\n\" \"{marker}\"; fi; exec </dev/null; ";
 
     /// <summary>The text an approval preview shows for a command on a server, with the wrapper that server's sudo mode uses.</summary>
     public static string Display(string command, bool useSudo, bool sudoPassword) =>

@@ -19,13 +19,56 @@ public static class KnownSecretRedaction
 {
     public const string Redacted = "[REDACTED]";
 
-    /// <summary>Replaces every occurrence of every secret (longest first, so one that contains another is removed whole).</summary>
+    /// <summary>
+    /// Replaces every occurrence of every secret in <paramref name="text"/>. Matches are collected on the original text and
+    /// overlapping intervals are merged before substitution, so overlapping secrets (e.g. <c>abcdefgh</c> and <c>fghijk</c>
+    /// in <c>abcdefghijk</c>) never leave a fragment behind (T7.R27).
+    /// </summary>
     public static string Redact(string text, IReadOnlyList<string> secrets)
     {
-        if (string.IsNullOrEmpty(text)) return text;
+        if (string.IsNullOrEmpty(text) || secrets.Count == 0) return text;
+        List<(int Start, int End)>? spans = null;
         foreach (var secret in secrets)
-            if (secret.Length > 0) text = text.Replace(secret, Redacted, StringComparison.Ordinal);
-        return text;
+        {
+            if (string.IsNullOrEmpty(secret)) continue;
+            var index = 0;
+            while ((index = text.IndexOf(secret, index, StringComparison.Ordinal)) >= 0)
+            {
+                spans ??= [];
+                spans.Add((index, index + secret.Length));
+                // Advance by 1 so self-overlapping occurrences are also captured before merging.
+                index++;
+            }
+        }
+
+        if (spans is null) return text;
+        spans.Sort(static (a, b) => a.Start != b.Start ? a.Start.CompareTo(b.Start) : a.End.CompareTo(b.End));
+
+        var builder = new System.Text.StringBuilder(text.Length);
+        var cursor = 0;
+        var mergedStart = spans[0].Start;
+        var mergedEnd = spans[0].End;
+        for (var i = 1; i < spans.Count; i++)
+        {
+            var next = spans[i];
+            if (next.Start < mergedEnd)
+            {
+                if (next.End > mergedEnd) mergedEnd = next.End;
+            }
+            else
+            {
+                builder.Append(text, cursor, mergedStart - cursor);
+                builder.Append(Redacted);
+                cursor = mergedEnd;
+                mergedStart = next.Start;
+                mergedEnd = next.End;
+            }
+        }
+
+        builder.Append(text, cursor, mergedStart - cursor);
+        builder.Append(Redacted);
+        if (mergedEnd < text.Length) builder.Append(text, mergedEnd, text.Length - mergedEnd);
+        return builder.ToString();
     }
 
     public static RemoteCommandResult Redact(RemoteCommandResult result, IReadOnlyList<string> secrets) =>

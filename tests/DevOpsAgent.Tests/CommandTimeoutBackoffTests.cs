@@ -57,9 +57,10 @@ public sealed class CommandTimeoutBackoffTests
         Assert.Equal(commands, lab.Transports.Commands(hung));
         Assert.Equal(attempts, lab.Transports.Attempts(hung));
         Assert.Equal(HostFailureKind.CommandTimeout, skipped.Kind);
-        // The message names the cause: commands timed out, not "could not connect".
-        Assert.Contains("hung is unreachable (since", skipped.Message, StringComparison.Ordinal);
+        // The message names the cause: commands timed out, not "unreachable" or "could not connect" (T7.R21 e).
+        Assert.Contains("hung is not answering commands (since", skipped.Message, StringComparison.Ordinal);
         Assert.Contains("commands timed out", skipped.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("is unreachable", skipped.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("could not connect", skipped.Message, StringComparison.Ordinal);
         Assert.Equal(0, lab.Pool.ActiveLeases);
     }
@@ -216,7 +217,7 @@ public sealed class CommandTimeoutBackoffTests
 
         Assert.EndsWith(": could not connect.", HostUnreachableException.Describe("app", connect), StringComparison.Ordinal);
         Assert.EndsWith(": commands timed out.", HostUnreachableException.Describe("app", commands), StringComparison.Ordinal);
-        Assert.Contains("app is unreachable via jump host edge (since", HostUnreachableException.Describe("app", commands, "edge"), StringComparison.Ordinal);
+        Assert.Contains("app via jump host edge is not answering commands (since", HostUnreachableException.Describe("app", commands, "edge"), StringComparison.Ordinal);
         Assert.EndsWith(": commands on edge timed out.", HostUnreachableException.Describe("app", commands, "edge"), StringComparison.Ordinal);
         Assert.EndsWith(": could not connect to edge.", HostUnreachableException.Describe("app", connect, "edge"), StringComparison.Ordinal);
     }
@@ -233,7 +234,7 @@ public sealed class CommandTimeoutBackoffTests
         var attempts = lab.Transports.Attempts(app);
         var exception = await Assert.ThrowsAsync<HostUnreachableException>(() => lab.Run(app, TimeSpan.FromSeconds(5)));
 
-        Assert.Contains("app is unreachable via jump host edge", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("app via jump host edge is not answering commands", exception.Message, StringComparison.Ordinal);
         Assert.Contains("commands on edge timed out", exception.Message, StringComparison.Ordinal);
         Assert.Equal(attempts, lab.Transports.Attempts(app));
     }

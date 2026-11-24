@@ -29,6 +29,7 @@ public sealed class ManagedKnownHosts(IOptions<SshConnectionOptions> options, Ti
     : IHostKeyStore
 {
     private const string FirstSeenTag = "dva-first-seen=";
+    private static readonly TimeSpan AcceptTokenLifetime = TimeSpan.FromMinutes(5);
     private readonly SshConnectionOptions _options = options.Value;
     private readonly SemaphoreSlim _write = new(1, 1);
     private readonly ConcurrentDictionary<string, HostKeyMismatch> _mismatches = new(StringComparer.OrdinalIgnoreCase);
@@ -36,20 +37,63 @@ public sealed class ManagedKnownHosts(IOptions<SshConnectionOptions> options, Ti
     // The refused key itself (not only its fingerprint), so an accept stores exactly the key that was shown.
     private readonly ConcurrentDictionary<string, (string KeyType, byte[] Key)> _presented = new(StringComparer.OrdinalIgnoreCase);
 
+    // One-time confirmation tokens issued when the Accept new key dialog opens (T7.R29 4).
+    private readonly ConcurrentDictionary<string, AcceptTokenEntry> _acceptTokens = new(StringComparer.OrdinalIgnoreCase);
+
+    private sealed record AcceptTokenEntry(string Token, string PresentedFingerprint, DateTimeOffset ExpiresAtUtc);
+
     public HostKeyDecision Check(string host, int port, string keyType, byte[] key)
     {
-        var manual = KnownHostsLines.For(KnownHostsLines.Read(_options.KnownHostsFile), host, port);
-        var stored = manual.Count > 0 ? manual : KnownHostsLines.For(KnownHostsLines.Read(_options.ManagedKnownHostsFile), host, port);
-        if (stored.Count == 0) return HostKeyDecision.FirstUse;
+        var manualAvailable = TryReadOwnerKnownHosts(out var allManual);
+        var manualForHost = KnownHostsLines.For(allManual, host, port);
+
+        // T7.R29 (1): honour @revoked lines in the owner's known_hosts file; a revoked key is always refused and never trusted on first use.
+        var revoked = manualForHost.Where(entry => entry.Marker == KnownHostMarker.Revoked).ToArray();
+        if (revoked.Any(entry => entry.KeyData.Length == 0 || entry.KeyData.AsSpan().SequenceEqual(key)))
+        {
+            _presented[Name(host, port)] = (keyType, key.ToArray());
+            _mismatches[Name(host, port)] = new HostKeyMismatch(host, port,
+                manualForHost.Where(entry => entry.Marker == KnownHostMarker.None).Select(entry => Info(entry, true)).ToArray(),
+                keyType, Fingerprint(key), timeProvider.GetUtcNow(), StoredIsManual: true, Revoked: true);
+            _acceptTokens.TryRemove(Name(host, port), out _);
+            return HostKeyDecision.Mismatch;
+        }
+
+        var manualPinned = manualForHost.Where(entry => entry.Marker == KnownHostMarker.None).ToArray();
+        var managedPinned = manualPinned.Length > 0
+            ? []
+            : KnownHostsLines.For(KnownHostsLines.Read(_options.ManagedKnownHostsFile), host, port)
+                .Where(entry => entry.Marker == KnownHostMarker.None)
+                .ToArray();
+        var stored = manualPinned.Length > 0 ? manualPinned : managedPinned;
+
+        if (stored.Length == 0)
+        {
+            // T7.R29 (2): when the owner's Ssh:KnownHostsFile is configured but missing or unreadable (e.g. missing mount),
+            // refuse trust-on-first-use so pinned hosts cannot silently become TOFU.
+            if (!manualAvailable)
+            {
+                _presented[Name(host, port)] = (keyType, key.ToArray());
+                _mismatches[Name(host, port)] = new HostKeyMismatch(host, port, [],
+                    keyType, Fingerprint(key), timeProvider.GetUtcNow(), StoredIsManual: true);
+                _acceptTokens.TryRemove(Name(host, port), out _);
+                return HostKeyDecision.Mismatch;
+            }
+
+            return HostKeyDecision.FirstUse;
+        }
+
         if (stored.Any(entry => entry.KeyData.AsSpan().SequenceEqual(key)))
         {
             _mismatches.TryRemove(Name(host, port), out _);
+            _acceptTokens.TryRemove(Name(host, port), out _);
             return HostKeyDecision.Trusted;
         }
 
         _presented[Name(host, port)] = (keyType, key.ToArray());
-        _mismatches[Name(host, port)] = new HostKeyMismatch(host, port, stored.Select(entry => Info(entry, manual.Count > 0)).ToArray(),
-            keyType, Fingerprint(key), timeProvider.GetUtcNow(), manual.Count > 0);
+        _mismatches[Name(host, port)] = new HostKeyMismatch(host, port, stored.Select(entry => Info(entry, manualPinned.Length > 0)).ToArray(),
+            keyType, Fingerprint(key), timeProvider.GetUtcNow(), manualPinned.Length > 0);
+        _acceptTokens.TryRemove(Name(host, port), out _);
         return HostKeyDecision.Mismatch;
     }
 
@@ -59,9 +103,16 @@ public sealed class ManagedKnownHosts(IOptions<SshConnectionOptions> options, Ti
         await _write.WaitAsync(cancellationToken);
         try
         {
-            if (KnownHostsLines.For(KnownHostsLines.Read(_options.KnownHostsFile), host, port).Count > 0) return;
+            // T7.R29 (2): never record first-use keys when the configured owner known_hosts file is missing or unreadable.
+            if (!TryReadOwnerKnownHosts(out var allManual)) return;
+            var manualForHost = KnownHostsLines.For(allManual, host, port);
+            if (manualForHost.Any(entry => entry.Marker == KnownHostMarker.Revoked
+                    && (entry.KeyData.Length == 0 || entry.KeyData.AsSpan().SequenceEqual(key))))
+                return;
+            if (manualForHost.Any(entry => entry.Marker == KnownHostMarker.None)) return;
             var lines = ReadManagedLines();
-            if (KnownHostsLines.For(lines.Select(KnownHostsLines.Parse).OfType<KnownHostLine>().ToArray(), host, port).Count > 0) return;
+            if (KnownHostsLines.For(lines.Select(KnownHostsLines.Parse).OfType<KnownHostLine>().ToArray(), host, port)
+                .Any(entry => entry.Marker == KnownHostMarker.None)) return;
             lines.Add(Line(host, port, keyType, key));
             try
             {
@@ -86,40 +137,103 @@ public sealed class ManagedKnownHosts(IOptions<SshConnectionOptions> options, Ti
 
     public IReadOnlyList<HostKeyInfo> GetKeys(string host, int port)
     {
-        var manual = KnownHostsLines.For(KnownHostsLines.Read(_options.KnownHostsFile), host, port);
-        return manual.Count > 0
+        var manual = KnownHostsLines.For(KnownHostsLines.Read(_options.KnownHostsFile), host, port)
+            .Where(entry => entry.Marker == KnownHostMarker.None)
+            .ToArray();
+        return manual.Length > 0
             ? manual.Select(entry => Info(entry, true)).ToArray()
-            : KnownHostsLines.For(KnownHostsLines.Read(_options.ManagedKnownHostsFile), host, port).Select(entry => Info(entry, false)).ToArray();
+            : KnownHostsLines.For(KnownHostsLines.Read(_options.ManagedKnownHostsFile), host, port)
+                .Where(entry => entry.Marker == KnownHostMarker.None)
+                .Select(entry => Info(entry, false))
+                .ToArray();
     }
 
     public HostKeyMismatch? GetMismatch(string host, int port) => _mismatches.GetValueOrDefault(Name(host, port));
 
-    public async Task AcceptPresentedKeyAsync(string host, int port, string presentedFingerprint, CancellationToken cancellationToken)
+    public string IssueAcceptToken(string host, int port, string presentedFingerprint)
     {
-        if (!_mismatches.TryGetValue(Name(host, port), out var mismatch) || mismatch.PresentedFingerprint != presentedFingerprint)
+        var keyName = Name(host, port);
+        if (!_mismatches.TryGetValue(keyName, out var mismatch) || mismatch.PresentedFingerprint != presentedFingerprint)
             throw new InvalidOperationException("That key is no longer the one the server presented. Run Test connection and compare the fingerprint again.");
+        if (mismatch.Revoked)
+            throw new InvalidOperationException("The presented host key is marked @revoked in your known_hosts file and cannot be accepted.");
         if (mismatch.StoredIsManual)
             throw new InvalidOperationException("The stored key comes from your own known_hosts file; change it there.");
-        if (!_presented.TryGetValue(Name(host, port), out var presented) || Fingerprint(presented.Key) != presentedFingerprint)
+
+        var token = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
+        _acceptTokens[keyName] = new AcceptTokenEntry(token, presentedFingerprint, timeProvider.GetUtcNow() + AcceptTokenLifetime);
+        return token;
+    }
+
+    public async Task AcceptPresentedKeyAsync(string host, int port, string presentedFingerprint, string confirmationToken, CancellationToken cancellationToken)
+    {
+        var keyName = Name(host, port);
+        if (!_mismatches.TryGetValue(keyName, out var mismatch) || mismatch.PresentedFingerprint != presentedFingerprint)
+            throw new InvalidOperationException("That key is no longer the one the server presented. Run Test connection and compare the fingerprint again.");
+        if (mismatch.Revoked)
+            throw new InvalidOperationException("The presented host key is marked @revoked in your known_hosts file and cannot be accepted.");
+        if (mismatch.StoredIsManual)
+            throw new InvalidOperationException("The stored key comes from your own known_hosts file; change it there.");
+        if (!_presented.TryGetValue(keyName, out var presented) || Fingerprint(presented.Key) != presentedFingerprint)
             throw new InvalidOperationException("The presented key is not available any more. Run Test connection and try again.");
+
+        // T7.R29 (4): require and atomically consume the one-time confirmation token issued by the dialog.
+        if (string.IsNullOrWhiteSpace(confirmationToken)
+            || !_acceptTokens.TryGetValue(keyName, out var issued)
+            || !CryptographicOperations.FixedTimeEquals(
+                System.Text.Encoding.UTF8.GetBytes(issued.Token),
+                System.Text.Encoding.UTF8.GetBytes(confirmationToken))
+            || issued.PresentedFingerprint != presentedFingerprint
+            || timeProvider.GetUtcNow() > issued.ExpiresAtUtc
+            || !_acceptTokens.TryRemove(KeyValuePair.Create(keyName, issued)))
+        {
+            throw new InvalidOperationException("The confirmation token is missing, invalid, expired, or already used. Re-open Accept new key and confirm the fingerprint again.");
+        }
 
         await _write.WaitAsync(cancellationToken);
         try
         {
+            // T7.R29 (7): keep one managed entry per (host:port, keyType) so dual-key-type hosts do not flip-flop.
+            // Remove existing managed lines for this host only when they have the same key type or are unreadable/damaged.
+            var hostNames = KnownHostsLines.Names(host, port);
             var lines = ReadManagedLines()
-                .Where(line => KnownHostsLines.Parse(line) is not { } entry || !KnownHostsLines.Names(host, port).Any(name =>
-                    entry.HostNames.Contains(name, StringComparer.OrdinalIgnoreCase)))
+                .Where(line =>
+                {
+                    if (KnownHostsLines.Parse(line) is not { } entry) return true;
+                    if (!hostNames.Any(name => entry.HostNames.Contains(name, StringComparer.OrdinalIgnoreCase))) return true;
+                    if (entry.KeyData.Length == 0) return false; // replace damaged lines for this host
+                    return !string.Equals(entry.KeyType, presented.KeyType, StringComparison.OrdinalIgnoreCase);
+                })
                 .ToList();
             lines.Add(Line(host, port, presented.KeyType, presented.Key));
             WriteManaged(lines);
-            _mismatches.TryRemove(Name(host, port), out _);
-            logger.LogWarning("The owner accepted a new SSH host key for {Host}:{Port} ({Fingerprint}); it replaces the stored key",
-                host, port, presentedFingerprint);
+            _mismatches.TryRemove(keyName, out _);
+            logger.LogWarning("The owner accepted a new SSH host key for {Host}:{Port} ({KeyType} {Fingerprint}); it replaces any previous managed {KeyType} key",
+                host, port, presented.KeyType, presentedFingerprint, presented.KeyType);
         }
         finally
         {
             _write.Release();
         }
+    }
+
+    private bool TryReadOwnerKnownHosts(out IReadOnlyList<KnownHostLine> entries)
+    {
+        if (string.IsNullOrWhiteSpace(_options.KnownHostsFile))
+        {
+            entries = [];
+            return true;
+        }
+
+        if (KnownHostsLines.TryRead(_options.KnownHostsFile, out entries, out var error))
+        {
+            return true;
+        }
+
+        logger.LogError("The configured owner known_hosts file {File} is missing or unreadable ({ErrorType}); first-use SSH host-key trust is refused",
+            _options.KnownHostsFile, error?.GetType().Name ?? "FileNotFoundException");
+        entries = [];
+        return false;
     }
 
     public static string Fingerprint(byte[] key) => "SHA256:" + Convert.ToBase64String(SHA256.HashData(key)).TrimEnd('=');
@@ -140,23 +254,60 @@ public sealed class ManagedKnownHosts(IOptions<SshConnectionOptions> options, Ti
     private List<string> ReadManagedLines() =>
         File.Exists(_options.ManagedKnownHostsFile) ? File.ReadAllLines(_options.ManagedKnownHostsFile).ToList() : [];
 
-    // Written to a temporary file and moved over the old one, so a crash never leaves a half-written file.
+    // Written to a temporary file, flushed to disk (fsync, T7.R29 3), and moved over the old one, so a power loss never leaves an empty file.
     private void WriteManaged(IEnumerable<string> lines)
     {
         var path = _options.ManagedKnownHostsFile;
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         var temporary = path + ".tmp";
-        File.WriteAllLines(temporary, lines);
+        using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None))
+        using (var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
+        {
+            foreach (var line in lines) writer.WriteLine(line);
+            writer.Flush();
+            stream.Flush(flushToDisk: true);
+        }
+
         File.Move(temporary, path, overwrite: true);
     }
 }
 
-internal sealed record KnownHostLine(IReadOnlyList<string> HostNames, string KeyType, byte[] KeyData, string? Comment);
+internal enum KnownHostMarker
+{
+    None = 0,
+    Revoked = 1,
+    CertAuthority = 2
+}
+
+internal sealed record KnownHostLine(IReadOnlyList<string> HostNames, string KeyType, byte[] KeyData, string? Comment, KnownHostMarker Marker = KnownHostMarker.None);
 
 internal static class KnownHostsLines
 {
     public static IReadOnlyList<KnownHostLine> Read(string? path) =>
-        !string.IsNullOrWhiteSpace(path) && File.Exists(path) ? File.ReadLines(path).Select(Parse).OfType<KnownHostLine>().ToArray() : [];
+        TryRead(path, out var entries, out _) ? entries : [];
+
+    public static bool TryRead(string? path, out IReadOnlyList<KnownHostLine> entries, out Exception? error)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            entries = [];
+            error = null;
+            return true;
+        }
+
+        try
+        {
+            entries = File.ReadLines(path).Select(Parse).OfType<KnownHostLine>().ToArray();
+            error = null;
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            entries = [];
+            error = exception;
+            return false;
+        }
+    }
 
     /// <summary>The names a host is listed under: plain host for port 22 (and "[host]:22"), "[host]:port" otherwise.</summary>
     public static string[] Names(string host, int port) => port == 22
@@ -216,23 +367,42 @@ internal static class KnownHostsLines
         }
     }
 
-    // @markers (@revoked, @cert-authority) are not used by the app and are skipped, as before.
+    // Parses standard entries as well as OpenSSH @revoked and @cert-authority markers (T7.R29 1).
     public static KnownHostLine? Parse(string line)
     {
         var trimmed = line.Trim();
-        if (trimmed.Length == 0 || trimmed.StartsWith('#') || trimmed.StartsWith('@')) return null;
-        var fields = trimmed.Split((char[]?)null, 4, StringSplitOptions.RemoveEmptyEntries);
-        var names = fields[0].Split(',', StringSplitOptions.RemoveEmptyEntries);
+        if (trimmed.Length == 0 || trimmed.StartsWith('#')) return null;
+
+        var marker = KnownHostMarker.None;
+        var offset = 0;
+        string[] fields;
+        if (trimmed.StartsWith('@'))
+        {
+            fields = trimmed.Split((char[]?)null, 5, StringSplitOptions.RemoveEmptyEntries);
+            if (fields.Length < 2) return null;
+            if (string.Equals(fields[0], "@revoked", StringComparison.OrdinalIgnoreCase)) marker = KnownHostMarker.Revoked;
+            else if (string.Equals(fields[0], "@cert-authority", StringComparison.OrdinalIgnoreCase)) marker = KnownHostMarker.CertAuthority;
+            else return null;
+            offset = 1;
+        }
+        else
+        {
+            fields = trimmed.Split((char[]?)null, 4, StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        var names = fields[offset].Split(',', StringSplitOptions.RemoveEmptyEntries);
         // A line that names a host but whose key cannot be read (truncated, damaged base64) still pins it: with no key to
         // match, the host is refused. Skipping the line would make the host unknown, trusted on first use and re-recorded.
-        if (fields.Length < 3) return new KnownHostLine(names, fields.Length > 1 ? fields[1] : string.Empty, [], null);
+        if (fields.Length - offset < 3)
+            return new KnownHostLine(names, fields.Length - offset > 1 ? fields[offset + 1] : string.Empty, [], null, marker);
         try
         {
-            return new KnownHostLine(names, fields[1], Convert.FromBase64String(fields[2]), fields.Length > 3 ? fields[3].Trim() : null);
+            return new KnownHostLine(names, fields[offset + 1], Convert.FromBase64String(fields[offset + 2]),
+                fields.Length - offset > 3 ? fields[offset + 3].Trim() : null, marker);
         }
         catch (FormatException)
         {
-            return new KnownHostLine(names, fields[1], [], null);
+            return new KnownHostLine(names, fields[offset + 1], [], null, marker);
         }
     }
 }

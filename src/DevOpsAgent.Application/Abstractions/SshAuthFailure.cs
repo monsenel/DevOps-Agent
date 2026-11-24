@@ -25,7 +25,13 @@ public enum SshAuthFailure
     /// The server dropped the connection while the key was being offered (a login limit such as sshd's MaxAuthTries closes
     /// the socket instead of answering "denied"). The login failed the same way a refused key does, and it counts the same.
     /// </summary>
-    ServerClosedDuringLogin = 5
+    ServerClosedDuringLogin = 5,
+
+    /// <summary>
+    /// The stored key passphrase could not be decrypted by Data Protection (for example the key ring changed). The server
+    /// was never contacted, so this does not count toward the automatic-retry pause (T7.R23).
+    /// </summary>
+    PassphraseUnreadable = 6
 }
 
 /// <summary>
@@ -46,6 +52,7 @@ public sealed class SshAuthFailedException(SshAuthFailure reason) : Exception(De
         SshAuthFailure.KeyInvalidOrWrongPassphrase => "wrong passphrase or invalid key file",
         SshAuthFailure.PassphraseRequired => "the key needs a passphrase and none is stored",
         SshAuthFailure.ServerClosedDuringLogin => "the server closed the connection during login",
+        SshAuthFailure.PassphraseUnreadable => "stored key passphrase cannot be decrypted; re-enter it in server settings",
         _ => "authentication failed"
     };
 }

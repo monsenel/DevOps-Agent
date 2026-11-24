@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Text.RegularExpressions;
 using DevOpsAgent.Application.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -166,13 +165,28 @@ public sealed partial class SudoPasswordGate(
         if (server.SudoPasswordAttemptStartedAtUtc is not null && !_inFlight.ContainsKey(serverId)
             && server.SudoPasswordRejectedAtUtc is null && server.SudoPasswordOutcomeUnknownAtUtc is null)
         {
-            // Started, never finished, not running here: the app stopped in the middle of it, or storing its outcome failed
-            // (then this process knows the outcome, and a stored "unknown" still keeps the pause across a restart).
-            if (!_paused.TryGetValue(serverId, out var known) || known.ProtectedValue != protectedValue) _paused[serverId] = (protectedValue, false);
-            server.RecordSudoPasswordOutcomeUnknown(timeProvider.GetUtcNow());
-            await TrySaveAsync(repository, server, "an interrupted sudo password attempt");
-            logger.LogWarning("{ServerName}: a sudo password attempt was interrupted before its outcome was known; password sudo is paused until Retry now or the password is edited or removed",
-                server.Name);
+            // Started, never finished, not running here: the app stopped in the middle of it, or storing its outcome failed.
+            // If this process already knows it was rejected (transient DB failure earlier, T7.R27 3), persist Rejected rather
+            // than downgrading it to OutcomeUnknown.
+            var wasRejectedHere = _paused.TryGetValue(serverId, out var known) && known.ProtectedValue == protectedValue && known.Rejected;
+            if (!wasRejectedHere && (!_paused.TryGetValue(serverId, out known) || known.ProtectedValue != protectedValue))
+            {
+                _paused[serverId] = (protectedValue, false);
+            }
+
+            if (wasRejectedHere)
+            {
+                server.RecordSudoPasswordRejected(timeProvider.GetUtcNow());
+                await TrySaveAsync(repository, server, "a previously rejected sudo password");
+            }
+            else
+            {
+                server.RecordSudoPasswordOutcomeUnknown(timeProvider.GetUtcNow());
+                await TrySaveAsync(repository, server, "an interrupted sudo password attempt");
+                logger.LogWarning("{ServerName}: a sudo password attempt was interrupted before its outcome was known; password sudo is paused until Retry now or the password is edited or removed",
+                    server.Name);
+            }
+
             events?.NotifyChanged(serverId);
         }
 
@@ -247,6 +261,22 @@ public sealed partial class SudoPasswordGate(
     }
 
     /// <summary>
+    /// The unchecked marker came back (T7.R27 4): sudo ran via NOPASSWD or a cached ticket without reading the password from
+    /// stdin. Clears the in-flight attempt marker without confirming the password or resolving an open sudo-auth-failed alert.
+    /// </summary>
+    internal async Task RecordUncheckedAsync(Guid serverId, string protectedValue)
+    {
+        try
+        {
+            await UpdateAsync(serverId, protectedValue, server => server.ClearSudoPasswordAttemptStarted());
+        }
+        catch (Exception exception)
+        {
+            logger.LogError("Clearing an unchecked sudo password attempt failed ({ErrorType})", exception.GetType().Name);
+        }
+    }
+
+    /// <summary>
     /// Records that the stored password was rejected, unless it was replaced or removed in the meantime (then the rejection was
     /// for a password that no longer exists).
     /// </summary>
@@ -273,34 +303,51 @@ public sealed partial class SudoPasswordGate(
         events?.NotifyChanged(serverId);
     }
 
+    // Bounded retries for persisting a pause before releasing the turn (T7.R27 3): recovers from transient SQLite locks
+    // without hanging forever when a database is permanently unwritable.
+    private const int SaveRetryAttempts = 5;
+    /// <summary>Base backoff delay between retries when persisting a sudo password pause (T7.R27 3).</summary>
+    public TimeSpan SaveRetryBaseDelay { get; set; } = TimeSpan.FromMilliseconds(25);
+
     private async Task RecordPausedAsync(Guid serverId, string protectedValue, bool rejected)
     {
         // Remembered in memory first: a failing database write must not leave the password armed for the next command.
         _paused[serverId] = (protectedValue, rejected);
         // Not cancellable: the attempt has been made, and forgetting it would allow a second attempt.
-        try
+        var now = timeProvider.GetUtcNow();
+        Exception? lastError = null;
+        for (var attempt = 0; attempt < SaveRetryAttempts; attempt++)
         {
-            var now = timeProvider.GetUtcNow();
-            var name = await UpdateAsync(serverId, protectedValue, server =>
+            try
             {
-                if (rejected) server.RecordSudoPasswordRejected(now);
-                else server.RecordSudoPasswordOutcomeUnknown(now);
-            });
-            if (name is null) return;
-            events?.NotifyChanged(serverId);
-            if (rejected)
-                logger.LogWarning("{ServerName}: the sudo password was rejected; no sudo is used on this server until its sudo password is edited or removed",
-                    name);
-            else
-                logger.LogWarning("{ServerName}: the outcome of a sudo password attempt is unknown; password sudo is paused until Retry now or the password is edited or removed",
-                    name);
+                var name = await UpdateAsync(serverId, protectedValue, server =>
+                {
+                    if (rejected) server.RecordSudoPasswordRejected(now);
+                    else server.RecordSudoPasswordOutcomeUnknown(now);
+                });
+                if (name is null) return;
+                events?.NotifyChanged(serverId);
+                if (rejected)
+                    logger.LogWarning("{ServerName}: the sudo password was rejected; no sudo is used on this server until its sudo password is edited or removed",
+                        name);
+                else
+                    logger.LogWarning("{ServerName}: the outcome of a sudo password attempt is unknown; password sudo is paused until Retry now or the password is edited or removed",
+                        name);
+                return;
+            }
+            catch (Exception exception)
+            {
+                lastError = exception;
+                if (attempt + 1 < SaveRetryAttempts && SaveRetryBaseDelay > TimeSpan.Zero)
+                {
+                    await Task.Delay(TimeSpan.FromTicks(SaveRetryBaseDelay.Ticks << attempt));
+                }
+            }
         }
-        catch (Exception exception)
-        {
-            // Only the type: sudo stays paused in this process, and the attempt is still marked as started in the database.
-            logger.LogError("The outcome of a sudo password attempt could not be stored ({ErrorType}); sudo stays paused on this server until the app restarts or the password is edited or removed",
-                exception.GetType().Name);
-        }
+
+        // Only the type: sudo stays paused in this process, and the attempt is still marked as started in the database.
+        logger.LogError("The outcome of a sudo password attempt could not be stored ({ErrorType}); sudo stays paused on this server until the app restarts or the password is edited or removed",
+            lastError?.GetType().Name ?? "Exception");
     }
 
     // Applies a change to the server if its stored password is still the one the attempt used; returns the server's name.
@@ -325,18 +372,14 @@ public sealed partial class SudoPasswordGate(
     }
 
     /// <summary>
-    /// True when sudo refused the password: sudo exits non-zero and says "Sorry, try again." (each wrong password, also when
-    /// pam_faillock has locked the account), "N incorrect password attempt(s)" or "no password was provided". Matched on whole
-    /// stderr lines in the C locale (the command sets <c>LC_ALL=C</c>). Only used to word an unconfirmed attempt: without the
-    /// marker the password is never treated as accepted.
+    /// True when an unconfirmed password-sudo command ran to completion and exited non-zero without printing the
+    /// confirmation marker (T7.R27 2, owner decision): covers sudo's standard rejection lines as well as pam_faillock
+    /// lockout messages ("account validation failure, is your account locked?"), preventing Retry now from resending
+    /// a failing password. A missing exit code (<c>null</c>) or exit 0 without marker remains "outcome unknown".
     /// </summary>
     public static bool IsPasswordRejected(RemoteCommandResult result) =>
-        result.ExitCode is not 0
-        && result.StandardError.Split('\n').Any(line => RejectionLine().IsMatch(line.TrimEnd('\r')));
-
-    [GeneratedRegex(@"^(?:Sorry, try again\.|sudo: \d+ incorrect password attempts?|sudo: no password was provided)$",
-        RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
-    private static partial Regex RejectionLine();
+        result.ExitCode is int code && code != 0
+        && !result.StandardError.StartsWith("sudo: not run:", StringComparison.Ordinal);
 
     /// <summary>Redacts one password only; the runner uses <see cref="RedactAsync"/> (every stored password, T7.R26).</summary>
     public static RemoteCommandResult Redact(RemoteCommandResult result, string? password) =>
