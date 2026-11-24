@@ -86,6 +86,27 @@ public sealed class SnapshotRepository(AppDbContext dbContext) : ISnapshotReposi
             .Where(run => run.SnapshotId == snapshotId)
             .ToArrayAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<CollectorRun>> ListLatestServerCollectorRunsAsync(Guid serverId, CancellationToken cancellationToken)
+    {
+        var usableSnapshotIds = await GraphSnapshots().Select(snapshot => snapshot.Id).ToArrayAsync(cancellationToken);
+        if (usableSnapshotIds.Length == 0)
+        {
+            return [];
+        }
+
+        var runs = await dbContext.CollectorRuns.AsNoTracking()
+            .Where(run => run.ServerId == serverId
+                && usableSnapshotIds.Contains(run.SnapshotId)
+                && run.Status == CollectorRunStatus.Succeeded
+                && run.ResultJson != null)
+            .ToArrayAsync(cancellationToken);
+
+        return runs
+            .GroupBy(run => run.CollectorName, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.OrderByDescending(run => run.CreatedAtUtc).First())
+            .ToArray();
+    }
+
     public async Task<IReadOnlyDictionary<Guid, DateTimeOffset>> GetLastHostCollectionTimesAsync(
         IReadOnlyCollection<Guid> serverIds,
         CancellationToken cancellationToken)

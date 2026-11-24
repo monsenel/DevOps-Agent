@@ -5,300 +5,565 @@
 @inject ISnapshotRepository SnapshotRepository
 @inject IDiscoveryCoordinator Discovery
 @inject ServerService ServersService
+@inject VmInspectorService VmInspector
 @inject NavigationManager Navigation
 @inject AlertService AlertManager
+@using System.Globalization
 @using System.Text.Json
 @using DevOpsAgent.Domain.Discovery
 @using DevOpsAgent.Application.Servers
 
 <PageTitle>Topology · DevOps Agent</PageTitle>
 
-<section class="ui-card topology-toolbar" aria-label="Topology controls">
-    <div class="topology-toolbar-row">
-        <div class="segmented-control" role="group" aria-label="Graph view">
-            <button type="button" class="@(CurrentView == TopologyView.Servers ? "active" : null)" aria-pressed="@(CurrentView == TopologyView.Servers)" @onclick="() => ChangeViewAsync(TopologyView.Servers)">Servers</button>
-            <button type="button" class="@(CurrentView == TopologyView.Service ? "active" : null)" aria-pressed="@(CurrentView == TopologyView.Service)" @onclick="() => ChangeViewAsync(TopologyView.Service)">Service</button>
-            <button type="button" class="@(CurrentView == TopologyView.Network ? "active" : null)" aria-pressed="@(CurrentView == TopologyView.Network)" @onclick="() => ChangeViewAsync(TopologyView.Network)">Network</button>
-        </div>
-        <form class="topology-trace" @onsubmit="TraceAsync" @onsubmit:preventDefault>
-            <label for="topology-trace-input">Trace domain</label>
-            @* oninput keeps the value current, so Enter or the Trace button always submits what was typed. *@
-            <input id="topology-trace-input" type="text" placeholder="api.example.com or URL" @bind="_traceQuery" @bind:event="oninput" />
-            <button class="ui-button secondary" type="submit" disabled="@(_graph is null)">Trace</button>
-            @if (_tracedNodeIds.Count > 0)
-            {
-                <button class="ui-button secondary" type="button" @onclick="ClearTraceAsync">Clear trace</button>
-            }
-        </form>
-        <form class="topology-search" role="search" @onsubmit="ApplySearchAsync" @onsubmit:preventDefault>
-            <label for="topology-search-input" class="visually-hidden">Search topology</label>
-            <input id="topology-search-input" type="search" placeholder="Search name, IP, port…" value="@_search" @oninput="SearchChanged" />
-            <button class="ui-button secondary" type="submit" disabled="@(_graph is null)">Search</button>
-        </form>
-        <label class="topology-filter">
-            <span class="visually-hidden">Filter by tag</span>
-            <select value="@_selectedTag" @onchange="TagChanged">
-                <option value="">All tags</option>
-                @foreach (var tag in _tags)
-                {
-                    <option value="@tag">Tag: @tag</option>
-                }
-            </select>
-        </label>
-        <label class="topology-filter">
-            <span class="visually-hidden">Filter by Compose project</span>
-            <select value="@_selectedProject" @onchange="ProjectChanged">
-                <option value="">All projects</option>
-                @foreach (var project in _projects)
-                {
-                    <option value="@project">Project: @project</option>
-                }
-            </select>
-        </label>
-        <label class="topology-filter">
-            <span class="visually-hidden">Filter by subnet</span>
-            <select value="@_selectedSubnet" @onchange="SubnetChanged">
-                <option value="">All subnets</option>
-                @foreach (var subnet in _subnets)
-                {
-                    <option value="@subnet">Subnet: @subnet</option>
-                }
-            </select>
-        </label>
-        <button class="ui-button primary" type="button" disabled="@_discovering" @onclick="RunDiscoveryAsync">
-            @(_discovering ? "Discovering…" : "Run discovery")
-        </button>
-    </div>
-    <div class="topology-legend" aria-label="Graph legend">
-        <span><i class="legend-line observed"></i>Declared + observed</span>
-        <span><i class="legend-line only-observed"></i>Observed only</span>
-        <span><i class="legend-line traced"></i>Traced path</span>
-        @if ((_latestRun ?? _snapshot) is { } lastRun)
-        {
-            <span class="muted topology-last-run">Last discovery @lastRun.StartedAtUtc.ToLocalTime().ToString("g") · @lastRun.Status</span>
-        }
-    </div>
-    @if (!string.IsNullOrWhiteSpace(_progressMessage))
-    {
-        <div class="topology-progress" role="status" aria-live="polite">
-            <span class="progress-track"><span style="width:@ProgressPercent%"></span></span>
-            <span>@_progressMessage</span>
-        </div>
-    }
-    @if (!string.IsNullOrWhiteSpace(_pageError))
-    {
-        <div class="alert-message error" role="alert">@_pageError</div>
-    }
-    @if (!string.IsNullOrWhiteSpace(_traceMessage))
-    {
-        <p class="topology-trace-message" role="status">@_traceMessage</p>
-    }
-</section>
-
-<div class="topology-layout">
+<div class="topology-stage @(_fullscreen ? "fullscreen" : null)" tabindex="-1" @onkeydown="HandleStageKeyDown">
     <section class="ui-card topology-graph-card" aria-labelledby="topology-graph-title">
-        <div class="ui-card-header">
-            <div>
-                <h2 id="topology-graph-title">Infrastructure map</h2>
-                <p class="muted">@GraphSummary</p>
-            </div>
-            <div class="card-actions topology-zoom" role="group" aria-label="Zoom">
-                <button class="ui-button secondary icon-button" type="button" @onclick="ZoomOutAsync" disabled="@(_graphModule is null)"
-                        aria-label="Zoom out" title="Zoom out">−</button>
-                <button class="ui-button secondary icon-button" type="button" @onclick="ZoomInAsync" disabled="@(_graphModule is null)"
-                        aria-label="Zoom in" title="Zoom in">+</button>
-                <button class="ui-button secondary" type="button" @onclick="FitGraphAsync" disabled="@(_graphModule is null)">Fit graph</button>
-            </div>
-        </div>
-        <div @ref="_graphHost" class="topology-graph" role="img" aria-label="Interactive infrastructure graph. Use the node list below to select an item and inspect its details."></div>
-        @if (_visibleNodes.Count > 0)
-        {
-            <nav class="topology-node-list" aria-label="Graph nodes">
-                @foreach (var node in _visibleNodes)
-                {
-                    var id = ReadString(node, "id");
-                    <button type="button" @key="id" aria-pressed="@(_selectedId == id)" @onclick="() => SelectNodeAsync(node)">
-                        <span class="topology-node-kind">@ReadString(node, "kind")</span>
-                        <span>@GraphNodeLabel.Describe(node)</span>
-                    </button>
-                }
-            </nav>
-        }
-        @if (VisibleEdges.Count > 0)
-        {
-            <nav class="topology-node-list" aria-label="Graph edges">
-                @foreach (var edge in VisibleEdges)
-                {
-                    var id = ReadString(edge, "id");
-                    <button type="button" @key="id" aria-pressed="@(_selectedId == id)" @onclick="() => SelectEdgeAsync(edge)">
-                        <span class="topology-node-kind">@ReadString(edge, "kind")</span>
-                        <span>@FindNodeName(ReadString(edge, "source") ?? "") → @FindNodeName(ReadString(edge, "target") ?? "") @PortLabel(edge)</span>
-                    </button>
-                }
-            </nav>
-        }
-    </section>
+        <div @ref="_graphHost" class="topology-graph" role="img"
+             aria-label="Interactive infrastructure graph. Click a server or open the Inspector drawer to browse nodes and edges."></div>
 
-    <aside class="ui-card topology-details" aria-labelledby="topology-details-title" aria-live="polite">
-        <div class="ui-card-header">
-            <div>
-                <p class="eyebrow">Selection</p>
-                <h2 id="topology-details-title">@(_selected is null ? "Node or edge details" : SelectedTitle)</h2>
+        <div class="topology-overlay-shell">
+            @* Top floating collapsible Discovery & Filter toolbar (collapsed by default so the map fills the page). *@
+            <div class="topology-float-top" aria-label="Topology controls">
+                <div class="topology-float-bar">
+                    <div class="topology-toolbar-row">
+                        <div class="segmented-control" role="group" aria-label="Graph view">
+                            <button type="button" class="@(CurrentView == TopologyView.Servers ? "active" : null)" aria-pressed="@(CurrentView == TopologyView.Servers)" @onclick="() => ChangeViewAsync(TopologyView.Servers)">Servers</button>
+                            <button type="button" class="@(CurrentView == TopologyView.Service ? "active" : null)" aria-pressed="@(CurrentView == TopologyView.Service)" @onclick="() => ChangeViewAsync(TopologyView.Service)">Service</button>
+                            <button type="button" class="@(CurrentView == TopologyView.Network ? "active" : null)" aria-pressed="@(CurrentView == TopologyView.Network)" @onclick="() => ChangeViewAsync(TopologyView.Network)">Network</button>
+                        </div>
+
+                        <form class="topology-search" role="search" @onsubmit="ApplySearchAsync" @onsubmit:preventDefault>
+                            <label for="topology-search-input" class="visually-hidden">Search topology</label>
+                            <input id="topology-search-input" type="search" placeholder="Search name, IP, port…" value="@_search" @oninput="SearchChanged" />
+                            <button class="ui-button secondary" type="submit" disabled="@(_graph is null)">Search</button>
+                        </form>
+
+                        <div class="topology-float-actions">
+                            <button class="ui-button secondary" type="button" aria-expanded="@_discoveryExpanded" @onclick="() => _discoveryExpanded = !_discoveryExpanded">
+                                @(_discoveryExpanded ? "Hide filters" : ActiveFilterCount > 0 ? $"Filters ({ActiveFilterCount})" : "Discovery & filters")
+                            </button>
+                            <button class="ui-button primary" type="button" disabled="@_discovering" @onclick="RunDiscoveryAsync">
+                                @(_discovering ? "Discovering…" : "Run discovery")
+                            </button>
+                        </div>
+                    </div>
+
+                    @if (_discoveryExpanded)
+                    {
+                        <div class="topology-expanded-panel">
+                            <div class="topology-expanded-grid">
+                                <form class="topology-trace" @onsubmit="TraceAsync" @onsubmit:preventDefault>
+                                    <label for="topology-trace-input">Trace domain</label>
+                                    <input id="topology-trace-input" type="text" placeholder="api.example.com or URL" @bind="_traceQuery" @bind:event="oninput" />
+                                    <button class="ui-button secondary" type="submit" disabled="@(_graph is null)">Trace</button>
+                                    @if (_tracedNodeIds.Count > 0)
+                                    {
+                                        <button class="ui-button secondary" type="button" @onclick="ClearTraceAsync">Clear trace</button>
+                                    }
+                                </form>
+
+                                <label class="topology-filter">
+                                    <span class="visually-hidden">Filter by tag</span>
+                                    <select value="@_selectedTag" @onchange="TagChanged">
+                                        <option value="">All tags</option>
+                                        @foreach (var tag in _tags)
+                                        {
+                                            <option value="@tag">Tag: @tag</option>
+                                        }
+                                    </select>
+                                </label>
+                                <label class="topology-filter">
+                                    <span class="visually-hidden">Filter by Compose project</span>
+                                    <select value="@_selectedProject" @onchange="ProjectChanged">
+                                        <option value="">All projects</option>
+                                        @foreach (var project in _projects)
+                                        {
+                                            <option value="@project">Project: @project</option>
+                                        }
+                                    </select>
+                                </label>
+                                <label class="topology-filter">
+                                    <span class="visually-hidden">Filter by subnet</span>
+                                    <select value="@_selectedSubnet" @onchange="SubnetChanged">
+                                        <option value="">All subnets</option>
+                                        @foreach (var subnet in _subnets)
+                                        {
+                                            <option value="@subnet">Subnet: @subnet</option>
+                                        }
+                                    </select>
+                                </label>
+                            </div>
+
+                            <div class="topology-legend" aria-label="Graph legend">
+                                <span><i class="legend-line observed"></i>Declared + observed</span>
+                                <span><i class="legend-line only-observed"></i>Observed only</span>
+                                <span><i class="legend-line traced"></i>Traced path</span>
+                                @if ((_latestRun ?? _snapshot) is { } lastRun)
+                                {
+                                    <span class="muted topology-last-run">Last discovery @lastRun.StartedAtUtc.ToLocalTime().ToString("g") · @lastRun.Status</span>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(_progressMessage))
+                    {
+                        <div class="topology-progress" role="status" aria-live="polite">
+                            <span class="progress-track"><span style="width:@ProgressPercent%"></span></span>
+                            <span>@_progressMessage</span>
+                        </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_pageError))
+                    {
+                        <div class="alert-message error" role="alert">@_pageError</div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_traceMessage))
+                    {
+                        <p class="topology-trace-message" role="status">@_traceMessage</p>
+                    }
+                </div>
+            </div>
+
+            @* Middle flexible lane: right-aligned floating Inspector launcher OR open drawer (never overlaps top bar or bottom controls). *@
+            <div class="topology-overlay-middle">
+                @if (!_detailsOpen)
+                {
+                    <button type="button" class="ui-button secondary topology-drawer-launcher" @onclick="OpenInspectorIndex">
+                        @(_selected is null ? "Inspector & index" : $"Details · {SelectedTitle}")
+                    </button>
+                }
+                else
+                {
+                    <aside class="ui-card topology-float-drawer" aria-labelledby="topology-details-title" aria-live="polite">
+                        <header class="topology-drawer-header">
+                            <div class="topology-drawer-title">
+                                <p class="eyebrow">@(_vmSnapshot is not null ? $"VM · {_vmSnapshot.Group}" : "Selection")</p>
+                                <h2 id="topology-details-title">@(_selected is null ? "Map index" : SelectedTitle)</h2>
+                                @if (_vmSnapshot is { } headerVm)
+                                {
+                                    <p class="muted mono topology-drawer-subtitle">
+                                        @headerVm.Host
+                                        @if (!string.IsNullOrWhiteSpace(headerVm.OsInfo))
+                                        {
+                                            <span> · @headerVm.OsInfo</span>
+                                        }
+                                        @if (headerVm.Resources.SystemUptimeSeconds is { } uptimeSec)
+                                        {
+                                            <span> · up @VmInspectorService.FormatDuration(TimeSpan.FromSeconds(uptimeSec))</span>
+                                        }
+                                    </p>
+                                }
+                            </div>
+                            <div class="topology-drawer-head-actions">
+                                @if (_vmSnapshot is { } refreshVm)
+                                {
+                                    <button type="button" class="ui-button secondary topology-mini-btn" disabled="@_vmRefreshing"
+                                            @onclick="() => RefreshLiveVmAsync(refreshVm.ServerId)" title="Fetch fresh CPU, RAM, ports, and processes over SSH">
+                                        @(_vmRefreshing ? "Refreshing…" : "Live refresh")
+                                    </button>
+                                }
+                                <button type="button" class="ui-button secondary icon-button" @onclick="CloseDrawer" aria-label="Close details panel" title="Close">×</button>
+                            </div>
+                        </header>
+
+                        <div class="segmented-control topology-drawer-tabs" role="tablist" aria-label="Inspector sections">
+                            @if (_vmSnapshot is not null || _vmLoading)
+                            {
+                                <button type="button" role="tab" aria-selected="@(_inspectorTab == InspectorTab.Overview)" class="@(_inspectorTab == InspectorTab.Overview ? "active" : null)" @onclick="() => _inspectorTab = InspectorTab.Overview">Overview</button>
+                                <button type="button" role="tab" aria-selected="@(_inspectorTab == InspectorTab.Services)" class="@(_inspectorTab == InspectorTab.Services ? "active" : null)" @onclick="() => _inspectorTab = InspectorTab.Services">Services</button>
+                                <button type="button" role="tab" aria-selected="@(_inspectorTab == InspectorTab.Ports)" class="@(_inspectorTab == InspectorTab.Ports ? "active" : null)" @onclick="() => _inspectorTab = InspectorTab.Ports">Ports</button>
+                                <button type="button" role="tab" aria-selected="@(_inspectorTab == InspectorTab.Processes)" class="@(_inspectorTab == InspectorTab.Processes ? "active" : null)" @onclick="() => _inspectorTab = InspectorTab.Processes">Procs</button>
+                                <button type="button" role="tab" aria-selected="@(_inspectorTab == InspectorTab.Network)" class="@(_inspectorTab == InspectorTab.Network ? "active" : null)" @onclick="() => _inspectorTab = InspectorTab.Network">SSH</button>
+                            }
+                            else if (_selected is not null)
+                            {
+                                <button type="button" role="tab" aria-selected="@(_inspectorTab != InspectorTab.Index)" class="@(_inspectorTab != InspectorTab.Index ? "active" : null)" @onclick="() => _inspectorTab = InspectorTab.Network">Details</button>
+                            }
+                            <button type="button" role="tab" aria-selected="@(_inspectorTab == InspectorTab.Index)" class="@(_inspectorTab == InspectorTab.Index ? "active" : null)" @onclick="() => _inspectorTab = InspectorTab.Index">Index</button>
+                        </div>
+
+                        <div class="topology-drawer-body">
+                    @if (!string.IsNullOrWhiteSpace(_vmError))
+                    {
+                        <div class="alert-message error" role="alert">@_vmError</div>
+                    }
+                    @if (_vmSnapshot?.Warning is { Length: > 0 } vmWarn)
+                    {
+                        <p class="topology-stale-note"><span class="ui-badge warn">Partial</span><span class="muted">@vmWarn</span></p>
+                    }
+
+                    @if (_inspectorTab == InspectorTab.Index)
+                    {
+                        <div class="topology-index-section">
+                            <h3>Nodes (@_visibleNodes.Count)</h3>
+                            @if (_visibleNodes.Count == 0)
+                            {
+                                <p class="muted">No nodes match the current filter.</p>
+                            }
+                            else
+                            {
+                                <nav class="topology-node-list" aria-label="Graph nodes">
+                                    @foreach (var node in _visibleNodes)
+                                    {
+                                        var id = ReadString(node, "id");
+                                        <button type="button" @key="id" aria-pressed="@(_selectedId == id)" @onclick="() => SelectNodeAndFocusAsync(node)">
+                                            <span class="topology-node-kind">@ReadString(node, "kind")</span>
+                                            <span>@GraphNodeLabel.Describe(node)</span>
+                                        </button>
+                                    }
+                                </nav>
+                            }
+                        </div>
+                        @if (VisibleEdges.Count > 0)
+                        {
+                            <div class="topology-index-section">
+                                <h3>Connections (@VisibleEdges.Count)</h3>
+                                <nav class="topology-node-list" aria-label="Graph edges">
+                                    @foreach (var edge in VisibleEdges)
+                                    {
+                                        var id = ReadString(edge, "id");
+                                        <button type="button" @key="id" aria-pressed="@(_selectedId == id)" @onclick="() => SelectEdgeAsync(edge)">
+                                            <span class="topology-node-kind">@ReadString(edge, "kind")</span>
+                                            <span>@FindNodeName(ReadString(edge, "source") ?? "") → @FindNodeName(ReadString(edge, "target") ?? "") @PortLabel(edge)</span>
+                                        </button>
+                                    }
+                                </nav>
+                            </div>
+                        }
+                    }
+                    else if (_vmLoading && _vmSnapshot is null)
+                    {
+                        <p class="muted">Loading VM telemetry and services…</p>
+                    }
+                    else if (_vmSnapshot is { } vm && _inspectorTab == InspectorTab.Overview)
+                    {
+                        @if (_selected is JsonElement staleSel && !IsEdge(staleSel) && staleSel.TryGetProperty("attributes", out var staleAttr)
+                            && StaleCarryForward.Badge(staleAttr) is string staleBadge)
+                        {
+                            <p class="topology-stale-note"><span class="ui-badge warn">@staleBadge</span>
+                                <span class="muted">The server was unreachable at the last discovery; showing its last known state.</span></p>
+                        }
+
+                        <div class="vm-status-strip">
+                            @if (vm.IsLiveRefresh && vm.SnapshotAtUtc is { } liveAt)
+                            {
+                                <span class="ui-badge soft">Live · @liveAt.ToLocalTime().ToString("T")</span>
+                            }
+                            else if (vm.SnapshotAtUtc is { } snapAt)
+                            {
+                                <span class="ui-badge neutral">Snapshot · @snapAt.ToLocalTime().ToString("g")</span>
+                            }
+                            @if (vm.OpenAlertCount > 0)
+                            {
+                                <span class="ui-badge danger">@vm.OpenAlertCount open alert@(vm.OpenAlertCount == 1 ? "" : "s")</span>
+                            }
+                            <span class="ui-badge @(vm.DockerDaemonRunning ? "soft" : vm.DockerInstalled ? "warn" : "neutral")">
+                                @(vm.DockerDaemonRunning ? "Docker running" : vm.DockerInstalled ? "Docker stopped" : "No Docker")
+                            </span>
+                        </div>
+
+                        <section class="vm-resource-grid" aria-label="VM resources">
+                            <div class="vm-resource-card">
+                                <div class="vm-resource-top">
+                                    <span class="muted">CPU</span>
+                                    <strong class="mono">@FormatPercent(vm.Resources.CpuPercent)</strong>
+                                </div>
+                                <span class="vm-progress-track"><span class="vm-progress-fill @ProgressClass(vm.Resources.CpuPercent)" style="width:@BarWidth(vm.Resources.CpuPercent)%"></span></span>
+                                <span class="muted vm-resource-sub">@(vm.Resources.CpuCores is { } c ? $"{c} cores" : "cores unknown") · load @FormatLoad(vm.Resources)</span>
+                            </div>
+
+                            <div class="vm-resource-card">
+                                <div class="vm-resource-top">
+                                    <span class="muted">Memory</span>
+                                    <strong class="mono">@FormatPercent(vm.Resources.MemoryPercent)</strong>
+                                </div>
+                                <span class="vm-progress-track"><span class="vm-progress-fill @ProgressClass(vm.Resources.MemoryPercent)" style="width:@BarWidth(vm.Resources.MemoryPercent)%"></span></span>
+                                <span class="muted vm-resource-sub">@FormatBytesPair(vm.Resources.MemoryUsedBytes, vm.Resources.MemoryTotalBytes)</span>
+                            </div>
+
+                            <div class="vm-resource-card">
+                                <div class="vm-resource-top">
+                                    <span class="muted">Disk /</span>
+                                    <strong class="mono">@FormatPercent(vm.Resources.DiskPercent)</strong>
+                                </div>
+                                <span class="vm-progress-track"><span class="vm-progress-fill @ProgressClass(vm.Resources.DiskPercent)" style="width:@BarWidth(vm.Resources.DiskPercent)%"></span></span>
+                                <span class="muted vm-resource-sub">@FormatBytesPair(vm.Resources.DiskUsedBytes, vm.Resources.DiskTotalBytes)</span>
+                            </div>
+
+                            <div class="vm-resource-card">
+                                <div class="vm-resource-top">
+                                    <span class="muted">Network / Uptime</span>
+                                    <strong class="mono">@(vm.Resources.SystemUptimeSeconds is { } up ? VmInspectorService.FormatDuration(TimeSpan.FromSeconds(up)) : "—")</strong>
+                                </div>
+                                <span class="muted vm-resource-sub mono">↓ @FormatRate(vm.Resources.NetworkRxBytesPerSec) · ↑ @FormatRate(vm.Resources.NetworkTxBytesPerSec)</span>
+                            </div>
+                        </section>
+
+                        <div class="vm-quick-counts">
+                            <button type="button" class="vm-count-chip" @onclick="() => _inspectorTab = InspectorTab.Services">
+                                <strong>@vm.Containers.Count</strong>
+                                <span class="muted">Containers</span>
+                            </button>
+                            <button type="button" class="vm-count-chip" @onclick="() => _inspectorTab = InspectorTab.Services">
+                                <strong>@vm.SystemdServices.Count(s => !s.IsOsService)</strong>
+                                <span class="muted">Services</span>
+                            </button>
+                            <button type="button" class="vm-count-chip" @onclick="() => _inspectorTab = InspectorTab.Ports">
+                                <strong>@vm.Ports.Count(p => p.Exposure == PortExposure.External) / @vm.Ports.Count</strong>
+                                <span class="muted">Ext / Ports</span>
+                            </button>
+                            <button type="button" class="vm-count-chip" @onclick="() => _inspectorTab = InspectorTab.Processes">
+                                <strong>@vm.Processes.Count</strong>
+                                <span class="muted">Top procs</span>
+                            </button>
+                        </div>
+
+                        <div class="vm-quick-links">
+                            <a class="ui-button secondary" href="/servers/@vm.ServerId">Server detail</a>
+                            <a class="ui-button primary" href="@BuildAskAgentUrl(vm)">Ask agent about VM</a>
+                        </div>
+
+                        @if (_selected is JsonElement sel)
+                        {
+                            @RenderNodeAttributes(sel)
+                        }
+                    }
+                    else if (_vmSnapshot is { } vmSvc && _inspectorTab == InspectorTab.Services)
+                    {
+                        <h3>Docker runtime &amp; containers (@vmSvc.Containers.Count)</h3>
+                        <p class="vm-status-line">
+                            <span class="ui-badge @(vmSvc.DockerDaemonRunning ? "soft" : vmSvc.DockerInstalled ? "warn" : "neutral")">
+                                @(vmSvc.DockerDaemonRunning ? "Docker active" : vmSvc.DockerInstalled ? "Docker installed (daemon stopped or permission denied)" : "Docker not installed")
+                            </span>
+                        </p>
+                        @if (vmSvc.Containers.Count == 0)
+                        {
+                            <p class="muted">No containers found on this VM.</p>
+                        }
+                        else
+                        {
+                            <ul class="topology-detail-items">
+                                @foreach (var container in vmSvc.Containers)
+                                {
+                                    <li class="vm-service-row" @key="container.Name">
+                                        <div class="vm-service-head">
+                                            <strong>@container.Name</strong>
+                                            <div class="vm-service-badges">
+                                                <span class="ui-badge @ContainerBadgeClass(container.State)">@container.State</span>
+                                                @if (!string.IsNullOrWhiteSpace(container.HealthStatus))
+                                                {
+                                                    <span class="ui-badge @(container.HealthStatus == "healthy" ? "soft" : "warn")">@container.HealthStatus</span>
+                                                }
+                                            </div>
+                                        </div>
+                                        <span class="mono muted vm-service-meta">@container.Image</span>
+                                        <div class="vm-service-foot">
+                                            <span class="muted">@container.UptimeText</span>
+                                            @if (!string.IsNullOrWhiteSpace(container.ComposeProject))
+                                            {
+                                                <span class="ui-badge neutral">compose: @container.ComposeProject</span>
+                                            }
+                                        </div>
+                                        @if (!string.IsNullOrWhiteSpace(container.PortsText))
+                                        {
+                                            <span class="mono muted vm-service-meta">@container.PortsText</span>
+                                        }
+                                    </li>
+                                }
+                            </ul>
+                        }
+
+                        <h3>Proxies &amp; application stacks (@vmSvc.AppStacks.Count)</h3>
+                        @if (vmSvc.AppStacks.Count == 0)
+                        {
+                            <p class="muted">No nginx, HAProxy, Traefik, Caddy, DB, or Nexus definitions detected.</p>
+                        }
+                        else
+                        {
+                            <ul class="topology-detail-items">
+                                @foreach (var stack in vmSvc.AppStacks)
+                                {
+                                    <li class="vm-service-row">
+                                        <div class="vm-service-head">
+                                            <strong>@stack.Name</strong>
+                                            <span class="ui-badge soft">@stack.Kind</span>
+                                        </div>
+                                        <span class="mono muted vm-service-meta">@stack.Detail</span>
+                                    </li>
+                                }
+                            </ul>
+                        }
+
+                        <h3>systemd services (@vmSvc.SystemdServices.Count)</h3>
+                        @if (vmSvc.SystemdServices.Count == 0)
+                        {
+                            <p class="muted">No systemd services recorded (run discovery on this host).</p>
+                        }
+                        else
+                        {
+                            <ul class="topology-detail-items">
+                                @foreach (var unit in vmSvc.SystemdServices)
+                                {
+                                    <li class="vm-service-row" @key="unit.Name">
+                                        <div class="vm-service-head">
+                                            <strong class="mono">@unit.Name</strong>
+                                            <div class="vm-service-badges">
+                                                <span class="ui-badge @(unit.IsOsService ? "neutral" : "soft")">@(unit.IsOsService ? "OS" : "Service")</span>
+                                                @if (unit.HasListeners)
+                                                {
+                                                    <span class="ui-badge warn">Listening</span>
+                                                }
+                                            </div>
+                                        </div>
+                                        <span class="muted vm-service-meta">
+                                            @unit.UptimeText
+                                            @if (unit.MainPid > 0)
+                                            {
+                                                <span class="mono"> · PID @unit.MainPid</span>
+                                            }
+                                        </span>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    }
+                    else if (_vmSnapshot is { } vmPorts && _inspectorTab == InspectorTab.Ports)
+                    {
+                        var visiblePorts = vmPorts.Ports
+                            .Where(item => _portFilter is null || item.Exposure == _portFilter)
+                            .ToArray();
+
+                        <div class="segmented-control vm-subfilter" role="group" aria-label="Filter ports by exposure">
+                            <button type="button" class="@(_portFilter is null ? "active" : null)" @onclick="() => _portFilter = null">All (@vmPorts.Ports.Count)</button>
+                            <button type="button" class="@(_portFilter == PortExposure.External ? "active" : null)" @onclick="() => _portFilter = PortExposure.External">External (@vmPorts.Ports.Count(p => p.Exposure == PortExposure.External))</button>
+                            <button type="button" class="@(_portFilter == PortExposure.Private ? "active" : null)" @onclick="() => _portFilter = PortExposure.Private">Private (@vmPorts.Ports.Count(p => p.Exposure == PortExposure.Private))</button>
+                            <button type="button" class="@(_portFilter == PortExposure.Internal ? "active" : null)" @onclick="() => _portFilter = PortExposure.Internal">Internal (@vmPorts.Ports.Count(p => p.Exposure == PortExposure.Internal))</button>
+                        </div>
+
+                        @if (visiblePorts.Length == 0)
+                        {
+                            <p class="muted">No listening ports in this category.</p>
+                        }
+                        else
+                        {
+                            <ul class="topology-detail-items">
+                                @foreach (var port in visiblePorts)
+                                {
+                                    <li class="vm-service-row" @key="@($"{port.Protocol}|{port.Address}|{port.Port}")">
+                                        <div class="vm-service-head">
+                                            <strong class="mono">@port.Address:@port.Port/@port.Protocol</strong>
+                                            <span class="ui-badge @ExposureBadgeClass(port.Exposure)">@port.ExposureLabel</span>
+                                        </div>
+                                        <div class="vm-service-foot">
+                                            <span class="muted">@(string.IsNullOrWhiteSpace(port.OwnerName) ? "unknown process" : port.OwnerName)</span>
+                                            @if (!string.IsNullOrWhiteSpace(port.FirewallNote))
+                                            {
+                                                <span class="mono muted">@port.FirewallNote</span>
+                                            }
+                                        </div>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    }
+                    else if (_vmSnapshot is { } vmProcs && _inspectorTab == InspectorTab.Processes)
+                    {
+                        var filteredProcs = FilterProcesses(vmProcs.Processes);
+
+                        <div class="segmented-control vm-subfilter" role="group" aria-label="Filter processes by tag">
+                            <button type="button" class="@(_processCategoryFilter is null ? "active" : null)" @onclick="() => _processCategoryFilter = null">All (@vmProcs.Processes.Count)</button>
+                            <button type="button" class="@(_processCategoryFilter == ProcessCategory.Service ? "active" : null)" @onclick="() => _processCategoryFilter = ProcessCategory.Service">Service (@vmProcs.Processes.Count(p => p.Category == ProcessCategory.Service))</button>
+                            <button type="button" class="@(_processCategoryFilter == ProcessCategory.Docker ? "active" : null)" @onclick="() => _processCategoryFilter = ProcessCategory.Docker">Docker (@vmProcs.Processes.Count(p => p.Category == ProcessCategory.Docker))</button>
+                            <button type="button" class="@(_processCategoryFilter == ProcessCategory.Os ? "active" : null)" @onclick="() => _processCategoryFilter = ProcessCategory.Os">OS (@vmProcs.Processes.Count(p => p.Category == ProcessCategory.Os))</button>
+                        </div>
+
+                        <div class="vm-process-toolbar">
+                            <div class="field">
+                                <label for="vm-proc-search" class="visually-hidden">Search processes</label>
+                                <input id="vm-proc-search" type="search" @bind="_processQuery" @bind:event="oninput" placeholder="Filter PID, user, unit, command…" />
+                            </div>
+                            <div class="select-field">
+                                <label for="vm-proc-sort" class="visually-hidden">Sort processes</label>
+                                <select id="vm-proc-sort" @bind="_processSort">
+                                    <option value="cpu">Sort: CPU%</option>
+                                    <option value="mem">Sort: RAM%</option>
+                                    <option value="uptime">Sort: Uptime</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        @if (vmProcs.TotalProcessCount > vmProcs.Processes.Count)
+                        {
+                            <p class="muted vm-proc-count">Showing top @vmProcs.Processes.Count active of @vmProcs.TotalProcessCount processes (secrets redacted).</p>
+                        }
+
+                        @if (filteredProcs.Count == 0)
+                        {
+                            <p class="muted">No processes recorded yet. Click <strong>Live refresh</strong> or <strong>Run discovery</strong>.</p>
+                        }
+                        else
+                        {
+                            <ul class="topology-detail-items">
+                                @foreach (var proc in filteredProcs)
+                                {
+                                    <li class="vm-service-row" @key="proc.Pid">
+                                        <div class="vm-service-head">
+                                            <strong>@proc.Name <span class="mono muted">(@proc.Pid)</span></strong>
+                                            <span class="ui-badge @ProcessBadgeClass(proc.Category)">@ProcessTagText(proc)</span>
+                                        </div>
+                                        <div class="vm-service-foot mono muted">
+                                            <span>@proc.User · CPU @proc.CpuPercent.ToString("0.0", CultureInfo.InvariantCulture)% · RAM @proc.MemoryPercent.ToString("0.0", CultureInfo.InvariantCulture)%</span>
+                                            @if (proc.ElapsedSeconds > 0)
+                                            {
+                                                <span>up @VmInspectorService.FormatDuration(TimeSpan.FromSeconds(proc.ElapsedSeconds))</span>
+                                            }
+                                        </div>
+                                        <span class="mono muted vm-proc-cmd">@proc.CommandLine</span>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    }
+                    else if (_selected is JsonElement selected)
+                    {
+                        @RenderNetworkAndSelectionDetails(selected)
+                    }
+                    else
+                    {
+                        <p class="muted">Select a server card, node, or edge on the map, or open the Index tab.</p>
+                    }
+                        </div>
+                    </aside>
+                }
+            </div>
+
+            <div class="topology-overlay-bottom">
+                <div class="topology-map-header">
+                    <div>
+                        <h2 id="topology-graph-title">Infrastructure map</h2>
+                        <p class="muted">@GraphSummary</p>
+                    </div>
+                </div>
+
+                @* Bottom-right floating map zoom/fit/fullscreen controls. *@
+                <div class="topology-float-controls" role="group" aria-label="Map zoom and layout">
+                    <button class="ui-button secondary icon-button" type="button" @onclick="ZoomOutAsync" disabled="@(_graphModule is null)" aria-label="Zoom out" title="Zoom out">−</button>
+                    <button class="ui-button secondary icon-button" type="button" @onclick="ZoomInAsync" disabled="@(_graphModule is null)" aria-label="Zoom in" title="Zoom in">+</button>
+                    <button class="ui-button secondary" type="button" @onclick="FitGraphAsync" disabled="@(_graphModule is null)">Fit</button>
+                    <button class="ui-button secondary" type="button" @onclick="ToggleFullscreenAsync" aria-pressed="@_fullscreen">
+                        @(_fullscreen ? "Exit full" : "Fullscreen")
+                    </button>
+                </div>
             </div>
         </div>
-        @if (_selected is JsonElement selected)
-        {
-            @if (!IsEdge(selected) && selected.TryGetProperty("attributes", out var staleAttributes)
-                && StaleCarryForward.Badge(staleAttributes) is string staleBadge)
-            {
-                <p class="topology-stale-note"><span class="ui-badge warn">@staleBadge</span>
-                    <span class="muted">The server could not be reached or logged into at the last discovery (see Servers for the cause); this is its last known state.</span></p>
-            }
-            else if (IsEdge(selected) && (ReadBool(selected, "stale") || string.Equals(ReadString(selected, "stale"), "stale", StringComparison.Ordinal)))
-            {
-                <p class="topology-stale-note"><span class="ui-badge warn">@(ReadString(selected, "staleText") ?? StaleCarryForward.StaleEdgeBadge)</span>
-                    <span class="muted">@StaleCarryForward.StaleEdgeEvidenceDescription</span></p>
-            }
-            <dl class="topology-detail-list">
-                <dt>Kind</dt><dd>@ReadString(selected, "kind")</dd>
-                @if (ReadValue(selected, "port") is string port)
-                {
-                    <dt>Port</dt><dd class="mono">:@port @ReadString(selected, "protocol")</dd>
-                }
-                @if (IsEdge(selected) && ReadString(selected, "ports") is { Length: > 0 } ports)
-                {
-                    <dt>Ports</dt><dd class="mono">@ports</dd>
-                }
-                @if (IsEdge(selected) && ReadString(selected, "source") is string sourceId && ReadString(selected, "target") is string targetId)
-                {
-                    <dt>Source</dt><dd>@EndpointName(sourceId)</dd>
-                    <dt>Target</dt><dd>@EndpointName(targetId)</dd>
-                }
-                @if (!IsEdge(selected) && selected.TryGetProperty("attributes", out var attributes) && attributes.ValueKind == JsonValueKind.Object)
-                {
-                    @foreach (var property in attributes.EnumerateObject().Where(property => property.Value.ValueKind is JsonValueKind.String or JsonValueKind.Number
-                        && property.Name != StaleCarryForward.LastSeenAttribute))
-                    {
-                        <dt>@Humanize(property.Name)</dt><dd class="@(property.Name.Contains("ip", StringComparison.OrdinalIgnoreCase) || property.Name.Contains("address", StringComparison.OrdinalIgnoreCase) ? "mono" : null)">@property.Value.ToString()</dd>
-                    }
-                }
-            </dl>
-            @if (SelectedSsh is { } ssh)
-            {
-                <h3>SSH sessions</h3>
-                @if (ssh.Rows.Count == 0)
-                {
-                    <p class="muted">No SSH sessions were open at the last discovery.</p>
-                }
-                else
-                {
-                    <p class="topology-ssh-status"><span class="ui-badge @SshLevelBadge(ssh.Status.Level)">@SshLevelText(ssh.Status)</span></p>
-                    <ul class="topology-detail-items topology-ssh-sessions">
-                        @foreach (var row in ssh.Rows)
-                        {
-                            <li @key="@($"{row.Address}|{row.Verdict}")">
-                                <span class="topology-ssh-source">
-                                    <span class="mono">@row.Address</span>
-                                    @if (row.ServerName is not null)
-                                    {
-                                        <span class="muted">@row.ServerName</span>
-                                    }
-                                </span>
-                                <span class="topology-ssh-meta">
-                                    <span class="muted">× @row.Count @(row.Count == 1 ? "session" : "sessions")</span>
-                                    <span class="ui-badge @SshVerdictBadge(row.Verdict)">@SshVerdictText(row.Verdict)</span>
-                                </span>
-                            </li>
-                        }
-                    </ul>
-                }
-                @if (ssh.AllowedSources.Count == 0)
-                {
-                    <p class="muted">Set the allowed SSH sources to be warned about other addresses.</p>
-                }
-                <a class="ui-button secondary topology-ssh-link" href="/servers?sshSources=@ssh.ServerId">Allowed SSH sources</a>
-            }
-            @if (_selectedListeners.Count > 0)
-            {
-                <h3>Listeners</h3>
-                <ul class="topology-detail-items">
-                    @foreach (var listener in _selectedListeners)
-                    {
-                        <li><span class="mono">@listener.Address:@listener.Port/@listener.Protocol</span><span class="muted">@listener.ProcessName</span></li>
-                    }
-                </ul>
-            }
-            @if (SelectedMemberConnections.Count > 0)
-            {
-                <h3>Connections</h3>
-                <ul class="topology-detail-items">
-                    @foreach (var connection in SelectedMemberConnections)
-                    {
-                        <li>
-                            <span>@connection.Source → @connection.Target <span class="mono">@(connection.Port is null ? string.Empty : $":{connection.Port}")</span></span>
-                            <span class="ui-badge neutral">@connection.Kind</span>
-                        </li>
-                    }
-                </ul>
-            }
-            @if (ReadString(selected, "kind") == "Unknown")
-            {
-                <h3>Connections</h3>
-                @if (SelectedConnections.Count > 0)
-                {
-                    <ul class="topology-detail-items">
-                        @foreach (var connection in SelectedConnections)
-                        {
-                            <li>
-                                <span>@connection.Direction @connection.PeerName</span>
-                                <span class="mono">@(connection.Port is null ? "port unknown" : $":{connection.Port}")</span>
-                            </li>
-                        }
-                    </ul>
-                }
-                else
-                {
-                    <p class="muted">No connecting graph edges are recorded for this endpoint.</p>
-                }
-                @if (InventoryServerOf(selected) is not null)
-                {
-                    <p class="muted">This server is in the inventory; run discovery to map it.</p>
-                }
-                else if (TryGetProperty(selected, "attributes", out var unknownAttributes)
-                    && ReadValue(unknownAttributes, "address") is not null
-                    && ReadString(selected, "serverId") is not null)
-                {
-                    <button class="ui-button primary" type="button" @onclick="() => AddUnknownServerAsync(selected)">Add this server</button>
-                }
-            }
-            @if (_selectedEvidence.Count > 0)
-            {
-                <h3>Evidence</h3>
-                <ul class="topology-detail-items">
-                    @foreach (var evidence in _selectedEvidence)
-                    {
-                        <li><span class="ui-badge neutral">@evidence.Collector</span><span>@evidence.Description</span></li>
-                    }
-                </ul>
-            }
-            @if (IsEdge(selected) && _selectedEvidence.Count == 0)
-            {
-                <p class="muted">No collector evidence is attached to this edge.</p>
-            }
-        }
-        else
-        {
-            <p class="muted">Select a graph node or use the accessible node list to inspect its interfaces, listeners, and collection evidence.</p>
-        }
-    </aside>
+    </section>
 </div>
 
 @code {
-    // The card the Servers view draws around all domains (graph.js); it is not a graph node.
     private const string ClientsCardId = "servers-view:clients";
-
-    // The card the Servers view draws for all unknown endpoints with one address (graph.js).
     private const string UnknownHostCardPrefix = "servers-view:unknown:";
+
+    private enum TopologyView { Servers, Service, Network }
+    private enum InspectorTab { Overview, Services, Ports, Processes, Network, Index }
 
     private ElementReference _graphHost;
     private IJSObjectReference? _graphModule;
@@ -323,8 +588,19 @@
     private string? _progressMessage;
     private bool _discovering => Discovery.IsRunning;
     private int _completedServers;
-    // The Servers view draws the Service-view data as one card per server; the Application GraphView has no value for it.
-    private enum TopologyView { Servers, Service, Network }
+
+    private bool _discoveryExpanded;
+    private bool _detailsOpen;
+    private bool _fullscreen;
+    private InspectorTab _inspectorTab = InspectorTab.Overview;
+    private VmInspectorSnapshot? _vmSnapshot;
+    private bool _vmLoading;
+    private bool _vmRefreshing;
+    private string? _vmError;
+    private PortExposure? _portFilter;
+    private ProcessCategory? _processCategoryFilter;
+    private string _processQuery = string.Empty;
+    private string _processSort = "cpu";
 
     private TopologyView CurrentView { get; set; } = TopologyView.Servers;
     private GraphView CurrentGraphView => CurrentView == TopologyView.Network ? GraphView.Network : GraphView.Service;
@@ -334,8 +610,157 @@
     private IReadOnlyList<GraphListenerDto> _selectedListeners = [];
     private IReadOnlyList<GraphEvidenceDto> _selectedEvidence = [];
     private IReadOnlyDictionary<string, string> _serverAlertStatuses = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-    // The connections of an unknown endpoint. In the Servers view the unknown host card (and each of its rows) stands for several
-    // unknown nodes, named in "memberNodeIds"; their connections are listed together.
+
+    private int ActiveFilterCount =>
+        (!string.IsNullOrEmpty(_selectedTag) ? 1 : 0)
+        + (!string.IsNullOrEmpty(_selectedProject) ? 1 : 0)
+        + (!string.IsNullOrEmpty(_selectedSubnet) ? 1 : 0)
+        + (_tracedNodeIds.Count > 0 ? 1 : 0);
+
+    private RenderFragment RenderNodeAttributes(JsonElement selected) => @<dl class="topology-detail-list">
+        <dt>Kind</dt><dd>@ReadString(selected, "kind")</dd>
+        @if (ReadValue(selected, "port") is string port)
+        {
+            <dt>Port</dt><dd class="mono">:@port @ReadString(selected, "protocol")</dd>
+        }
+        @if (IsEdge(selected) && ReadString(selected, "ports") is { Length: > 0 } ports)
+        {
+            <dt>Ports</dt><dd class="mono">@ports</dd>
+        }
+        @if (IsEdge(selected) && ReadString(selected, "source") is string sourceId && ReadString(selected, "target") is string targetId)
+        {
+            <dt>Source</dt><dd>@EndpointName(sourceId)</dd>
+            <dt>Target</dt><dd>@EndpointName(targetId)</dd>
+        }
+        @if (!IsEdge(selected) && selected.TryGetProperty("attributes", out var attributes) && attributes.ValueKind == JsonValueKind.Object)
+        {
+            @foreach (var property in attributes.EnumerateObject().Where(property => property.Value.ValueKind is JsonValueKind.String or JsonValueKind.Number
+                && property.Name != StaleCarryForward.LastSeenAttribute))
+            {
+                <dt>@Humanize(property.Name)</dt><dd class="@(property.Name.Contains("ip", StringComparison.OrdinalIgnoreCase) || property.Name.Contains("address", StringComparison.OrdinalIgnoreCase) ? "mono" : null)">@property.Value.ToString()</dd>
+            }
+        }
+    </dl>;
+
+    private RenderFragment RenderNetworkAndSelectionDetails(JsonElement selected) => @<div class="vm-network-tab">
+        @if (!IsEdge(selected) && selected.TryGetProperty("attributes", out var staleAttributes)
+            && StaleCarryForward.Badge(staleAttributes) is string staleBadge)
+        {
+            <p class="topology-stale-note"><span class="ui-badge warn">@staleBadge</span>
+                <span class="muted">The server could not be reached or logged into at the last discovery (see Servers for the cause); this is its last known state.</span></p>
+        }
+        else if (IsEdge(selected) && (ReadBool(selected, "stale") || string.Equals(ReadString(selected, "stale"), "stale", StringComparison.Ordinal)))
+        {
+            <p class="topology-stale-note"><span class="ui-badge warn">@(ReadString(selected, "staleText") ?? StaleCarryForward.StaleEdgeBadge)</span>
+                <span class="muted">@StaleCarryForward.StaleEdgeEvidenceDescription</span></p>
+        }
+
+        @RenderNodeAttributes(selected)
+
+        @if (SelectedSsh is { } ssh)
+        {
+            <h3>SSH sessions</h3>
+            @if (ssh.Rows.Count == 0)
+            {
+                <p class="muted">No SSH sessions were open at the last discovery.</p>
+            }
+            else
+            {
+                <p class="topology-ssh-status"><span class="ui-badge @SshLevelBadge(ssh.Status.Level)">@SshLevelText(ssh.Status)</span></p>
+                <ul class="topology-detail-items topology-ssh-sessions">
+                    @foreach (var row in ssh.Rows)
+                    {
+                        <li @key="@($"{row.Address}|{row.Verdict}")">
+                            <span class="topology-ssh-source">
+                                <span class="mono">@row.Address</span>
+                                @if (row.ServerName is not null)
+                                {
+                                    <span class="muted">@row.ServerName</span>
+                                }
+                            </span>
+                            <span class="topology-ssh-meta">
+                                <span class="muted">× @row.Count @(row.Count == 1 ? "session" : "sessions")</span>
+                                <span class="ui-badge @SshVerdictBadge(row.Verdict)">@SshVerdictText(row.Verdict)</span>
+                            </span>
+                        </li>
+                    }
+                </ul>
+            }
+            @if (ssh.AllowedSources.Count == 0)
+            {
+                <p class="muted">Set the allowed SSH sources to be warned about other addresses.</p>
+            }
+            <a class="ui-button secondary topology-ssh-link" href="/servers?sshSources=@ssh.ServerId">Allowed SSH sources</a>
+        }
+        @if (_selectedListeners.Count > 0)
+        {
+            <h3>Listeners</h3>
+            <ul class="topology-detail-items">
+                @foreach (var listener in _selectedListeners)
+                {
+                    <li><span class="mono">@listener.Address:@listener.Port/@listener.Protocol</span><span class="muted">@listener.ProcessName</span></li>
+                }
+            </ul>
+        }
+        @if (SelectedMemberConnections.Count > 0)
+        {
+            <h3>Connections</h3>
+            <ul class="topology-detail-items">
+                @foreach (var connection in SelectedMemberConnections)
+                {
+                    <li>
+                        <span>@connection.Source → @connection.Target <span class="mono">@(connection.Port is null ? string.Empty : $":{connection.Port}")</span></span>
+                        <span class="ui-badge neutral">@connection.Kind</span>
+                    </li>
+                }
+            </ul>
+        }
+        @if (ReadString(selected, "kind") == "Unknown")
+        {
+            <h3>Connections</h3>
+            @if (SelectedConnections.Count > 0)
+            {
+                <ul class="topology-detail-items">
+                    @foreach (var connection in SelectedConnections)
+                    {
+                        <li>
+                            <span>@connection.Direction @connection.PeerName</span>
+                            <span class="mono">@(connection.Port is null ? "port unknown" : $":{connection.Port}")</span>
+                        </li>
+                    }
+                </ul>
+            }
+            else
+            {
+                <p class="muted">No connecting graph edges are recorded for this endpoint.</p>
+            }
+            @if (InventoryServerOf(selected) is not null)
+            {
+                <p class="muted">This server is in the inventory; run discovery to map it.</p>
+            }
+            else if (TryGetProperty(selected, "attributes", out var unknownAttributes)
+                && ReadValue(unknownAttributes, "address") is not null
+                && ReadString(selected, "serverId") is not null)
+            {
+                <button class="ui-button primary" type="button" @onclick="() => AddUnknownServerAsync(selected)">Add this server</button>
+            }
+        }
+        @if (_selectedEvidence.Count > 0)
+        {
+            <h3>Evidence</h3>
+            <ul class="topology-detail-items">
+                @foreach (var evidence in _selectedEvidence)
+                {
+                    <li><span class="ui-badge neutral">@evidence.Collector</span><span>@evidence.Description</span></li>
+                }
+            </ul>
+        }
+        @if (IsEdge(selected) && _selectedEvidence.Count == 0)
+        {
+            <p class="muted">No collector evidence is attached to this edge.</p>
+        }
+    </div>;
+
     private IReadOnlyList<UnknownConnection> SelectedConnections
     {
         get
@@ -350,7 +775,7 @@
                 .ToArray();
         }
     }
-    // An edge of the Servers view stands for all connections between two cards; these are the connections it contains.
+
     private IReadOnlyList<EdgeConnection> SelectedMemberConnections
     {
         get
@@ -366,21 +791,27 @@
                     .ToArray();
         }
     }
+
     private IReadOnlyList<JsonElement> VisibleEdges => _graph is null ? [] : _graph.Edges
         .Select(edge => edge.Data)
         .Where(edge => ReadString(edge, "source") is string source && ReadString(edge, "target") is string target
             && _visibleNodes.Any(node => ReadString(node, "id") == source)
             && _visibleNodes.Any(node => ReadString(node, "id") == target))
         .ToArray();
+
     private string SelectedTitle => _selected is JsonElement selected && IsEdge(selected)
         ? $"{EndpointName(ReadString(selected, "source") ?? "") ?? "Source"} {(MemberEdgeIds(selected).Count > 0 ? "↔" : "→")} {EndpointName(ReadString(selected, "target") ?? "") ?? "Target"}"
         : _selected is JsonElement node && ReadString(node, "id") is string cardId && cardId.StartsWith(UnknownHostCardPrefix, StringComparison.Ordinal)
             ? InventoryServerOf(node)?.Name ?? UnknownHostTitle(UnknownHostAddress(node), ReadBool(node, "external"))
-        : _selected is JsonElement other ? ReadString(other, "label") ?? ReadString(other, "kind") ?? "Selected node" : "Node or edge details";
+        : _vmSnapshot is not null && !IsEdge(_selected ?? default) && ReadString(_selected ?? default, "kind") == "Host"
+            ? _vmSnapshot.ServerName
+        : _selected is JsonElement other ? ReadString(other, "label") ?? ReadString(other, "kind") ?? "Selected node" : "Map index";
+
     private int ProgressPercent => _servers.Count == 0 ? (_discovering ? 15 : 0) : _completedServers * 100 / _servers.Count;
     private string GraphSummary => _graph is null
         ? "Run discovery to build a map of your servers and services."
-        : $"{_visibleNodes.Count} nodes shown · {VisibleEdgeCount} connections shown";
+        : $"{_visibleNodes.Count} nodes · {VisibleEdgeCount} connections";
+
     private int VisibleEdgeCount
     {
         get
@@ -408,7 +839,6 @@
         }
     }
 
-    /// <summary>A node to select and center, from the global search (T8.2).</summary>
     [SupplyParameterFromQuery(Name = "node")]
     public string? FocusNodeId { get; set; }
 
@@ -416,7 +846,6 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        // Search from this very page changes only the query: focus the new node without reloading.
         if (_graphModule is not null) await FocusRequestedNodeAsync();
     }
 
@@ -453,6 +882,34 @@
         }
     }
 
+    private void OpenInspectorIndex()
+    {
+        _detailsOpen = true;
+        if (_selected is null) _inspectorTab = InspectorTab.Index;
+    }
+
+    private void CloseDrawer() => _detailsOpen = false;
+
+    private async Task ToggleFullscreenAsync()
+    {
+        _fullscreen = !_fullscreen;
+        if (_graphModule is not null)
+        {
+            await Task.Delay(50);
+            await _graphModule.InvokeVoidAsync("fit");
+        }
+    }
+
+    private async Task HandleStageKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape")
+        {
+            if (_detailsOpen) _detailsOpen = false;
+            else if (_discoveryExpanded) _discoveryExpanded = false;
+            else if (_fullscreen) await ToggleFullscreenAsync();
+        }
+    }
+
     private async Task ChangeViewAsync(TopologyView view)
     {
         CurrentView = view;
@@ -469,6 +926,9 @@
         _externalClientAddresses = null;
         _selected = null;
         _selectedId = null;
+        _vmSnapshot = null;
+        _vmError = null;
+        _detailsOpen = false;
         _traceMessage = null;
         _tracedNodeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         _tracedEdgeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -507,7 +967,6 @@
         }
         catch (OperationCanceledException) when (_disposeCts.IsCancellationRequested)
         {
-            // The tab closed; the host-owned discovery run continues to completion.
         }
         catch (Exception exception)
         {
@@ -667,6 +1126,7 @@
         {
             _selected = null;
             _selectedId = null;
+            _vmSnapshot = null;
             _selectedListeners = [];
             _selectedEvidence = [];
         }
@@ -692,10 +1152,7 @@
     }
 
     private Task FitGraphAsync() => _graphModule is null ? Task.CompletedTask : _graphModule.InvokeVoidAsync("fit").AsTask();
-
-    // One step is a factor of 1.4 around the middle of the map; the wheel and pinch still zoom around the pointer.
     private Task ZoomInAsync() => _graphModule is null ? Task.CompletedTask : _graphModule.InvokeVoidAsync("zoomBy", 1.4).AsTask();
-
     private Task ZoomOutAsync() => _graphModule is null ? Task.CompletedTask : _graphModule.InvokeVoidAsync("zoomBy", 1 / 1.4).AsTask();
 
     private async Task TraceAsync()
@@ -706,7 +1163,6 @@
             return;
         }
 
-        // A trace runs on the service data; the Network view has no services, so go to the Servers view.
         if (CurrentView == TopologyView.Network)
         {
             CurrentView = TopologyView.Servers;
@@ -755,15 +1211,18 @@
         return Task.CompletedTask;
     }
 
-    private async Task SelectNodeAsync(JsonElement node)
+    private async Task SelectNodeAsync(JsonElement node) => await SelectEntityAsync(node);
+
+    private async Task SelectNodeAndFocusAsync(JsonElement node)
     {
         await SelectEntityAsync(node);
+        if (_graphModule is not null && ReadString(node, "id") is string id)
+        {
+            await _graphModule.InvokeVoidAsync("focus", id);
+        }
     }
 
-    private async Task SelectEdgeAsync(JsonElement edge)
-    {
-        await SelectEntityAsync(edge);
-    }
+    private async Task SelectEdgeAsync(JsonElement edge) => await SelectEntityAsync(edge);
 
     private async Task SelectEntityAsync(JsonElement entity)
     {
@@ -771,12 +1230,12 @@
         if (id is null) return;
         _selectedId = id;
         _selected = entity;
+        _detailsOpen = true;
         LoadSelectionDetails(entity);
+        await LoadVmForSelectionAsync(entity);
         if (_graphModule is not null) await _graphModule.InvokeVoidAsync("select", id);
     }
 
-    // Listeners and evidence of the selection. Ids of the Servers view that are not graph ids (a header, the clients card) have
-    // none; an aggregated edge shows the evidence of every connection it contains.
     private void LoadSelectionDetails(JsonElement entity)
     {
         _selectedListeners = [];
@@ -790,13 +1249,198 @@
         }
         else
         {
-            // An unknown host card (or one of its rows) stands for several nodes: show what all of them have.
             var nodeIds = ReadGuidSet(entity, "memberNodeIds");
             if (Guid.TryParseExact(ReadString(entity, "id"), "N", out var nodeId)) nodeIds.Add(nodeId);
             _selectedListeners = _graph.Listeners.Where(listener => nodeIds.Contains(listener.NodeId)).ToArray();
             _selectedEvidence = _graph.Evidence.Where(item => item.NodeId is Guid id && nodeIds.Contains(id)).ToArray();
         }
     }
+
+    private async Task LoadVmForSelectionAsync(JsonElement entity)
+    {
+        _vmError = null;
+        if (!TryResolveServerId(entity, out var serverId))
+        {
+            _vmSnapshot = null;
+            if (_inspectorTab is not InspectorTab.Network and not InspectorTab.Index)
+            {
+                _inspectorTab = InspectorTab.Network;
+            }
+            return;
+        }
+
+        if (_inspectorTab == InspectorTab.Index)
+        {
+            _inspectorTab = InspectorTab.Overview;
+        }
+
+        if (_vmSnapshot?.ServerId == serverId)
+        {
+            return;
+        }
+
+        _vmLoading = true;
+        try
+        {
+            _vmSnapshot = await VmInspector.LoadAsync(serverId, _disposeCts.Token);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _vmError = $"Could not load VM details: {exception.Message}";
+        }
+        finally
+        {
+            _vmLoading = false;
+        }
+    }
+
+    private async Task RefreshLiveVmAsync(Guid serverId)
+    {
+        if (_vmRefreshing) return;
+        _vmRefreshing = true;
+        _vmError = null;
+        try
+        {
+            _vmSnapshot = await VmInspector.RefreshLiveAsync(serverId, _disposeCts.Token);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _vmError = $"Live refresh failed: {exception.Message}";
+        }
+        finally
+        {
+            _vmRefreshing = false;
+        }
+    }
+
+    private bool TryResolveServerId(JsonElement entity, out Guid serverId)
+    {
+        serverId = Guid.Empty;
+        if (IsEdge(entity)) return false;
+
+        var kind = ReadString(entity, "kind");
+        if (string.Equals(kind, "Unknown", StringComparison.OrdinalIgnoreCase))
+        {
+            if (InventoryServerOf(entity) is { } known && Guid.TryParseExact(known.ServerId, "N", out serverId))
+            {
+                return true;
+            }
+            return false;
+        }
+
+        if (ReadString(entity, "inventoryServerId") is { } invId && Guid.TryParseExact(invId, "N", out serverId))
+        {
+            return true;
+        }
+
+        if (ReadString(entity, "serverId") is { } rawId
+            && Guid.TryParseExact(rawId, "N", out serverId)
+            && ServerById(rawId) is not null)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private IReadOnlyList<ProcessInfo> FilterProcesses(IReadOnlyList<ProcessInfo> processes)
+    {
+        IEnumerable<ProcessInfo> query = processes.Where(item => _processCategoryFilter is null || item.Category == _processCategoryFilter);
+        if (!string.IsNullOrWhiteSpace(_processQuery))
+        {
+            var term = _processQuery.Trim();
+            query = query.Where(item =>
+                item.Name.Contains(term, StringComparison.OrdinalIgnoreCase)
+                || item.CommandLine.Contains(term, StringComparison.OrdinalIgnoreCase)
+                || item.User.Contains(term, StringComparison.OrdinalIgnoreCase)
+                || (item.UnitName?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)
+                || (item.ContainerName?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)
+                || item.Pid.ToString(CultureInfo.InvariantCulture).Contains(term, StringComparison.Ordinal));
+        }
+
+        query = _processSort switch
+        {
+            "mem" => query.OrderByDescending(item => item.MemoryPercent).ThenByDescending(item => item.CpuPercent),
+            "uptime" => query.OrderByDescending(item => item.ElapsedSeconds).ThenByDescending(item => item.CpuPercent),
+            _ => query.OrderByDescending(item => item.CpuPercent).ThenByDescending(item => item.MemoryPercent)
+        };
+
+        return query.ToArray();
+    }
+
+    private static string BuildAskAgentUrl(VmInspectorSnapshot vm)
+    {
+        var prompt = $"Inspect server {vm.ServerName} ({vm.Host}) status, listening ports, containers/services, and recent alerts, and summarize any issues without making changes.";
+        return $"/agent-chat?prompt={Uri.EscapeDataString(prompt)}";
+    }
+
+    private static string FormatPercent(double? value) =>
+        value is { } pct ? $"{pct.ToString("0.#", CultureInfo.InvariantCulture)}%" : "—";
+
+    private static int BarWidth(double? value) =>
+        value is { } pct ? (int)Math.Clamp(Math.Round(pct), 0, 100) : 0;
+
+    private static string ProgressClass(double? value) =>
+        value is >= 85 ? "high-load" : string.Empty;
+
+    private static string FormatLoad(VmResourceMetrics resources) =>
+        resources.Load1m is { } l1
+            ? $"{l1.ToString("0.00", CultureInfo.InvariantCulture)} / {(resources.Load5m ?? 0).ToString("0.00", CultureInfo.InvariantCulture)}"
+            : "—";
+
+    private static string FormatBytesPair(double? used, double? total)
+    {
+        if (used is not { } u || total is not { } t || t <= 0) return "No metric sample yet";
+        return $"{FormatBytes(u)} / {FormatBytes(t)}";
+    }
+
+    private static string FormatBytes(double bytes)
+    {
+        const double GiB = 1024d * 1024d * 1024d;
+        const double MiB = 1024d * 1024d;
+        return bytes >= GiB
+            ? $"{(bytes / GiB).ToString("0.1", CultureInfo.InvariantCulture)} GB"
+            : $"{(bytes / MiB).ToString("0", CultureInfo.InvariantCulture)} MB";
+    }
+
+    private static string FormatRate(double? bytesPerSec)
+    {
+        if (bytesPerSec is not { } rate) return "—";
+        const double MiB = 1024d * 1024d;
+        const double KiB = 1024d;
+        if (rate >= MiB) return $"{(rate / MiB).ToString("0.1", CultureInfo.InvariantCulture)} MB/s";
+        if (rate >= KiB) return $"{(rate / KiB).ToString("0", CultureInfo.InvariantCulture)} KB/s";
+        return $"{rate.ToString("0", CultureInfo.InvariantCulture)} B/s";
+    }
+
+    private static string ContainerBadgeClass(string state) => state.ToLowerInvariant() switch
+    {
+        "running" => "soft",
+        "restarting" or "paused" => "warn",
+        "exited" or "dead" => "danger",
+        _ => "neutral"
+    };
+
+    private static string ExposureBadgeClass(PortExposure exposure) => exposure switch
+    {
+        PortExposure.External => "warn",
+        PortExposure.Internal => "soft",
+        _ => "neutral"
+    };
+
+    private static string ProcessBadgeClass(ProcessCategory category) => category switch
+    {
+        ProcessCategory.Docker => "soft",
+        ProcessCategory.Service => "warn",
+        _ => "neutral"
+    };
+
+    private static string ProcessTagText(ProcessInfo proc) => proc.Category switch
+    {
+        ProcessCategory.Docker => proc.ContainerName is { Length: > 0 } c ? $"Docker · {c}" : "Docker",
+        ProcessCategory.Service => proc.UnitName is { Length: > 0 } u ? $"Service · {u}" : "Service",
+        _ => "OS"
+    };
 
     private static HashSet<Guid> MemberEdgeIds(JsonElement edge) => ReadGuidSet(edge, "memberEdgeIds");
 
@@ -811,14 +1455,9 @@
         ? address
         : (ReadString(card, "id") ?? string.Empty)[UnknownHostCardPrefix.Length..];
 
-    // "Unknown host · 10.0.0.5", or "External client · 203.0.113.7" for an address that only connects to inventory servers.
     private static string UnknownHostTitle(string address, bool external) => $"{(external ? "External client" : "Unknown host")} · {address}";
 
-    // The addresses (as the Servers view groups them) whose unknown endpoints are all client-side: each is the source of an edge and
-    // the target of none, like graph.js decides. Computed from the whole loaded graph, so a search or tag filter that hides edges
-    // can make the card (which goes by what is shown) and this list disagree; the card's own "external" flag wins where it is known.
     private IReadOnlySet<string>? _externalClientAddresses;
-
     private IReadOnlySet<string> ExternalClientAddresses => _externalClientAddresses ??= BuildExternalClientAddresses();
 
     private IReadOnlySet<string> BuildExternalClientAddresses()
@@ -844,13 +1483,9 @@
         return clientByAddress.Where(item => item.Value).Select(item => item.Key).ToHashSet(StringComparer.Ordinal);
     }
 
-    // Inventory servers by address, for the Servers view (an unknown host card whose address belongs to one is named after it) and
-    // the details panel. Built lazily from the loaded graph, so LoadGraphAsync resets it.
     private IReadOnlyDictionary<string, InventoryServer>? _inventory;
-
     private IReadOnlyDictionary<string, InventoryServer> Inventory => _inventory ??= BuildInventory();
 
-    // The address as the Servers view groups unknown endpoints by it (graph.js): trimmed, lowercase, without IPv6 brackets.
     private static string NormalizeAddress(string address)
     {
         var text = address.Trim().ToLowerInvariant();
@@ -866,15 +1501,12 @@
         void Add(string text, InventoryServer server)
         {
             if (!System.Net.IPAddress.TryParse(text.Trim(), out var parsed) || System.Net.IPAddress.IsLoopback(parsed)) return;
-            // The text as written and its canonical form (the graph may spell an IPv6 address either way).
             result.TryAdd(NormalizeAddress(text), server);
             result.TryAdd(NormalizeAddress(parsed.ToString()), server);
         }
 
-        // What the owner typed is the strongest claim on an address.
         foreach (var server in _servers) Add(server.Host, new InventoryServer(server.Id.ToString("N"), server.Name));
 
-        // Interface addresses from discovery, unless two servers have the same one (the docker0 address 172.17.0.1 is on every Docker host).
         var claimed = new Dictionary<string, (string Address, HashSet<string> ServerIds)>(StringComparer.Ordinal);
         foreach (var node in (_graph?.Nodes ?? []).Select(element => element.Data).Where(node => ReadString(node, "kind") == "Host"))
         {
@@ -899,8 +1531,6 @@
         return result;
     }
 
-    // The inventory server an unknown card or endpoint stands for: named in the data of a card the Servers view drew for it, or found
-    // by its address.
     private InventoryServer? InventoryServerOf(JsonElement unknown)
     {
         if (ReadString(unknown, "inventoryServerId") is { } serverId
@@ -913,14 +1543,11 @@
             && Inventory.TryGetValue(NormalizeAddress(address), out var entry) ? entry : null;
     }
 
-    // Per node: the tcp ports it listens on, for the port list on the rows of the Servers view. A listener bound only to loopback
-    // (127.0.0.0/8, which includes Docker's embedded DNS on 127.0.0.11, or ::1) is not reachable from another machine.
     private Dictionary<string, int[]> BuildListenerPorts() => (_graph?.Listeners ?? [])
         .Where(listener => string.Equals(listener.Protocol, "tcp", StringComparison.OrdinalIgnoreCase) && !IsLoopbackOnly(listener.Address))
         .GroupBy(listener => listener.NodeId.ToString("N"), StringComparer.OrdinalIgnoreCase)
         .ToDictionary(group => group.Key, group => group.Select(listener => listener.Port).Distinct().Order().ToArray(), StringComparer.OrdinalIgnoreCase);
 
-    // "*", "0.0.0.0" and "::" are every interface; ss may print "127.0.0.53%lo" with the interface.
     private static bool IsLoopbackOnly(string address)
     {
         var text = address.Trim().Trim('[', ']');
@@ -930,8 +1557,6 @@
         return System.Net.IPAddress.IsLoopback(parsed.IsIPv4MappedToIPv6 ? parsed.MapToIPv4() : parsed);
     }
 
-    // Per server: the operating system and the primary address for the caption above its card in the Servers view, and its SSH
-    // session status (T8.18): the card colour, the warning badge and the caption text.
     private Dictionary<string, object> BuildServerInfo() => _servers.ToDictionary(server => server.Id.ToString("N"),
         server => (object)new
         {
@@ -943,10 +1568,7 @@
         },
         StringComparer.OrdinalIgnoreCase);
 
-    // The SSH session status of every server that has a Host node, judged against its allowed sources and its jump host. Built
-    // lazily from the loaded graph, so LoadGraphAsync resets it.
     private IReadOnlyDictionary<string, SshSessionStatus>? _sshStatuses;
-
     private IReadOnlyDictionary<string, SshSessionStatus> SshStatuses => _sshStatuses ??= BuildSshStatuses();
 
     private IReadOnlyDictionary<string, SshSessionStatus> BuildSshStatuses()
@@ -970,8 +1592,6 @@
         TryGetProperty(host, "attributes", out var attributes) ? SshSessionAttributes.Read(attributes) : [],
         server.AllowedSshSources, JumpHostAddresses(server));
 
-    // The addresses a session from the server's jump host comes from: what the jump server was added with (when it is an IP) and
-    // the interface addresses of its Host node, loopback left out.
     private IReadOnlyList<string> JumpHostAddresses(ServerSummary server)
     {
         if (server.JumpServerId is not { } jumpId || _servers.FirstOrDefault(candidate => candidate.Id == jumpId) is not { } jump) return [];
@@ -992,7 +1612,6 @@
     private static bool IsNonLoopbackIp(string text) => !text.Contains('/') && SshSourceList.TryNormalize(text, out var normalized)
         && !System.Net.IPAddress.IsLoopback(System.Net.IPAddress.Parse(normalized));
 
-    // The SSH sessions of the selected Host: one row per source address and verdict, not allowed first (the policy sorts them).
     private SshPanel? SelectedSsh
     {
         get
@@ -1037,16 +1656,12 @@
         _ => "No list set"
     };
 
-    // The address the server is added with when it is one of its interfaces (a host name or a tunnelled 127.0.0.1 is not),
-    // otherwise its first reachable interface address, otherwise what it was added with.
     private string CaptionAddress(ServerSummary server)
     {
         var addresses = HostAddresses(server.Id.ToString("N"));
         return addresses.Contains(server.Host, StringComparer.OrdinalIgnoreCase) ? server.Host : addresses.FirstOrDefault() ?? server.Host;
     }
 
-    // Interface addresses that other machines can reach: loopback (127.0.0.1, ::1) and IPv6 link-local are skipped, and IPv4
-    // addresses come before IPv6 ones.
     private IReadOnlyList<string> HostAddresses(string serverId) => (_graph?.Nodes ?? []).Select(element => element.Data)
         .Where(node => ReadString(node, "kind") == "Host" && string.Equals(ReadString(node, "serverId"), serverId, StringComparison.OrdinalIgnoreCase))
         .SelectMany(node => TryGetProperty(node, "attributes", out var attributes) && TryGetProperty(attributes, "addresses", out var addresses)
@@ -1066,8 +1681,10 @@
         {
             _selected = null;
             _selectedId = null;
+            _vmSnapshot = null;
             _selectedListeners = [];
             _selectedEvidence = [];
+            _detailsOpen = false;
         }
         else
         {
@@ -1075,7 +1692,9 @@
             var data = document.RootElement.Clone();
             _selected = data;
             _selectedId = ReadString(data, "id");
+            _detailsOpen = true;
             LoadSelectionDetails(data);
+            await LoadVmForSelectionAsync(data);
         }
         await InvokeAsync(StateHasChanged);
     }
@@ -1132,15 +1751,9 @@
     private static string Humanize(string text) => System.Text.RegularExpressions.Regex.Replace(text, "([a-z])([A-Z])", "$1 $2");
 
     private sealed record UnknownConnection(string Direction, string PeerName, string? Port);
-
     private sealed record EdgeConnection(string Source, string Target, string? Port, string Kind);
-
-    // An inventory server (id in "N" format) as the Servers view needs it.
     private sealed record InventoryServer(string ServerId, string Name);
-
-    // The SSH section of the details panel: one row per source address and verdict, the server's allowed list and its id (N format).
     private sealed record SshPanel(SshSessionStatus Status, IReadOnlyList<SshRow> Rows, IReadOnlyList<string> AllowedSources, string ServerId);
-
     private sealed record SshRow(string Address, string? ServerName, int Count, SshSessionVerdict Verdict);
 
     private string? FindNodeName(string id) => _graph?.Nodes
@@ -1149,8 +1762,6 @@
             ? ReadString(node, "label")
             : null;
 
-    // The name of an edge end in the details panel: also the clients card of the Servers view, and an unknown endpoint by its
-    // address (every unknown node is labelled "Unknown").
     private string? EndpointName(string id) => id == ClientsCardId
         ? "Internet / Clients"
         : id.StartsWith(UnknownHostCardPrefix, StringComparison.Ordinal)

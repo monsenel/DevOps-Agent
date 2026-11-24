@@ -94,14 +94,68 @@ public sealed class UpdatesCollectorTests
             call => Assert.False(call.Options.UseSudo));
     }
 
-    private sealed class ScriptedRunner(Func<string, string> output) : ISshRunner
+    [Fact]
+    public async Task ApkScan_ReadsRepositoriesAndUpgradablePackages_ForAlpine()
+    {
+        const string apkList =
+            "nginx-1.26.3-r0 x86_64 {nginx} (BSD-2-Clause) [upgradable from: nginx-1.26.2-r0]\n"
+            + "libcrypto3-3.3.2-r4 x86_64 {openssl} (Apache-2.0) [upgradable from: libcrypto3-3.3.2-r1]\n";
+        const string apkRepos =
+            "__DVA_APK_REPOS__\n"
+            + "https://dl-cdn.alpinelinux.org/alpine/v3.23/main\n"
+            + "@edge https://dl-cdn.alpinelinux.org/alpine/edge/community\n"
+            + "# https://disabled.example/repo\n";
+
+        var runner = new ScriptedRunner(command => command switch
+        {
+            var c when c.Contains("apt-get", StringComparison.Ordinal) && c.StartsWith("command -v", StringComparison.Ordinal) => string.Empty,
+            var c when c == DevOpsAgent.Infrastructure.Parsers.PackageSourcesParser.ApkSourcesCommand => apkRepos,
+            var c when c == DevOpsAgent.Application.Updates.PackageListProbe.Command => "1763164800\n",
+            var c when c.Contains("apk list -u", StringComparison.Ordinal) => apkList,
+            _ => string.Empty
+        }, command => command.Contains("command -v apk", StringComparison.Ordinal)
+            || !(command.StartsWith("command -v apt-get", StringComparison.Ordinal) || command.StartsWith("command -v dnf", StringComparison.Ordinal)));
+
+        var collector = new UpdatesCollector(new UpdateCollectorOptions(), cacheOnly: true);
+        var server = new Server("kartio-nginx", "kartio-nginx", 22, "root", "key", "prod");
+
+        Assert.True(await collector.IsApplicableAsync(new ServerContext(server, runner), CancellationToken.None));
+        var raw = await collector.CollectAsync(new ServerContext(server, runner), CancellationToken.None);
+        var parsed = collector.Parse(raw);
+        Assert.True(parsed.IsSuccess, parsed.Error);
+        var packages = parsed.Data!.Value.Deserialize<DevOpsAgent.Application.Updates.UpdatePackageDto[]>()!;
+        var output = JsonSerializer.Deserialize<DevOpsAgent.Application.Updates.UpdateCollectionOutput>(raw.StandardOutput)!;
+
+        Assert.Equal(DevOpsAgent.Application.Updates.PackageManagerKind.Apk, output.PackageManager);
+        Assert.Equal(2, packages.Length);
+        Assert.Contains(packages, p => p.Name == "nginx" && p.CurrentVersion == "1.26.2-r0" && p.CandidateVersion == "1.26.3-r0");
+        Assert.Contains(packages, p => p.Name == "libcrypto3" && p.CurrentVersion == "3.3.2-r1" && p.CandidateVersion == "3.3.2-r4");
+        Assert.Equal(2, UpdatesCollector.ParseSources(output).Count);
+        Assert.All(runner.Calls, call => Assert.False(call.Options.UseSudo));
+
+        var versionFallback = DevOpsAgent.Infrastructure.Parsers.UpdatesParser.ParseApk(
+            "Installed:                                Available:\n"
+            + "busybox-1.37.0-r8                         < 1.37.0-r10\n");
+        var busybox = Assert.Single(versionFallback);
+        Assert.Equal("busybox", busybox.Name);
+        Assert.Equal("1.37.0-r8", busybox.CurrentVersion);
+        Assert.Equal("1.37.0-r10", busybox.CandidateVersion);
+
+        var tools = new DevOpsAgent.Application.Agent.ToolCommandBuilder(new DevOpsAgent.Application.Agent.ToolRegistry());
+        var apply = tools.Build(new DevOpsAgent.Domain.Agent.ActionRecord(
+            "apply_updates", "kartio-nginx", "[]", "{\"packages\":[\"nginx\"]}", null, DateTimeOffset.UnixEpoch));
+        Assert.Contains("apk add --upgrade --no-cache -- 'nginx'", apply.Command, StringComparison.Ordinal);
+    }
+
+    private sealed class ScriptedRunner(Func<string, string> output, Func<string, bool>? exitZero = null) : ISshRunner
     {
         public List<(string Command, SshRunOptions Options)> Calls { get; } = [];
 
         public Task<RemoteCommandResult> RunAsync(Guid serverId, string command, SshRunOptions options, CancellationToken cancellationToken)
         {
             Calls.Add((command, options));
-            return Task.FromResult(new RemoteCommandResult(0, output(command), string.Empty, TimeSpan.FromMilliseconds(5)));
+            var rc = exitZero is null || exitZero(command) ? 0 : 1;
+            return Task.FromResult(new RemoteCommandResult(rc, output(command), string.Empty, TimeSpan.FromMilliseconds(5)));
         }
     }
 

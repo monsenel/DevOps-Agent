@@ -154,7 +154,7 @@ public sealed class SystemdCollector : ICollector
 
     private static Task<RemoteCommandResult> QueryUnitAsync(ServerContext context, string unitName, CancellationToken cancellationToken) =>
         context.SshRunner.RunAsync(context.Server.Id,
-            $"systemctl show -p MainPID,ExecStart,FragmentPath {ShellQuote(unitName)}",
+            $"systemctl show -p MainPID,ExecStart,FragmentPath,ActiveEnterTimestamp {ShellQuote(unitName)}",
             new SshRunOptions(CommandTimeout), cancellationToken);
 
     private static string FormatShowError(string unitName, RemoteCommandResult showResult) =>

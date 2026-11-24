@@ -45,6 +45,15 @@ public interface ISnapshotRepository
         Task.FromResult<IReadOnlyDictionary<Guid, DateTimeOffset>>(new Dictionary<Guid, DateTimeOffset>());
 
     /// <summary>
+    /// Latest succeeded or partial collector runs (one per collector name) recorded for a server across usable snapshots.
+    /// Handles merge snapshots where different servers may have been updated in different snapshots.
+    /// </summary>
+    Task<IReadOnlyList<CollectorRun>> ListLatestServerCollectorRunsAsync(
+        Guid serverId,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<CollectorRun>>([]);
+
+    /// <summary>
     /// Latest recorded status of the named collector for each requested server in usable snapshots started at or before
     /// <paramref name="atOrBeforeUtc"/> (used to determine listener eligibility across merge snapshots, T7.R16).
     /// </summary>

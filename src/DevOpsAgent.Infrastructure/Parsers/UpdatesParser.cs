@@ -8,6 +8,14 @@ public static partial class UpdatesParser
     [GeneratedRegex("^([^\\s/]+)(?:/([^\\s]+))?\\s+([^\\s]+)\\s+([^\\s]+)(?:\\s+\\[upgradable from:\\s*([^\\]]+)\\])?", RegexOptions.CultureInvariant)]
     private static partial Regex AptLine();
 
+    // "nginx-1.26.3-r0 x86_64 {nginx} (BSD-2-Clause) [upgradable from: nginx-1.26.2-r0]"
+    [GeneratedRegex("^(?<name>.+?)-(?<ver>[0-9][^\\s]*)\\s+(?<arch>\\S+)\\s+\\{(?<origin>[^}]+)\\}.*\\[upgradable from:\\s*(?<from>[^\\]]+)\\]", RegexOptions.CultureInvariant)]
+    private static partial Regex ApkListLine();
+
+    // "nginx-1.26.2-r0 < 1.26.3-r0"
+    [GeneratedRegex("^(?<name>.+?)-(?<cur>[0-9][^\\s]*)\\s+<\\s+(?<cand>\\S+)", RegexOptions.CultureInvariant)]
+    private static partial Regex ApkVersionLine();
+
     public static IReadOnlyList<UpdatePackageDto> ParseApt(string output)
     {
         var packages = new List<UpdatePackageDto>();
@@ -39,6 +47,44 @@ public static partial class UpdatesParser
                 $@"(?im)(?<![A-Za-z0-9_-]){Regex.Escape(packageName)}(?:[-.]|\s)", RegexOptions.CultureInvariant);
             packages.Add(new(name, string.Empty, fields[1], fields[2], securityMatch));
         }
+        return packages;
+    }
+
+    /// <summary>Parses Alpine <c>apk list -u</c> (preferred) or <c>apk version -l '&lt;'</c> output.</summary>
+    public static IReadOnlyList<UpdatePackageDto> ParseApk(string output)
+    {
+        var packages = new List<UpdatePackageDto>();
+        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (line.StartsWith("Installed:", StringComparison.OrdinalIgnoreCase)
+                || line.StartsWith("WARNING:", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (ApkListLine().Match(line) is { Success: true } listMatch)
+            {
+                var name = listMatch.Groups["name"].Value;
+                var candidate = listMatch.Groups["ver"].Value;
+                var from = listMatch.Groups["from"].Value.Trim();
+                var current = from.StartsWith(name + "-", StringComparison.Ordinal)
+                    ? from[(name.Length + 1)..]
+                    : from;
+                packages.Add(new(name, current, candidate, "apk", false));
+                continue;
+            }
+
+            if (ApkVersionLine().Match(line) is { Success: true } verMatch)
+            {
+                packages.Add(new(
+                    verMatch.Groups["name"].Value,
+                    verMatch.Groups["cur"].Value,
+                    verMatch.Groups["cand"].Value,
+                    "apk",
+                    false));
+            }
+        }
+
         return packages;
     }
 }

@@ -67,6 +67,7 @@ builder.Services.AddScoped<BanTargetGuard>();
 builder.Services.AddScoped<ActionExecutionService>();
 builder.Services.AddSingleton<ToolCommandBuilder>();
 builder.Services.AddScoped<GraphBuilder>();
+builder.Services.AddScoped<VmInspectorService>();
 builder.Services.AddScoped<LlmEdgeSuggestionService>();
 builder.Services.AddScoped<ProviderStatusState>();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);

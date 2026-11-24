@@ -27,7 +27,7 @@ public sealed class UpdatesCollector : ICollector
     public async Task<bool> IsApplicableAsync(ServerContext context, CancellationToken cancellationToken)
     {
         var result = await context.SshRunner.RunAsync(context.Server.Id,
-            "command -v apt-get >/dev/null 2>&1 || command -v dnf >/dev/null 2>&1",
+            "command -v apt-get >/dev/null 2>&1 || command -v dnf >/dev/null 2>&1 || command -v apk >/dev/null 2>&1",
             new SshRunOptions(TimeSpan.FromSeconds(10)), cancellationToken);
         return result.ExitCode == 0;
     }
@@ -49,40 +49,64 @@ public sealed class UpdatesCollector : ICollector
             var policy = names.Length == 0 ? string.Empty : await ReadOnlyAsync(context, PackageSourcesParser.AptPolicyCommand(names), cancellationToken);
             var output = unreachable
                 ? new UpdateCollectionOutput("", "", "", "Repositories unreachable (apt): one or more configured package repositories could not be reached.", null, _cacheOnly,
-                    sources)
+                    sources, PackageManager: PackageManagerKind.Apt)
                 : new UpdateCollectionOutput(result.StandardOutput, "", "",
                     result.ExitCode == 0 ? null : string.IsNullOrWhiteSpace(result.StandardError) ? "apt-get update or apt list failed." : result.StandardError,
-                    refreshedAt, _cacheOnly, sources, policy);
+                    refreshedAt, _cacheOnly, sources, policy, PackageManager: PackageManagerKind.Apt);
             return new CollectorOutput(JsonSerializer.Serialize(output), result.StandardError, result.ExitCode == 0 || unreachable ? 0 : result.ExitCode, result.Duration);
         }
 
-        var dnfResult = await context.SshRunner.RunAsync(context.Server.Id,
-            _cacheOnly ? DnfCacheOnlyCheckCommand : DnfScanCommand(_options.RepositoryTimeout),
-            new SshRunOptions(_options.CommandTimeout), cancellationToken);
-        var dnfUnreachable = dnfResult.StandardOutput.Contains(RepositoriesUnreachableMarker, StringComparison.Ordinal);
-        if (dnfUnreachable)
+        var dnf = await context.SshRunner.RunAsync(context.Server.Id, "command -v dnf >/dev/null 2>&1",
+            new SshRunOptions(TimeSpan.FromSeconds(10)), cancellationToken);
+        if (dnf.ExitCode == 0)
         {
-            return new CollectorOutput(JsonSerializer.Serialize(new UpdateCollectionOutput("", "", "",
-                "Repositories unreachable (dnf): one or more configured package repositories could not be reached.")),
-                dnfResult.StandardError, 0, dnfResult.Duration);
-        }
-        if (dnfResult.ExitCode is not 0 and not 100)
-        {
-            return new CollectorOutput(JsonSerializer.Serialize(new UpdateCollectionOutput("", "", "",
-                string.IsNullOrWhiteSpace(dnfResult.StandardError) ? "dnf check-update failed." : dnfResult.StandardError)),
-                dnfResult.StandardError, dnfResult.ExitCode, dnfResult.Duration);
+            var dnfResult = await context.SshRunner.RunAsync(context.Server.Id,
+                _cacheOnly ? DnfCacheOnlyCheckCommand : DnfScanCommand(_options.RepositoryTimeout),
+                new SshRunOptions(_options.CommandTimeout), cancellationToken);
+            var dnfUnreachable = dnfResult.StandardOutput.Contains(RepositoriesUnreachableMarker, StringComparison.Ordinal);
+            if (dnfUnreachable)
+            {
+                return new CollectorOutput(JsonSerializer.Serialize(new UpdateCollectionOutput("", "", "",
+                    "Repositories unreachable (dnf): one or more configured package repositories could not be reached.",
+                    PackageManager: PackageManagerKind.Dnf)),
+                    dnfResult.StandardError, 0, dnfResult.Duration);
+            }
+            if (dnfResult.ExitCode is not 0 and not 100)
+            {
+                return new CollectorOutput(JsonSerializer.Serialize(new UpdateCollectionOutput("", "", "",
+                    string.IsNullOrWhiteSpace(dnfResult.StandardError) ? "dnf check-update failed." : dnfResult.StandardError,
+                    PackageManager: PackageManagerKind.Dnf)),
+                    dnfResult.StandardError, dnfResult.ExitCode, dnfResult.Duration);
+            }
+
+            var security = await context.SshRunner.RunAsync(context.Server.Id,
+                _cacheOnly ? "dnf -C updateinfo list security" : "dnf updateinfo list security",
+                new SshRunOptions(_options.CommandTimeout), cancellationToken);
+            var error = dnfResult.ExitCode == 0 || dnfResult.ExitCode == 100 ? null
+                : string.IsNullOrWhiteSpace(dnfResult.StandardError) ? "dnf check-update failed." : dnfResult.StandardError;
+            var dnfRefreshedAt = error is null ? await ReadRefreshTimeAsync(context, cancellationToken) : null;
+            var dnfSources = await ReadOnlyAsync(context, PackageSourcesParser.DnfSourcesCommand, cancellationToken);
+            return new CollectorOutput(JsonSerializer.Serialize(new UpdateCollectionOutput("", dnfResult.StandardOutput,
+                security.StandardOutput, error, dnfRefreshedAt, _cacheOnly, dnfSources, PackageManager: PackageManagerKind.Dnf)),
+                dnfResult.StandardError + security.StandardError,
+                error is null ? 0 : dnfResult.ExitCode, dnfResult.Duration + security.Duration);
         }
 
-        var security = await context.SshRunner.RunAsync(context.Server.Id,
-            _cacheOnly ? "dnf -C updateinfo list security" : "dnf updateinfo list security",
-            new SshRunOptions(_options.CommandTimeout), cancellationToken);
-        var error = dnfResult.ExitCode == 0 || dnfResult.ExitCode == 100 ? null
-            : string.IsNullOrWhiteSpace(dnfResult.StandardError) ? "dnf check-update failed." : dnfResult.StandardError;
-        var dnfRefreshedAt = error is null ? await ReadRefreshTimeAsync(context, cancellationToken) : null;
-        var dnfSources = await ReadOnlyAsync(context, PackageSourcesParser.DnfSourcesCommand, cancellationToken);
-        return new CollectorOutput(JsonSerializer.Serialize(new UpdateCollectionOutput("", dnfResult.StandardOutput,
-            security.StandardOutput, error, dnfRefreshedAt, _cacheOnly, dnfSources)), dnfResult.StandardError + security.StandardError,
-            error is null ? 0 : dnfResult.ExitCode, dnfResult.Duration + security.Duration);
+        var apkResult = await context.SshRunner.RunAsync(context.Server.Id,
+            _cacheOnly ? ApkCacheOnlyCommand : ApkScanCommand,
+            new SshRunOptions(_options.CommandTimeout, UseSudo: !_cacheOnly), cancellationToken);
+        var apkUnreachable = apkResult.StandardOutput.Contains(RepositoriesUnreachableMarker, StringComparison.Ordinal);
+        var apkRefreshedAt = apkUnreachable || apkResult.ExitCode != 0 ? null : await ReadRefreshTimeAsync(context, cancellationToken);
+        var apkSources = await ReadOnlyAsync(context, PackageSourcesParser.ApkSourcesCommand, cancellationToken);
+        var apkOutput = apkUnreachable
+            ? new UpdateCollectionOutput("", "", "",
+                "Repositories unreachable (apk): one or more configured Alpine repositories could not be reached.",
+                null, _cacheOnly, apkSources, PackageManager: PackageManagerKind.Apk)
+            : new UpdateCollectionOutput("", "", "",
+                apkResult.ExitCode == 0 ? null : string.IsNullOrWhiteSpace(apkResult.StandardError) ? "apk update or apk list failed." : apkResult.StandardError,
+                apkRefreshedAt, _cacheOnly, apkSources, ApkOutput: apkResult.StandardOutput, PackageManager: PackageManagerKind.Apk);
+        return new CollectorOutput(JsonSerializer.Serialize(apkOutput), apkResult.StandardError,
+            apkResult.ExitCode == 0 || apkUnreachable ? 0 : apkResult.ExitCode, apkResult.Duration);
     }
 
     public CollectorResult Parse(CollectorOutput output)
@@ -90,8 +114,11 @@ public sealed class UpdatesCollector : ICollector
         var data = JsonSerializer.Deserialize<UpdateCollectionOutput>(output.StandardOutput);
         if (data is null) return new CollectorResult(Error: "Update command produced no parseable output.");
         if (data.Error is not null) return new CollectorResult(Error: data.Error);
-        var packages = data.AptOutput.Length > 0 ? UpdatesParser.ParseApt(data.AptOutput)
-            : UpdatesParser.ParseDnf(data.DnfOutput, data.SecurityOutput);
+        var packages = data.PackageManager == PackageManagerKind.Apk || data.ApkOutput.Length > 0
+            ? UpdatesParser.ParseApk(data.ApkOutput)
+            : data.AptOutput.Length > 0
+                ? UpdatesParser.ParseApt(data.AptOutput)
+                : UpdatesParser.ParseDnf(data.DnfOutput, data.SecurityOutput);
         // apt's own suite name ("jammy") is the same for Ubuntu and, say, Docker's repository: the origin label tells them apart.
         var origins = PackageSourcesParser.ParseAptOrigins(data.AptPolicyOutput);
         if (origins.Count > 0)
@@ -101,9 +128,11 @@ public sealed class UpdatesCollector : ICollector
 
     /// <summary>Configured sources of a collected output (T8.6).</summary>
     public static IReadOnlyList<PackageSourceDto> ParseSources(UpdateCollectionOutput output) =>
-        output.SourcesOutput.Contains(PackageSourcesParser.FileMarker, StringComparison.Ordinal)
-            ? PackageSourcesParser.ParseApt(output.SourcesOutput)
-            : PackageSourcesParser.ParseDnf(output.SourcesOutput);
+        output.SourcesOutput.Contains(PackageSourcesParser.ApkMarker, StringComparison.Ordinal)
+            ? PackageSourcesParser.ParseApk(output.SourcesOutput)
+            : output.SourcesOutput.Contains(PackageSourcesParser.FileMarker, StringComparison.Ordinal)
+                ? PackageSourcesParser.ParseApt(output.SourcesOutput)
+                : PackageSourcesParser.ParseDnf(output.SourcesOutput);
 
     // Best effort, read-only, no sudo: a failure only leaves the extra information out.
     private static async Task<string> ReadOnlyAsync(ServerContext context, string command, CancellationToken cancellationToken)
@@ -132,6 +161,13 @@ public sealed class UpdatesCollector : ICollector
 
     private const string AptCacheOnlyCommand = "apt list --upgradable 2>/dev/null";
     private const string DnfCacheOnlyCheckCommand = "dnf -C check-update";
+    private const string ApkCacheOnlyCommand = "apk list -u 2>/dev/null || apk version -l '<'";
+
+    public const string ApkScanCommand =
+        "update_output=$(apk update 2>&1); update_status=$?; "
+        + "if [ \"$update_status\" -ne 0 ] || printf '%s\\n' \"$update_output\" | grep -Eiq '(ERROR:|temporary error|network is unreachable|timed out|unable to select packages|fetch .* failed)'; then "
+        + "if printf '%s\\n' \"$update_output\" | grep -Eiq '(Permission denied|locked)'; then printf '%s\\n' \"$update_output\" >&2; exit \"$update_status\"; fi; "
+        + $"printf '%s\\n' '{RepositoriesUnreachableMarker}'; exit 0; fi; apk list -u 2>/dev/null || apk version -l '<'";
 
     public static string AptScanCommand(int repositoryTimeoutSeconds) =>
         $"update_output=$(apt-get -o Acquire::Retries=0 -o Acquire::http::Timeout={repositoryTimeoutSeconds} -o Acquire::https::Timeout={repositoryTimeoutSeconds} update 2>&1); update_status=$?; " +

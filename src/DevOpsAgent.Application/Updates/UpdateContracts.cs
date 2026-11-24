@@ -3,7 +3,8 @@ namespace DevOpsAgent.Application.Updates;
 public enum PackageManagerKind
 {
     Apt,
-    Dnf
+    Dnf,
+    Apk
 }
 
 public sealed record UpdatePackageDto(string Name, string CurrentVersion, string CandidateVersion, string Repository, bool IsSecurity);
@@ -36,6 +37,7 @@ public sealed record ServerUpdateStatus(Guid ServerId, string ServerName, string
     }
 }
 public sealed record UpdateCollectionOutput(string AptOutput, string DnfOutput, string SecurityOutput, string? Error,
-    DateTimeOffset? PackageListsRefreshedAtUtc = null, bool CacheOnly = false, string SourcesOutput = "", string AptPolicyOutput = "");
+    DateTimeOffset? PackageListsRefreshedAtUtc = null, bool CacheOnly = false, string SourcesOutput = "", string AptPolicyOutput = "",
+    string ApkOutput = "", PackageManagerKind? PackageManager = null);
 public sealed record CollectedUpdateResult(PackageManagerKind PackageManager, string ResultJson,
     DateTimeOffset? PackageListsRefreshedAtUtc = null, bool CacheOnly = false, string SourcesJson = "[]");

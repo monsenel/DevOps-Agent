@@ -14,6 +14,9 @@ public static class PackageListProbe
         + "[ -n \"$t\" ] || t=$(stat -c %Y /var/cache/apt/pkgcache.bin 2>/dev/null); fi; "
         + "if [ -z \"$t\" ] && [ -d /var/cache/dnf ]; then "
         + "t=$(find /var/cache/dnf -maxdepth 2 -name '*.solv' ! -name '@System*' -printf '%T@\\n' 2>/dev/null | sort -n | tail -n 1); fi; "
+        + "if [ -z \"$t\" ] && [ -d /var/cache/apk ]; then "
+        + "f=$(ls -1t /var/cache/apk/APKINDEX.*.tar.gz 2>/dev/null | head -n 1); "
+        + "[ -n \"$f\" ] && t=$(stat -c %Y \"$f\" 2>/dev/null || date -r \"$f\" +%s 2>/dev/null); fi; "
         + "printf '%s\\n' \"$t\"";
 
     /// <summary>Parses the probe output (epoch seconds, optionally fractional) into UTC; null when unknown or implausible.</summary>

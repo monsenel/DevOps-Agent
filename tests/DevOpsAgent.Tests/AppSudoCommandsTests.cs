@@ -150,6 +150,7 @@ public sealed class AppSudoCommandsTests
         var docker = new DockerCollector();
         await docker.IsApplicableAsync(new ServerContext(server, new CapturingRunner(failUnprivilegedDocker: true, sink: runner)), CancellationToken.None);
         await docker.CollectAsync(context, CancellationToken.None);
+        await new ProcessCollector().CollectAsync(new ServerContext(server, new CapturingRunner(failUnprivilegedDocker: true, sink: runner)), CancellationToken.None);
         await new UpdatesCollector(new UpdateCollectorOptions()).CollectAsync(context, CancellationToken.None);
         await new AuthLogScanner(runner, new MemorySettings(), Options.Create(new SecurityMonitoringOptions()), TimeProvider.System)
             .ScanAsync(server, CancellationToken.None);

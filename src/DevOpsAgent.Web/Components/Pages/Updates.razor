@@ -129,6 +129,11 @@
                         </label>
                         <button class="ui-button secondary compact" type="button" @onclick="() => SelectSecurityOnly(selectable)">Security only in @group.Key</button>
                     }
+                    else if (group.Any(item => item.ReadOnly))
+                    {
+                        <span class="ui-badge neutral">Read-only mode</span>
+                        <a class="ui-button secondary compact" href="/settings">Enable updates in Settings</a>
+                    }
                 </div>
                 @foreach (var server in group.OrderBy(item => item.ServerName))
                 {
@@ -152,8 +157,8 @@
                         </header>
                         @if (server.Sources is { Count: > 0 } sources)
                         {
-                            @* T8.6: where this server's packages come from (read-only: source files, dnf -C repolist). *@
-                            <details class="updates-sources" open>
+                            @* T8.6: where this server's packages come from (read-only: source files, dnf -C repolist, apk repositories). *@
+                            <details class="updates-sources">
                                 <summary>Package sources (@sources.Count)</summary>
                                 <div class="updates-package-table-wrap">
                                     <table class="updates-package-table updates-sources-table">
@@ -211,13 +216,13 @@
                             <div class="updates-actions">
                                 @if (server.ReadOnly)
                                 {
-                                    <button class="ui-button primary" type="button" disabled aria-describedby="updates-readonly-@server.ServerId.ToString("N")">Review selected updates</button>
+                                    <button class="ui-button primary" type="button" disabled aria-describedby="updates-readonly-@server.ServerId.ToString("N")">Review &amp; update selected</button>
                                     <span class="muted updates-readonly-reason" id="updates-readonly-@server.ServerId.ToString("N")">@ServerUpdateStatus.ReadOnlyReason</span>
                                 }
                                 else
                                 {
                                     <button class="ui-button primary" type="button" disabled="@(_busy || !_selected.Any(item => item.ServerId == server.ServerId))"
-                                            @onclick="() => ProposeAsync(server)">Review selected updates</button>
+                                            @onclick="() => ProposeAsync(server)">Review &amp; update selected</button>
                                     <button class="ui-button secondary" type="button" disabled="@(!server.Packages.Any(item => item.IsSecurity))"
                                             @onclick="() => SelectSecurityOnly([server])">Select security only</button>
                                 }

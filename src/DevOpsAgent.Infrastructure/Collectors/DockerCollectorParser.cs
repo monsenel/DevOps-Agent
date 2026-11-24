@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using DevOpsAgent.Application.Discovery;
 
@@ -32,6 +33,7 @@ public static class DockerCollectorParser
         var ports = ParsePorts(GetObject(networkSettings, "Ports"));
         var environmentNames = ParseEnvironmentNames(config);
         var containerName = GetString(item, "Name") ?? string.Empty;
+        var health = GetObject(state, "Health");
 
         return new DockerContainerInfo(
             GetString(item, "Id") ?? string.Empty,
@@ -43,7 +45,23 @@ public static class DockerCollectorParser
             GetInt32(state, "Pid") ?? 0,
             networkEndpoints,
             ports,
-            environmentNames);
+            environmentNames,
+            ParseTimestamp(GetString(state, "StartedAt")),
+            ParseTimestamp(GetString(state, "FinishedAt")),
+            GetString(health, "Status"));
+    }
+
+    private static DateTimeOffset? ParseTimestamp(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw) || raw.StartsWith("0001-01-01", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed)
+            ? parsed
+            : null;
     }
 
     private static IReadOnlyList<DockerNetworkEndpoint> ParseContainerNetworks(JsonElement networks)

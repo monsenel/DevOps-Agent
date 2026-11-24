@@ -195,7 +195,37 @@ public static class SystemdCollectorParser
             mainPid,
             properties.GetValueOrDefault("ExecStart"),
             properties.GetValueOrDefault("FragmentPath"),
-            owningPids.Order().ToArray());
+            owningPids.Order().ToArray(),
+            ParseActiveEnterTimestamp(properties.GetValueOrDefault("ActiveEnterTimestamp")));
+    }
+
+    internal static DateTimeOffset? ParseActiveEnterTimestamp(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw) || string.Equals(raw.Trim(), "n/a", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var value = raw.Trim();
+        var isUtcSuffix = value.EndsWith(" UTC", StringComparison.OrdinalIgnoreCase);
+        if (isUtcSuffix)
+        {
+            value = value[..^4].TrimEnd();
+        }
+
+        var styles = DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal;
+        if (DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, styles, out var direct))
+        {
+            return direct;
+        }
+
+        var firstSpace = value.IndexOf(' ');
+        if (firstSpace > 0 && DateTimeOffset.TryParse(value[(firstSpace + 1)..], CultureInfo.InvariantCulture, styles, out var withoutWeekday))
+        {
+            return withoutWeekday;
+        }
+
+        return null;
     }
 
     public static SystemdDiscoveryResult Parse(
@@ -209,7 +239,8 @@ public static class SystemdCollectorParser
             .GroupBy(pair => pair.Value, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => (IReadOnlyCollection<int>)group.Select(pair => pair.Key).ToArray(), StringComparer.Ordinal);
 
-        var orderedNames = ParseRunningServiceNames(runningUnitsOutput)
+        var runningServices = ParseRunningServiceNames(runningUnitsOutput);
+        var orderedNames = runningServices
             .Concat(unitShowOutputs.Keys)
             .Distinct(StringComparer.Ordinal);
 
@@ -219,6 +250,6 @@ public static class SystemdCollectorParser
             .Where(unit => unit is not null)
             .Select(unit => unit!)
             .ToArray();
-        return new SystemdDiscoveryResult(units);
+        return new SystemdDiscoveryResult(units, runningServices);
     }
 }

@@ -1,6 +1,7 @@
 let graph;
 let dotNet;
 let themeListener;
+let resizeObserver;
 // "servers", "service" or "network": the Servers view builds its own cards and layout, the other two use cytoscape-elk.
 let viewMode = "service";
 // Lookup tables of the Servers view (real id -> card/row/aggregated edge); undefined in the other views.
@@ -319,6 +320,10 @@ export function init(container, dotNetReference) {
     });
     themeListener = () => applyStyles();
     document.addEventListener("dva-theme-changed", themeListener);
+    if (typeof ResizeObserver !== "undefined") {
+        resizeObserver = new ResizeObserver(() => { graph?.resize(); });
+        resizeObserver.observe(container);
+    }
     applyStyles();
 }
 
@@ -833,8 +838,12 @@ function resolveElement(id) {
 }
 
 export function setTheme() { applyStyles(); }
+export function resize() { graph?.resize(); }
 // The Servers view has port labels on the edges that reach beyond the cards, so it keeps a wider margin.
-export function fit() { graph?.fit(undefined, viewMode === "servers" ? 40 : 28); }
+export function fit() {
+    graph?.resize();
+    graph?.fit(undefined, viewMode === "servers" ? 40 : 28);
+}
 
 // Zooms by `factor` around a point of the visible map (pixels from its top left), kept inside the zoom limits.
 function zoomAt(factor, renderedPosition) {
@@ -949,6 +958,8 @@ function searchServers(value) {
 
 export function dispose() {
     document.removeEventListener("dva-theme-changed", themeListener);
+    resizeObserver?.disconnect();
+    resizeObserver = undefined;
     graph?.destroy();
     graph = undefined;
     dotNet = undefined;

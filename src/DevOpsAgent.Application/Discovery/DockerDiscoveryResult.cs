@@ -14,7 +14,10 @@ public sealed record DockerContainerInfo(
     int MainPid,
     IReadOnlyList<DockerNetworkEndpoint> Networks,
     IReadOnlyList<DockerPublishedPort> PublishedPorts,
-    IReadOnlyList<string> EnvironmentVariableNames);
+    IReadOnlyList<string> EnvironmentVariableNames,
+    DateTimeOffset? StartedAtUtc = null,
+    DateTimeOffset? FinishedAtUtc = null,
+    string? HealthStatus = null);
 
 public sealed record DockerNetworkEndpoint(
     string NetworkName,

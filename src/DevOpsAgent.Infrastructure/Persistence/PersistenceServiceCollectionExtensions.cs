@@ -61,6 +61,8 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<ICollector, TlsCollector>();
         services.AddSingleton<ICollector, ReverseProxyCollector>();
         services.AddSingleton<ICollector, AppConfigCollector>();
+        services.AddSingleton<ICollector, ProcessCollector>();
+        services.AddSingleton<ILiveVmProbe, LiveVmProbe>();
         services.AddSingleton<IServerKeyStore, ServerKeyStore>();
         services.AddSingleton<IHostReachability, DevOpsAgent.Application.Servers.HostReachabilityTracker>();
         services.AddSingleton<ManagedKnownHosts>();

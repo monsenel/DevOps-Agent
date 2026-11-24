@@ -12,6 +12,7 @@ public static partial class PackageSourcesParser
 {
     public const string FileMarker = "__DVA_SOURCE_FILE__ ";
     public const string PolicyMarker = "__DVA_APT_POLICY_PACKAGES__";
+    public const string ApkMarker = "__DVA_APK_REPOS__";
 
     /// <summary>Prints every apt source file with a marker line before it; reads only world-readable files, no sudo.</summary>
     public const string AptSourcesCommand =
@@ -20,6 +21,9 @@ public static partial class PackageSourcesParser
 
     /// <summary>From the metadata cache only (<c>-C</c>): never downloads or writes anything.</summary>
     public const string DnfSourcesCommand = "dnf -C repolist -v 2>/dev/null; true";
+
+    /// <summary>Reads Alpine's <c>/etc/apk/repositories</c>; read-only, no sudo.</summary>
+    public const string ApkSourcesCommand = "printf '" + ApkMarker + "\\n'; cat /etc/apk/repositories 2>/dev/null; true";
 
     /// <summary>The global policy (origins and labels of every source) and the version tables of the given packages.</summary>
     public static string AptPolicyCommand(IEnumerable<string> packageNames) =>
@@ -207,6 +211,32 @@ public static partial class PackageSourcesParser
         }
 
         return labels;
+    }
+
+    /// <summary>Parses Alpine <c>/etc/apk/repositories</c> URLs.</summary>
+    public static IReadOnlyList<PackageSourceDto> ParseApk(string output)
+    {
+        var sources = new List<PackageSourceDto>();
+        foreach (var raw in output.Replace("\r", string.Empty, StringComparison.Ordinal).Split('\n'))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0 || line == ApkMarker || line.StartsWith('#')) continue;
+            var tag = string.Empty;
+            var uri = line;
+            if (line.StartsWith('@'))
+            {
+                var parts = line.Split((char[]?)null, 2, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length < 2) continue;
+                tag = parts[0];
+                uri = parts[1];
+            }
+
+            var suite = uri.TrimEnd('/').Split('/').LastOrDefault() ?? uri;
+            if (!string.IsNullOrEmpty(tag)) suite = $"{tag} ({suite})";
+            sources.Add(new PackageSourceDto("apk", uri, suite, [], null, "/etc/apk/repositories", Enabled: true));
+        }
+
+        return sources;
     }
 
     private static string HostOf(string uri) => Uri.TryCreate(uri, UriKind.Absolute, out var parsed) ? parsed.Host : uri;
