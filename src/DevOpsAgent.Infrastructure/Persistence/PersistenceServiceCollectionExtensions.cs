@@ -57,6 +57,10 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<ICollector, SystemdCollector>();
         services.AddSingleton<ICollector, NginxCollector>();
         services.AddSingleton<ICollector, ConnectionCollector>();
+        services.AddSingleton<ICollector, FirewallCollector>();
+        services.AddSingleton<ICollector, TlsCollector>();
+        services.AddSingleton<ICollector, ReverseProxyCollector>();
+        services.AddSingleton<ICollector, AppConfigCollector>();
         services.AddSingleton<IServerKeyStore, ServerKeyStore>();
         services.AddSingleton<IHostReachability, DevOpsAgent.Application.Servers.HostReachabilityTracker>();
         services.AddSingleton<ManagedKnownHosts>();

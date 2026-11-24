@@ -1,24 +1,183 @@
 using System.Globalization;
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using DevOpsAgent.Domain.Graph;
 
 namespace DevOpsAgent.Application.Discovery;
 
+public sealed record StaleContainerSeed(
+    Guid ServerId,
+    string ContainerNodeKey,
+    string TargetNodeKey,
+    string Name,
+    IReadOnlyList<string> Addresses,
+    IReadOnlyList<DockerPublishedPort> PublishedPorts);
+
+public sealed record StaleListenerSeed(
+    Guid ServerId,
+    string NodeKey,
+    string Address,
+    int Port,
+    string Protocol,
+    string? ProcessName);
+
+public sealed record StaleSeedData(
+    IReadOnlySet<Guid> StaleServerIds,
+    IReadOnlyDictionary<Guid, IReadOnlyList<string>> HostAddresses,
+    IReadOnlyDictionary<Guid, IReadOnlyList<StaleContainerSeed>> Containers,
+    IReadOnlyDictionary<Guid, IReadOnlyList<StaleListenerSeed>> Listeners,
+    IReadOnlyDictionary<string, GraphNode> NodesByKey);
+
 /// <summary>
-/// NFR-3: a server that was unreachable during discovery keeps its nodes, listeners and edges from the last usable snapshot,
-/// flagged stale with the time they were last seen, instead of vanishing from the graph (and showing up as drift).
+/// NFR-3 / T7.R16: a server that was unreachable during discovery keeps its nodes, listeners and stale-to-stale edges
+/// from the last usable snapshot, flagged stale with the time its host collector last ran, instead of vanishing from the graph.
 /// </summary>
 public static class StaleCarryForward
 {
     public const string StaleAttribute = "Stale";
     public const string LastSeenAttribute = "LastSeenUtc";
+    public const string StaleEvidenceCollector = "stale";
+    public const string StaleEdgeBadge = "stale · carried forward";
+    public const string StaleEdgeEvidenceDescription = "Carried forward from the last reachable discovery; endpoint server was unreachable.";
+
+    /// <summary>
+    /// Extracts last-known host addresses, container IPs/published ports, and listeners for unreachable servers from the
+    /// previous snapshot so reachable servers resolve fresh edges against them instead of creating Unknown nodes (T7.R16a).
+    /// </summary>
+    public static StaleSeedData ExtractStaleSeed(GraphBuildResult previous, IReadOnlySet<Guid> staleServerIds)
+    {
+        var hostAddresses = new Dictionary<Guid, IReadOnlyList<string>>();
+        var containers = new Dictionary<Guid, IReadOnlyList<StaleContainerSeed>>();
+        var listeners = new Dictionary<Guid, IReadOnlyList<StaleListenerSeed>>();
+        var nodesByKey = new Dictionary<string, GraphNode>(StringComparer.Ordinal);
+        if (staleServerIds.Count == 0)
+        {
+            return new StaleSeedData(staleServerIds, hostAddresses, containers, listeners, nodesByKey);
+        }
+
+        var staleNodes = previous.Nodes.Where(node => node.ServerId is Guid id && staleServerIds.Contains(id)).ToArray();
+        var staleNodeById = staleNodes.ToDictionary(node => node.Id);
+        foreach (var node in staleNodes)
+        {
+            nodesByKey.TryAdd(node.Key, node);
+        }
+
+        var composeChildByContainerId = staleNodes
+            .Where(node => node.Kind == GraphNodeKind.Service && node.ParentNodeId is not null && node.Key.Contains(":compose:", StringComparison.Ordinal))
+            .GroupBy(node => node.ParentNodeId!.Value)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        foreach (var serverGroup in staleNodes.GroupBy(node => node.ServerId!.Value))
+        {
+            var serverId = serverGroup.Key;
+            var ipSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var containerList = new List<StaleContainerSeed>();
+
+            foreach (var node in serverGroup)
+            {
+                using var document = ParseObject(node.AttributesJson);
+                if (document is null) continue;
+                var attrs = document.RootElement;
+
+                if (node.Kind == GraphNodeKind.Host)
+                {
+                    if (TryReadString(attrs, "Host") is { } hostVal && IPAddress.TryParse(hostVal, out _))
+                    {
+                        ipSet.Add(hostVal);
+                    }
+
+                    if (TryGetProp(attrs, "Addresses", out var addressesEl) && addressesEl.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var item in addressesEl.EnumerateArray())
+                        {
+                            if (item.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(item.GetString()))
+                            {
+                                ipSet.Add(item.GetString()!);
+                            }
+                        }
+                    }
+                }
+                else if (node.Kind == GraphNodeKind.Container)
+                {
+                    var containerIps = new List<string>();
+                    if (TryGetProp(attrs, "Networks", out var networksEl) && networksEl.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var net in networksEl.EnumerateArray())
+                        {
+                            if (TryReadString(net, "IPv4Address") is { Length: > 0 } ipv4) containerIps.Add(StripPrefix(ipv4));
+                            if (TryReadString(net, "IPv6Address") is { Length: > 0 } ipv6) containerIps.Add(StripPrefix(ipv6));
+                        }
+                    }
+
+                    var publishedPorts = new List<DockerPublishedPort>();
+                    if (TryGetProp(attrs, "PublishedPorts", out var portsEl) && portsEl.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var portEl in portsEl.EnumerateArray())
+                        {
+                            var containerPort = TryReadInt(portEl, "ContainerPort");
+                            var hostPort = TryReadInt(portEl, "HostPort");
+                            var protocol = TryReadString(portEl, "Protocol") ?? "tcp";
+                            var hostIp = TryReadString(portEl, "HostIp");
+                            if (containerPort is int cp && hostPort is int hp)
+                            {
+                                publishedPorts.Add(new DockerPublishedPort(cp, protocol, hostIp, hp));
+                            }
+                        }
+                    }
+
+                    var targetKey = composeChildByContainerId.TryGetValue(node.Id, out var composeNode)
+                        ? composeNode.Key
+                        : node.Key;
+                    containerList.Add(new StaleContainerSeed(
+                        serverId,
+                        node.Key,
+                        targetKey,
+                        node.Name,
+                        containerIps.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+                        publishedPorts));
+                }
+            }
+
+            if (ipSet.Count > 0) hostAddresses[serverId] = ipSet.ToArray();
+            if (containerList.Count > 0) containers[serverId] = containerList;
+        }
+
+        foreach (var group in previous.Listeners
+                     .Where(listener => staleNodeById.ContainsKey(listener.NodeId))
+                     .GroupBy(listener => staleNodeById[listener.NodeId].ServerId!.Value))
+        {
+            listeners[group.Key] = group.Select(listener =>
+                new StaleListenerSeed(
+                    group.Key,
+                    staleNodeById[listener.NodeId].Key,
+                    listener.Address,
+                    listener.Port,
+                    listener.Protocol,
+                    listener.ProcessName)).ToArray();
+        }
+
+        return new StaleSeedData(staleServerIds, hostAddresses, containers, listeners, nodesByKey);
+    }
 
     /// <param name="fresh">Graph built from this run's reachable servers (unreachable servers contribute only a bare host).</param>
     /// <param name="previous">Entities of the last usable snapshot, or null when there is none.</param>
-    /// <param name="previousSeenAtUtc">When the previous snapshot was taken: the "last seen" time of nodes that were live in it.</param>
+    /// <param name="previousSeenAtUtc">Fallback "last seen" time when per-server host collector timestamps are unavailable.</param>
     public static GraphBuildResult Apply(Guid snapshotId, GraphBuildResult fresh, GraphBuildResult? previous,
-        IReadOnlySet<Guid> staleServerIds, DateTimeOffset? previousSeenAtUtc)
+        IReadOnlySet<Guid> staleServerIds, DateTimeOffset? previousSeenAtUtc) =>
+        Apply(snapshotId, fresh, previous, staleServerIds, lastSeenByServer: null, fallbackSeenAtUtc: previousSeenAtUtc);
+
+    /// <summary>
+    /// Applies stale carry-forward using per-server host collector timestamps (T7.R16b) and carrying only stale-to-stale
+    /// (non-fresh) edges marked stale with evidence (T7.R16a, T7.R16d).
+    /// </summary>
+    public static GraphBuildResult Apply(
+        Guid snapshotId,
+        GraphBuildResult fresh,
+        GraphBuildResult? previous,
+        IReadOnlySet<Guid> staleServerIds,
+        IReadOnlyDictionary<Guid, DateTimeOffset>? lastSeenByServer,
+        DateTimeOffset? fallbackSeenAtUtc = null)
     {
         if (staleServerIds.Count == 0) return fresh;
 
@@ -40,7 +199,7 @@ public static class StaleCarryForward
         var evidence = fresh.Evidence.Select(item => RemapEvidence(item, freshRemap, edgeIds, snapshotId)).ToList();
         if (previous is null || carriedServers.Count == 0) return new GraphBuildResult(nodes, edges, listeners, evidence);
 
-        // Replace this run's partial view of each stale server with its last known state.
+        // Replace this run's partial view (bare host or seeded stale stubs) of each stale server with its last known state.
         var replaced = nodes.Where(node => node.ServerId is Guid id && carriedServers.Contains(id)).ToList();
         var replacedKeys = replaced.ToDictionary(node => node.Id, node => node.Key);
         nodes.RemoveAll(node => replacedKeys.ContainsKey(node.Id));
@@ -48,6 +207,12 @@ public static class StaleCarryForward
         var nodeByKey = nodes.ToDictionary(node => node.Key, StringComparer.Ordinal);
         var previousById = previous.Nodes.ToDictionary(node => node.Id);
         var carried = new Dictionary<Guid, GraphNode>();
+
+        DateTimeOffset? ResolveLastSeen(Guid serverId) =>
+            lastSeenByServer is not null && lastSeenByServer.TryGetValue(serverId, out var seen)
+                ? seen
+                : fallbackSeenAtUtc;
+
         foreach (var old in previous.Nodes.Where(node => node.ServerId is Guid id && carriedServers.Contains(id))
                      .OrderBy(node => Depth(node, previousById)))
         {
@@ -63,13 +228,13 @@ public static class StaleCarryForward
                 : previousById.TryGetValue(oldParent, out var oldParentNode) && nodeByKey.TryGetValue(oldParentNode.Key, out var freshParent) ? freshParent.Id
                 : (Guid?)null
                 : null;
-            var clone = Clone(old, snapshotId, parentId, MarkStale(old.AttributesJson, previousSeenAtUtc));
+            var clone = Clone(old, snapshotId, parentId, MarkStale(old.AttributesJson, ResolveLastSeen(old.ServerId!.Value)));
             nodes.Add(clone);
             nodeByKey[clone.Key] = clone;
             carried[old.Id] = clone;
         }
 
-        // Fresh edges that pointed at the stale servers' bare nodes now point at the carried nodes with the same key.
+        // Fresh edges that pointed at the stale servers' bare or seeded nodes now point at the carried nodes with the same key.
         var replacedToCarried = replacedKeys.Where(pair => nodeByKey.ContainsKey(pair.Value))
             .ToDictionary(pair => pair.Key, pair => nodeByKey[pair.Value].Id);
         edgeIds.Clear();
@@ -81,20 +246,48 @@ public static class StaleCarryForward
         var liveEdgeIds = edges.Select(edge => edge.Id).ToHashSet();
         evidence.RemoveAll(item => item.EdgeId is Guid edgeId && !liveEdgeIds.Contains(edgeId));
 
-        GraphNode? Resolve(Guid previousNodeId) => carried.TryGetValue(previousNodeId, out var node) ? node
-            : previousById.TryGetValue(previousNodeId, out var old) && nodeByKey.TryGetValue(old.Key, out var current) ? current
-            : null;
+        bool IsFreshServerNode(GraphNode node) =>
+            node.ServerId is Guid id && !staleServerIds.Contains(id);
 
-        var carriedEdges = new Dictionary<Guid, GraphEdge>();
-        foreach (var old in previous.Edges.Where(edge => carried.ContainsKey(edge.SourceNodeId) || carried.ContainsKey(edge.TargetNodeId)))
+        GraphNode? ResolveOrCarryUnowned(Guid previousNodeId)
         {
-            if (Resolve(old.SourceNodeId) is not { } source || Resolve(old.TargetNodeId) is not { } target) continue;
+            if (carried.TryGetValue(previousNodeId, out var node)) return node;
+            if (!previousById.TryGetValue(previousNodeId, out var old)) return null;
+            if (nodeByKey.TryGetValue(old.Key, out var current)) return current;
+            if (old.ServerId is null && old.Kind is GraphNodeKind.Subnet or GraphNodeKind.Domain)
+            {
+                // Keep shared unowned Subnet/Domain nodes referenced solely by carried stale nodes.
+                var clone = Clone(old, snapshotId, null, old.AttributesJson);
+                nodes.Add(clone);
+                nodeByKey[clone.Key] = clone;
+                return clone;
+            }
+
+            return null;
+        }
+
+        // T7.R16a: carry ONLY stale-to-stale edges (including stale ↔ unowned Subnet/Domain).
+        // Fresh-to-stale (and stale-to-fresh) edges are NOT carried: reachable servers must report their live edges against
+        // the seeded IP index so removed proxy_pass directives are immediately visible instead of hidden until recovery.
+        var carriedEdges = new Dictionary<Guid, GraphEdge>();
+        var newlyCarriedEdgeIds = new HashSet<Guid>();
+        foreach (var old in previous.Edges)
+        {
+            if (!carried.ContainsKey(old.SourceNodeId) && !carried.ContainsKey(old.TargetNodeId)) continue;
+            if (!previousById.TryGetValue(old.SourceNodeId, out var oldSource)
+                || !previousById.TryGetValue(old.TargetNodeId, out var oldTarget)) continue;
+            if (IsFreshServerNode(oldSource) || IsFreshServerNode(oldTarget)) continue;
+
+            if (ResolveOrCarryUnowned(old.SourceNodeId) is not { } source
+                || ResolveOrCarryUnowned(old.TargetNodeId) is not { } target) continue;
+
             var existing = edges.FirstOrDefault(edge => edge.SourceNodeId == source.Id && edge.TargetNodeId == target.Id
                 && edge.Kind == old.Kind && edge.Port == old.Port && edge.Protocol == old.Protocol);
             if (existing is null)
             {
                 existing = new GraphEdge(snapshotId, source.Id, target.Id, old.Kind, old.Port, old.Protocol);
                 edges.Add(existing);
+                newlyCarriedEdgeIds.Add(existing.Id);
             }
 
             carriedEdges[old.Id] = existing;
@@ -115,6 +308,15 @@ public static class StaleCarryForward
             if (nodeId is null && edgeId is null) continue;
             if (old.NodeId is not null && nodeId is null || old.EdgeId is not null && edgeId is null) continue;
             evidence.Add(new GraphEvidence(snapshotId, nodeId, edgeId, old.Collector, old.Description));
+        }
+
+        // T7.R16d: mark every carried edge stale via evidence so graph DTOs style it dashed and detail panels explain it in text.
+        foreach (var carriedEdgeId in newlyCarriedEdgeIds)
+        {
+            if (!evidence.Any(item => item.EdgeId == carriedEdgeId && item.Collector == StaleEvidenceCollector))
+            {
+                evidence.Add(new GraphEvidence(snapshotId, null, carriedEdgeId, StaleEvidenceCollector, StaleEdgeEvidenceDescription));
+            }
         }
 
         return new GraphBuildResult(nodes, edges, listeners, evidence);
@@ -191,5 +393,50 @@ public static class StaleCarryForward
         for (var parent = node.ParentNodeId; parent is Guid id && seen.Add(id) && byId.TryGetValue(id, out var next); parent = next.ParentNodeId)
             depth++;
         return depth;
+    }
+
+    private static JsonDocument? ParseObject(string json)
+    {
+        try
+        {
+            var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind == JsonValueKind.Object) return document;
+            document.Dispose();
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static bool TryGetProp(JsonElement element, string name, out JsonElement value)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in element.EnumerateObject())
+            {
+                if (string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = prop.Value;
+                    return true;
+                }
+            }
+        }
+
+        value = default;
+        return false;
+    }
+
+    private static string? TryReadString(JsonElement element, string name) =>
+        TryGetProp(element, name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    private static int? TryReadInt(JsonElement element, string name) =>
+        TryGetProp(element, name, out var value) && value.TryGetInt32(out var parsed) ? parsed : null;
+
+    private static string StripPrefix(string address)
+    {
+        var slash = address.IndexOf('/');
+        return slash < 0 ? address : address[..slash];
     }
 }

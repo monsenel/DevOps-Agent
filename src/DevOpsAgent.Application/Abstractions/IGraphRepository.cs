@@ -9,6 +9,5 @@ public interface IGraphRepository
     Task<GraphSnapshotDto?> GetAsync(Guid snapshotId, GraphView view, CancellationToken cancellationToken);
 
     /// <summary>The stored entities of a snapshot's graph, for carrying unreachable servers forward (NFR-3).</summary>
-    Task<GraphBuildResult?> GetEntitiesAsync(Guid snapshotId, CancellationToken cancellationToken) =>
-        Task.FromResult<GraphBuildResult?>(null);
+    Task<GraphBuildResult?> GetEntitiesAsync(Guid snapshotId, CancellationToken cancellationToken);
 }

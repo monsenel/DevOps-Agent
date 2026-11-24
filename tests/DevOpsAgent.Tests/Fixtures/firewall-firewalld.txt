@@ -1,0 +1,11 @@
+__DVA_FW__:firewalld
+running
+public (active)
+  target: default
+  icmp-block-inversion: no
+  interfaces: eth0
+  sources: 10.88.20.0/24
+  services: ssh http https
+  ports: 8080/tcp 51820/udp
+  protocols:
+  forward: yes

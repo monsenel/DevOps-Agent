@@ -10,7 +10,9 @@ public sealed class EdgeResolver
         NginxEndpoint endpoint,
         ServerDiscoveryData source,
         IReadOnlyCollection<ServerDiscoveryData> servers,
-        IpIndex ipIndex)
+        IpIndex ipIndex,
+        StaleSeedData? staleSeed = null,
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? extraNameResolutions = null)
     {
         if (endpoint.IsUnresolved)
         {
@@ -30,7 +32,8 @@ public sealed class EdgeResolver
 
         var candidateAddresses = new List<string>();
         var directAddress = endpoint.Address.Trim('[', ']');
-        if (IPAddress.TryParse(directAddress, out _))
+        var isLiteralIp = IPAddress.TryParse(directAddress, out _);
+        if (isLiteralIp)
         {
             candidateAddresses.Add(directAddress);
         }
@@ -48,13 +51,24 @@ public sealed class EdgeResolver
                 var resolution = nameResolutions.FirstOrDefault(item => NameEquals(item.Key, endpoint.Address));
                 if (resolution.Value is not null) candidateAddresses.AddRange(resolution.Value);
             }
+
+            if (extraNameResolutions is not null)
+            {
+                var resolution = extraNameResolutions.FirstOrDefault(item => NameEquals(item.Key, endpoint.Address));
+                if (resolution.Value is not null) candidateAddresses.AddRange(resolution.Value);
+            }
         }
 
         foreach (var address in candidateAddresses.Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            var resolution = ResolveIndexedAddress(address, endpoint.Port, endpoint.Protocol, servers, ipIndex);
+            var resolution = ResolveIndexedAddress(address, endpoint.Port, endpoint.Protocol, servers, ipIndex, staleSeed);
             if (resolution is not null)
             {
+                if (isLiteralIp)
+                {
+                    return resolution;
+                }
+
                 var nameSource = source.Host?.HostsEntries.Any(entry =>
                     entry.Hostnames.Any(name => NameEquals(name, endpoint.Address))) == true
                     ? "/etc/hosts"
@@ -63,7 +77,7 @@ public sealed class EdgeResolver
             }
         }
 
-        return Unknown("no inventory host, container, or listener matched the nginx target.");
+        return Unknown("no inventory host, container, or listener matched the target.");
 
         EdgeResolution Unknown(string reason)
         {
@@ -79,7 +93,8 @@ public sealed class EdgeResolver
         int? port,
         string protocol,
         IReadOnlyCollection<ServerDiscoveryData> servers,
-        IpIndex ipIndex)
+        IpIndex ipIndex,
+        StaleSeedData? staleSeed)
     {
         var ownerKeys = ipIndex.Find(address);
         if (ownerKeys.Count == 0) return null;
@@ -102,6 +117,16 @@ public sealed class EdgeResolver
                     return new EdgeResolution(GetContainerNodeKey(containerData, container),
                         container.ComposeService ?? container.Name, false, "global IP index → container endpoint.");
                 }
+
+                if (staleSeed is not null && staleSeed.Containers.TryGetValue(containerServerId, out var staleContainers))
+                {
+                    var staleContainer = staleContainers.FirstOrDefault(item => item.Name == parts[1]);
+                    if (staleContainer is not null)
+                    {
+                        return new EdgeResolution(staleContainer.TargetNodeKey, staleContainer.Name, false,
+                            "global IP index → stale container endpoint.");
+                    }
+                }
             }
         }
 
@@ -115,25 +140,38 @@ public sealed class EdgeResolver
                 .SelectMany(data => data.Docker?.Containers
                     .Where(container => container.PublishedPorts.Any(published => published.HostPort == targetPort
                         && ProtocolMatches(protocol, published.Protocol)))
-                    .Select(container => (Data: data, Container: container)) ?? [])
+                    .Select(container => (NodeKey: GetContainerNodeKey(data, container), Name: container.ComposeService ?? container.Name)) ?? [])
+                .Concat(staleSeed is null
+                    ? []
+                    : hosts.Where(staleSeed.StaleServerIds.Contains)
+                        .SelectMany(hostId => staleSeed.Containers.GetValueOrDefault(hostId) ?? [])
+                        .Where(container => container.PublishedPorts.Any(published => published.HostPort == targetPort
+                            && ProtocolMatches(protocol, published.Protocol)))
+                        .Select(container => (NodeKey: container.TargetNodeKey, container.Name)))
+                .DistinctBy(item => item.NodeKey)
                 .ToArray();
             if (publishedMatches.Length == 1)
             {
                 var match = publishedMatches[0];
-                return new EdgeResolution(GetContainerNodeKey(match.Data, match.Container),
-                    match.Container.ComposeService ?? match.Container.Name, false,
+                return new EdgeResolution(match.NodeKey, match.Name, false,
                     "global IP index → published host port → container/service.");
             }
 
             var listeners = candidateServerData.SelectMany(data => data.Listeners?.Listeners
                     .Where(listener => listener.Port == targetPort && ProtocolMatches(protocol, listener.Protocol))
-                    .Select(listener => (Data: data, Listener: listener)) ?? [])
+                    .Select(listener => (NodeKey: GetListenerNodeKey(data, listener), Name: listener.ProcessName ?? data.Server.Name)) ?? [])
+                .Concat(staleSeed is null
+                    ? []
+                    : hosts.Where(staleSeed.StaleServerIds.Contains)
+                        .SelectMany(hostId => staleSeed.Listeners.GetValueOrDefault(hostId) ?? [])
+                        .Where(listener => listener.Port == targetPort && ProtocolMatches(protocol, listener.Protocol))
+                        .Select(listener => (listener.NodeKey, Name: listener.ProcessName ?? listener.NodeKey)))
+                .DistinctBy(item => item.NodeKey)
                 .ToArray();
             if (listeners.Length == 1)
             {
                 var match = listeners[0];
-                return new EdgeResolution(GetListenerNodeKey(match.Data, match.Listener),
-                    match.Listener.ProcessName ?? match.Data.Server.Name, false,
+                return new EdgeResolution(match.NodeKey, match.Name, false,
                     "global IP index → matching listener.");
             }
         }
@@ -175,6 +213,12 @@ public sealed class EdgeResolver
     private static bool IsProxyContainer(DockerContainerInfo container) =>
         container.Image.Contains("nginx", StringComparison.OrdinalIgnoreCase)
         || container.Name.Contains("nginx", StringComparison.OrdinalIgnoreCase)
+        || container.Image.Contains("haproxy", StringComparison.OrdinalIgnoreCase)
+        || container.Name.Contains("haproxy", StringComparison.OrdinalIgnoreCase)
+        || container.Image.Contains("traefik", StringComparison.OrdinalIgnoreCase)
+        || container.Name.Contains("traefik", StringComparison.OrdinalIgnoreCase)
+        || container.Image.Contains("caddy", StringComparison.OrdinalIgnoreCase)
+        || container.Name.Contains("caddy", StringComparison.OrdinalIgnoreCase)
         || container.ComposeService?.Contains("proxy", StringComparison.OrdinalIgnoreCase) == true;
 
     private static string GetContainerNodeKey(ServerDiscoveryData data, DockerContainerInfo container) =>
@@ -188,7 +232,8 @@ public sealed class EdgeResolver
         {
             var container = data.Docker?.Containers.FirstOrDefault(item => item.MainPid == listener.ProcessId.Value);
             if (container is not null) return GetContainerNodeKey(data, container);
-            var unit = data.Systemd?.Units.FirstOrDefault(item => item.MainPid == listener.ProcessId.Value);
+            var unit = data.Systemd?.Units.FirstOrDefault(item => item.MainPid == listener.ProcessId.Value
+                || item.ListenerPids.Contains(listener.ProcessId.Value));
             if (unit is not null) return $"service:{data.Server.Id:N}:systemd:{unit.Name}";
         }
 

@@ -9,7 +9,11 @@ public sealed record ServerDiscoveryData(
     DockerDiscoveryResult? Docker,
     SystemdDiscoveryResult? Systemd,
     NginxDiscoveryResult? Nginx = null,
-    ConnectionDiscoveryResult? Connections = null);
+    ConnectionDiscoveryResult? Connections = null,
+    FirewallDiscoveryResult? Firewall = null,
+    TlsDiscoveryResult? Tls = null,
+    ReverseProxyDiscoveryResult? ReverseProxy = null,
+    AppConfigDiscoveryResult? AppConfig = null);
 
 public sealed record GraphBuildResult(
     IReadOnlyList<DevOpsAgent.Domain.Graph.GraphNode> Nodes,

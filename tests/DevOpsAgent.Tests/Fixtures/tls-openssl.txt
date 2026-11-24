@@ -1,0 +1,16 @@
+__DVA_CERT__:/etc/letsencrypt/live/api.example.test/fullchain.pem
+subject=CN = api.example.test
+issuer=C = US, O = Let's Encrypt, CN = R10
+notBefore=Oct  1 00:00:00 2026 GMT
+notAfter=Dec 30 23:59:59 2026 GMT
+serial=03A1B2C3D4E5F6070809
+X509v3 Subject Alternative Name:
+    DNS:api.example.test, DNS:www.example.test, IP Address:192.0.2.10
+__DVA_CERT__:/etc/nginx/ssl/internal-selfsigned.crt
+subject=CN = internal.local
+issuer=CN = internal.local
+notBefore=Jan  1 00:00:00 2026 GMT
+notAfter=Jan  1 00:00:00 2027 GMT
+serial=11223344
+X509v3 Subject Alternative Name:
+    DNS:internal.local

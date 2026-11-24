@@ -221,6 +221,7 @@ public sealed class HealthCheckServiceTests
         public Task SaveAsync(Guid snapshotId, GraphBuildResult value, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task MergeAsync(Guid snapshotId, Guid previousSnapshotId, GraphBuildResult value, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task<GraphSnapshotDto?> GetAsync(Guid snapshotId, GraphView view, CancellationToken cancellationToken) => Task.FromResult(graph);
+        public Task<GraphBuildResult?> GetEntitiesAsync(Guid snapshotId, CancellationToken cancellationToken) => Task.FromResult<GraphBuildResult?>(null);
     }
 
     private sealed class MutableTimeProvider(DateTimeOffset now) : TimeProvider

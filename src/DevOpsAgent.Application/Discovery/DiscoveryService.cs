@@ -124,6 +124,29 @@ public sealed class DiscoveryService(
                         server.Id, server.Name, Message: serverSucceeded ? "Completed" : "Completed with errors"));
                 });
 
+            Snapshot? previousSnapshot = null;
+            GraphBuildResult? previousGraph = null;
+            StaleSeedData? staleSeed = null;
+            IReadOnlyDictionary<Guid, DateTimeOffset>? lastSeenByServer = null;
+            var staleServerIds = unreachableServers.Keys.ToHashSet();
+            if (staleServerIds.Count > 0)
+            {
+                // NFR-3 / T7.R16: load the previous usable snapshot before building the graph so reachable servers can
+                // resolve edges against all last-known addresses of stale servers, and look up each stale server's real
+                // host-collector timestamp instead of the previous snapshot's start time.
+                previousSnapshot = mergeSnapshotId is Guid mergeBase
+                    ? (await snapshotRepository.ListAsync(cancellationToken)).FirstOrDefault(item => item.Id == mergeBase)
+                    : await snapshotRepository.GetLatestAsync(cancellationToken);
+                previousGraph = previousSnapshot is null ? null
+                    : await graphRepository.GetEntitiesAsync(previousSnapshot.Id, cancellationToken);
+                if (previousGraph is not null)
+                {
+                    staleSeed = StaleCarryForward.ExtractStaleSeed(previousGraph, staleServerIds);
+                }
+
+                lastSeenByServer = await snapshotRepository.GetLastHostCollectionTimesAsync(staleServerIds, cancellationToken);
+            }
+
             var graph = graphBuilder.Build(snapshot.Id, serverContexts.Select(context => new ServerDiscoveryData(
                 context.Server,
                 GetPreviousResult<HostDiscoveryResult>(context, "host"),
@@ -131,17 +154,16 @@ public sealed class DiscoveryService(
                 GetPreviousResult<DockerDiscoveryResult>(context, "docker"),
                 GetPreviousResult<SystemdDiscoveryResult>(context, "systemd"),
                 GetPreviousResult<NginxDiscoveryResult>(context, "nginx"),
-                GetPreviousResult<ConnectionDiscoveryResult>(context, "connections"))).ToArray());
-            if (!unreachableServers.IsEmpty)
+                GetPreviousResult<ConnectionDiscoveryResult>(context, "connections"),
+                GetPreviousResult<FirewallDiscoveryResult>(context, "firewall"),
+                GetPreviousResult<TlsDiscoveryResult>(context, "tls"),
+                GetPreviousResult<ReverseProxyDiscoveryResult>(context, "reverse-proxy"),
+                GetPreviousResult<AppConfigDiscoveryResult>(context, "app-config"))).ToArray(),
+                staleSeed);
+            if (staleServerIds.Count > 0)
             {
-                // NFR-3: an unreachable server keeps its last known nodes, flagged stale, instead of disappearing.
-                var previousSnapshot = mergeSnapshotId is Guid mergeBase
-                    ? (await snapshotRepository.ListAsync(cancellationToken)).FirstOrDefault(item => item.Id == mergeBase)
-                    : await snapshotRepository.GetLatestAsync(cancellationToken);
-                var previousGraph = previousSnapshot is null ? null
-                    : await graphRepository.GetEntitiesAsync(previousSnapshot.Id, cancellationToken);
-                graph = StaleCarryForward.Apply(snapshot.Id, graph, previousGraph, unreachableServers.Keys.ToHashSet(),
-                    previousSnapshot?.StartedAtUtc);
+                graph = StaleCarryForward.Apply(snapshot.Id, graph, previousGraph, staleServerIds,
+                    lastSeenByServer, previousSnapshot?.StartedAtUtc);
             }
 
             if (mergeSnapshotId is Guid previousId)

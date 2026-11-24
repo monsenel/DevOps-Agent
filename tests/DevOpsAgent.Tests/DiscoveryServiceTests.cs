@@ -105,6 +105,9 @@ public sealed class DiscoveryServiceTests
 
         public Task<GraphSnapshotDto?> GetAsync(Guid snapshotId, GraphView view, CancellationToken cancellationToken) =>
             inner.GetAsync(snapshotId, view, cancellationToken);
+
+        public Task<GraphBuildResult?> GetEntitiesAsync(Guid snapshotId, CancellationToken cancellationToken) =>
+            inner.GetEntitiesAsync(snapshotId, cancellationToken);
     }
 
     [Fact]
@@ -172,6 +175,9 @@ public sealed class DiscoveryServiceTests
             throw new InvalidOperationException("simulated graph persistence failure");
 
         public Task<GraphSnapshotDto?> GetAsync(Guid snapshotId, GraphView view, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<GraphBuildResult?> GetEntitiesAsync(Guid snapshotId, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
     }
 

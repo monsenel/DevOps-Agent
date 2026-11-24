@@ -1,0 +1,11 @@
+__DVA_PROXY__:caddy:/etc/caddy/Caddyfile
+api.example.test, v2.example.test {
+    reverse_proxy /v1/* 10.88.20.20:5000
+    reverse_proxy http://10.88.20.21:5000 {
+        header_up X-Forwarded-Proto https
+    }
+}
+
+http://internal.example.test:8080 {
+    reverse_proxy 10.88.20.20:3000
+}
