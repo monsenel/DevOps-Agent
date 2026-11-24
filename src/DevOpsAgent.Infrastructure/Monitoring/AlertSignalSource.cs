@@ -190,8 +190,9 @@ public sealed class AlertSignalSource(
 
             if (fileIntegrity is not null)
             {
-                var fimAlert = await fileIntegrity.GetAlertConditionForServerAsync(server.Id, server.Name, cancellationToken);
+                var (fimAlert, holdFim) = await fileIntegrity.EvaluateAlertForServerAsync(server.Id, server.Name, cancellationToken);
                 if (fimAlert is not null) result.Add(fimAlert);
+                else if (holdFim) heldScopes.Add(new HeldRuleScope(server.Id, FileIntegrityService.AlertRule));
             }
         }
 

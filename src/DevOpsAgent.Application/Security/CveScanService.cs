@@ -47,7 +47,7 @@ public sealed class CveScanService(
                 new SshRunOptions(TimeSpan.FromMinutes(3), UseSudo: false),
                 cancellationToken);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (OperationCanceledException exception) when (exception is SshShutdownException || cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception exception)
         {
             var failed = new CveScanReport(server.Id, server.Name, now, "unknown", false, [],

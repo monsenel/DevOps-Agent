@@ -120,12 +120,17 @@ public sealed class FileIntegrityService(
                 new SshRunOptions(TimeSpan.FromSeconds(30), UseSudo: false),
                 cancellationToken);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (OperationCanceledException exception) when (exception is SshShutdownException || cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception exception)
         {
             var failed = new FileIntegrityReport(server.Id, server.Name, now, false, [], [],
                 $"File integrity check could not run: {exception.Message}");
-            await settings.SetAsync(ReportKey(serverId), JsonSerializer.Serialize(failed, JsonOptions), cancellationToken);
+            // T7.R20: preserve an existing valid drift report so a transient SSH failure cannot erase or falsely resolve an open FIM alert.
+            var existing = await GetLatestReportAsync(serverId, cancellationToken);
+            if (existing is null || existing.Changes.Count == 0)
+            {
+                await settings.SetAsync(ReportKey(serverId), JsonSerializer.Serialize(failed, JsonOptions), cancellationToken);
+            }
             return failed;
         }
 
@@ -163,15 +168,19 @@ public sealed class FileIntegrityService(
         return conditions;
     }
 
-    public async Task<AlertCondition?> GetAlertConditionForServerAsync(Guid serverId, string serverName, CancellationToken cancellationToken)
+    public async Task<(AlertCondition? Condition, bool HoldExisting)> EvaluateAlertForServerAsync(
+        Guid serverId,
+        string serverName,
+        CancellationToken cancellationToken)
     {
         var report = await GetLatestReportAsync(serverId, cancellationToken);
-        if (report is null || !string.IsNullOrWhiteSpace(report.Error) || report.Changes.Count == 0)
-            return null;
+        if (report is null) return (null, false);
+        if (!string.IsNullOrWhiteSpace(report.Error)) return (null, true);
+        if (report.Changes.Count == 0) return (null, false);
 
         var target = string.Join(", ", report.Changes.Select(c => c.Path));
         var summary = string.Join("; ", report.Changes.Select(c => $"{c.Path} ({c.ChangeType})"));
-        return new AlertCondition(
+        var condition = new AlertCondition(
             Key: $"{AlertRule}:{serverId:N}",
             Rule: AlertRule,
             Severity: AlertSeverity.High,
@@ -179,6 +188,13 @@ public sealed class FileIntegrityService(
             Target: target,
             Title: $"{serverName}: {report.Changes.Count} critical file(s) changed",
             Details: $"File integrity check at {report.CheckedAtUtc:yyyy-MM-dd HH:mm} UTC detected drift: {summary}. Verify whether changes were authorized, then reset the baseline if expected.");
+        return (condition, false);
+    }
+
+    public async Task<AlertCondition?> GetAlertConditionForServerAsync(Guid serverId, string serverName, CancellationToken cancellationToken)
+    {
+        var (condition, _) = await EvaluateAlertForServerAsync(serverId, serverName, cancellationToken);
+        return condition;
     }
 
     public static IReadOnlyList<FileHashEntry> ParseHashOutput(string stdout)

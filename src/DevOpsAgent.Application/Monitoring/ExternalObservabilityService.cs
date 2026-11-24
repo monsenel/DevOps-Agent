@@ -113,10 +113,10 @@ public sealed class ExternalObservabilityService(
         var requestUri = $"{stored.PrometheusBaseUrl}/api/v1/query?query={Uri.EscapeDataString(promQl)}";
         using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        AttachBearer(request, stored.ProtectedPrometheusToken);
 
         try
         {
+            AttachBearer(request, stored.ProtectedPrometheusToken);
             using var response = await httpClient.SendAsync(request, cancellationToken);
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
             if (!response.IsSuccessStatusCode)
@@ -149,10 +149,10 @@ public sealed class ExternalObservabilityService(
         var boundedLimit = Math.Clamp(limit <= 0 ? DefaultLogLimit : limit, 1, MaxLogLimit);
         var requestUri = $"{stored.VictoriaLogsBaseUrl}/select/logsql/query?query={Uri.EscapeDataString(logsQl)}&limit={boundedLimit.ToString(CultureInfo.InvariantCulture)}";
         using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
-        AttachBearer(request, stored.ProtectedVictoriaLogsToken);
 
         try
         {
+            AttachBearer(request, stored.ProtectedVictoriaLogsToken);
             using var response = await httpClient.SendAsync(request, cancellationToken);
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
             if (!response.IsSuccessStatusCode)

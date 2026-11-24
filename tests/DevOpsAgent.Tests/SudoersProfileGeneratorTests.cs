@@ -42,6 +42,8 @@ public sealed class SudoersProfileGeneratorTests
         Assert.Contains("Cmnd_Alias DVA_CONFIG_EDIT", result.SudoersContent, StringComparison.Ordinal);
         Assert.Contains("/usr/local/sbin/dva-sudo-helper apply-config *", result.SudoersContent, StringComparison.Ordinal);
         Assert.Contains("Path traversal rejected", result.HelperScriptTemplate, StringComparison.Ordinal);
+        Assert.Contains("[ -L \"$target\" ]", result.HelperScriptTemplate, StringComparison.Ordinal);
+        Assert.Contains("Symlink rejected", result.HelperScriptTemplate, StringComparison.Ordinal);
         Assert.Contains(result.Commands, cmd => !cmd.IsReadOnly);
     }
 

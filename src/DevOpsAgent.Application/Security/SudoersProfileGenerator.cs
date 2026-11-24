@@ -191,11 +191,13 @@ public static partial class SudoersProfileGenerator
           apply-config)
             staged="${3:-}"
             case "$staged" in /tmp/dva-edit-*/content) ;; *) echo "Invalid staged path" >&2; exit 2 ;; esac
+            if [ -L "$target" ] || [ -L "$staged" ]; then echo "Symlink rejected" >&2; exit 2; fi
             cp -p -- "$staged" "$target"
             ;;
           rollback-config)
             backup="${3:-}"
             case "$backup" in *.dva-bak-*) ;; *) echo "Invalid backup path" >&2; exit 2 ;; esac
+            if [ -L "$target" ] || [ -L "$backup" ]; then echo "Symlink rejected" >&2; exit 2; fi
             cp -p -- "$backup" "$target"
             ;;
           *)

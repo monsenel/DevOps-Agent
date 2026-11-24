@@ -125,6 +125,29 @@ public sealed class ExternalObservabilityTests
         Assert.Contains("Prometheus vector", toolResult.Summary, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task CorruptProtectedTokenReturnsErrorResultInsteadOfThrowing()
+    {
+        await using var db = await CreateDatabaseAsync();
+        var obs = new ExternalObservabilityService(
+            new AppSettingRepository(db.Context),
+            new FailingUnprotectProtector(),
+            new HttpClient(new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK))),
+            NullLogger<ExternalObservabilityService>.Instance);
+
+        await obs.SaveSettingsAsync(
+            new ExternalObservabilitySettingsInput(true, "http://prometheus:9090", "tok", true, "http://victorialogs:9428", "tok2"),
+            CancellationToken.None);
+
+        var prom = await obs.QueryPrometheusAsync("up", CancellationToken.None);
+        Assert.False(prom.Succeeded);
+        Assert.NotNull(prom.Error);
+
+        var vlogs = await obs.QueryVictoriaLogsAsync("error", 10, CancellationToken.None);
+        Assert.False(vlogs.Succeeded);
+        Assert.NotNull(vlogs.Error);
+    }
+
     private static ExternalObservabilityService CreateService(AppDbContext context, HttpMessageHandler handler) =>
         new(new AppSettingRepository(context), new PlainProtector(), new HttpClient(handler), NullLogger<ExternalObservabilityService>.Instance);
 
@@ -148,6 +171,12 @@ public sealed class ExternalObservabilityTests
     {
         public Task<RemoteCommandResult> RunAsync(Guid serverId, string command, SshRunOptions options, CancellationToken cancellationToken) =>
             Task.FromResult(new RemoteCommandResult(0, string.Empty, string.Empty, TimeSpan.Zero));
+    }
+
+    private sealed class FailingUnprotectProtector : ISecretProtector
+    {
+        public string Protect(string plaintext) => "enc:" + plaintext;
+        public string Unprotect(string ciphertext) => throw new System.Security.Cryptography.CryptographicException("Key ring rotated");
     }
 
     private sealed class PlainProtector : ISecretProtector

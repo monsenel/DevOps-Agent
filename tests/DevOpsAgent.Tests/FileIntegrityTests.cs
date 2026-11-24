@@ -86,6 +86,60 @@ public sealed class FileIntegrityTests
     }
 
     [Fact]
+    public async Task TransientSshErrorPreservesDriftAlertAndErrorReportEmitsHeldScopeAndShutdownRethrows()
+    {
+        await using var db = await CreateDatabaseAsync();
+        var server = new Server("srv-edge", "10.0.1.5", 22, "dva", "id_ed25519", "prod");
+        db.Context.Servers.Add(server);
+        await db.Context.SaveChangesAsync();
+
+        var baselineOut = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "fim-baseline.txt"));
+        var driftedOut = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "fim-drifted.txt"));
+        var runner = new SwitchableSshRunner(baselineOut);
+        var settings = new AppSettingRepository(db.Context);
+        var fim = new FileIntegrityService(new ServerRepository(db.Context), runner, settings, new FixedTime(T0), NullLogger<FileIntegrityService>.Instance);
+
+        await fim.CheckAsync(server.Id, CancellationToken.None);
+        runner.Output = driftedOut;
+        var drifted = await fim.CheckAsync(server.Id, CancellationToken.None);
+        Assert.True(drifted.HasDrift);
+
+        // Transient SSH error must NOT clear the open drift report or resolve the High alert.
+        runner.ThrowException = new InvalidOperationException("connection reset");
+        var failed = await fim.CheckAsync(server.Id, CancellationToken.None);
+        Assert.NotNull(failed.Error);
+        var stillOpen = await fim.GetAlertConditionForServerAsync(server.Id, server.Name, CancellationToken.None);
+        Assert.NotNull(stillOpen);
+        Assert.Equal(AlertSeverity.High, stillOpen.Severity);
+
+        // Shutdown must rethrow without overwriting persisted state.
+        runner.ThrowException = new SshShutdownException();
+        await Assert.ThrowsAsync<SshShutdownException>(() => fim.CheckAsync(server.Id, CancellationToken.None));
+
+        // When a server's only stored report is an error report, AlertSignalSource holds existing FIM alerts (T7.R20).
+        var server2 = new Server("srv-hold", "10.0.1.6", 22, "dva", "id_ed25519", "prod");
+        db.Context.Servers.Add(server2);
+        await db.Context.SaveChangesAsync();
+        runner.ThrowException = new InvalidOperationException("temporary ssh error");
+        await fim.CheckAsync(server2.Id, CancellationToken.None);
+
+        var signalSource = new AlertSignalSource(
+            new ServerRepository(db.Context),
+            new MetricRepository(db.Context),
+            new HealthCheckRepository(db.Context),
+            new SnapshotRepository(db.Context),
+            new SwitchableSshRunner("__DVA_DOCKER__\n__DVA_SYSTEMD_FAILED__\n"),
+            new EmptyAuthLogSource(),
+            new DriftService(new SnapshotRepository(db.Context), new GraphRepository(db.Context)),
+            new ContainerRestartMonitor(settings, new FixedTime(T0), NullLogger<ContainerRestartMonitor>.Instance),
+            new FixedTime(T0),
+            fileIntegrity: fim);
+
+        var evaluated = await signalSource.EvaluateSignalsAsync(CancellationToken.None);
+        Assert.Contains(evaluated.HeldScopes, s => s.ServerId == server2.Id && s.Rule == FileIntegrityService.AlertRule);
+    }
+
+    [Fact]
     public async Task CheckFileIntegrityToolDispatchesReadOnlyWithoutApproval()
     {
         await using var db = await CreateDatabaseAsync();
@@ -131,8 +185,12 @@ public sealed class FileIntegrityTests
     private sealed class SwitchableSshRunner(string output) : ISshRunner
     {
         public string Output { get; set; } = output;
-        public Task<RemoteCommandResult> RunAsync(Guid serverId, string command, SshRunOptions options, CancellationToken cancellationToken) =>
-            Task.FromResult(new RemoteCommandResult(0, Output, string.Empty, TimeSpan.FromMilliseconds(10)));
+        public Exception? ThrowException { get; set; }
+        public Task<RemoteCommandResult> RunAsync(Guid serverId, string command, SshRunOptions options, CancellationToken cancellationToken)
+        {
+            if (ThrowException is not null) throw ThrowException;
+            return Task.FromResult(new RemoteCommandResult(0, Output, string.Empty, TimeSpan.FromMilliseconds(10)));
+        }
     }
 
     private sealed class EmptyAuthLogSource : IAuthLogScanSource

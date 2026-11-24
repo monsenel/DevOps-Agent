@@ -3610,7 +3610,7 @@ p {
 
 .rolling-wave-list {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
     gap: 14px;
     margin: 0;
     padding: 0;
@@ -3685,7 +3685,7 @@ p {
 
 .runbook-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
     gap: var(--dva-gap);
 }
 

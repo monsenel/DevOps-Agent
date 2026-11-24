@@ -117,6 +117,22 @@ public sealed class CveScanTests
         Assert.Equal(Now, stored.ScannedAtUtc);
     }
 
+    [Fact]
+    public async Task CveScanServiceRethrowsSshShutdownExceptionWithoutPersistingFailure()
+    {
+        await using var db = await CreateDatabaseAsync();
+        var server = new Server("srv-shut", "10.0.1.11", 22, "dva", "id_ed25519", "prod");
+        db.Context.Servers.Add(server);
+        await db.Context.SaveChangesAsync();
+
+        var settings = new AppSettingRepository(db.Context);
+        var cveService = new CveScanService(new ServerRepository(db.Context), new ThrowingSshRunner(new SshShutdownException()),
+            settings, new FixedTime(Now), NullLogger<CveScanService>.Instance);
+
+        await Assert.ThrowsAsync<SshShutdownException>(() => cveService.RunAsync(server.Id, CancellationToken.None));
+        Assert.Null(await cveService.GetLatestAsync(server.Id, CancellationToken.None));
+    }
+
     private static async Task<SqliteTestDatabase> CreateDatabaseAsync()
     {
         var connection = new SqliteConnection("Data Source=:memory:");
@@ -135,6 +151,12 @@ public sealed class CveScanTests
             LastUseSudo = options.UseSudo;
             return Task.FromResult(new RemoteCommandResult(0, stdout, string.Empty, TimeSpan.FromMilliseconds(20)));
         }
+    }
+
+    private sealed class ThrowingSshRunner(Exception exception) : ISshRunner
+    {
+        public Task<RemoteCommandResult> RunAsync(Guid serverId, string command, SshRunOptions options, CancellationToken cancellationToken) =>
+            Task.FromException<RemoteCommandResult>(exception);
     }
 
     private sealed class FixedTime(DateTimeOffset now) : TimeProvider
