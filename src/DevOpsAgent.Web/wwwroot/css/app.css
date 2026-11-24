@@ -1325,7 +1325,7 @@ p {
 .overview-trace-pill code,
 .overview-topology-edges code,
 .overview-selected-edge code {
-    font-family: var(--dva-font-mono);
+    font-family: "JetBrains Mono", monospace;
     font-size: 12px;
 }
 
@@ -3545,7 +3545,7 @@ p {
 .skeleton-line {
     height: 16px;
     border-radius: 8px;
-    background: var(--dva-surface-muted);
+    background: var(--dva-inset);
     animation: dva-skeleton-pulse 1.4s ease-in-out infinite;
 }
 
@@ -3568,12 +3568,12 @@ p {
 }
 
 .chat-mode-select {
-    min-height: 44px;
+    min-height: var(--dva-control-h);
     padding: 0 12px;
-    border-radius: 12px;
-    border: 1px solid var(--dva-border);
-    background: var(--dva-surface);
-    color: var(--dva-text);
+    border-radius: var(--dva-radius-input);
+    border: 1px solid var(--dva-line);
+    background: var(--dva-card);
+    color: var(--dva-ink);
     font: inherit;
     font-size: 13px;
     font-weight: 500;
@@ -3706,7 +3706,8 @@ p {
 
 .runbooks-controls .field,
 .runbooks-controls .select-field {
-    min-width: 200px;
+    flex: 1 1 200px;
+    min-width: 0;
 }
 
 .runbook-grid {
@@ -3755,6 +3756,7 @@ p {
     display: flex;
     align-items: flex-start;
     gap: 10px;
+    min-height: var(--dva-control-h);
     cursor: pointer;
 }
 

@@ -214,6 +214,10 @@
 </div>
 
 @code {
+    [SupplyParameterFromQuery(Name = "prompt")]
+    public string? InitialPrompt { get; set; }
+
+    private string? _appliedInitialPrompt;
     private readonly List<ChatConversationSummary> _conversations = [];
     private readonly List<ChatMessageView> _messages = [];
     private Guid? _selectedConversationId;
@@ -321,6 +325,16 @@
     }
 
     private string SelectedTitle => _conversations.SingleOrDefault(item => item.Id == _selectedConversationId)?.Title ?? "New conversation";
+
+    protected override void OnParametersSet()
+    {
+        if (!string.IsNullOrWhiteSpace(InitialPrompt)
+            && !string.Equals(_appliedInitialPrompt, InitialPrompt, StringComparison.Ordinal))
+        {
+            _appliedInitialPrompt = InitialPrompt;
+            _draft = InitialPrompt.Trim();
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
