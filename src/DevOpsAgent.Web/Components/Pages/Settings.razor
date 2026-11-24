@@ -1,6 +1,7 @@
 @page "/settings"
 @page "/settings/llm"
 @inject ProviderService Providers
+@inject LlmRoutingService LlmRouting
 @inject ProviderStatusState ProviderStatus
 @inject DiscoveryScheduleService DiscoverySchedule
 @inject DevOpsAgent.Application.Updates.UpdateScheduleService UpdateSchedule
@@ -327,18 +328,68 @@
             </section>
 
             <section class="ui-card task-routing-card" aria-labelledby="task-routing-heading">
-                <header class="ui-card-header"><h2 id="task-routing-heading">Task routing</h2><span class="ui-badge neutral">v2</span></header>
-                <p class="muted">Choose different providers for chat and specialist tasks.</p>
-                <div class="disabled-feature-row"><span>Chat and tool calls</span><span>Unavailable</span></div>
-                <div class="disabled-feature-row"><span>Log triage</span><span>Unavailable</span></div>
-                <div class="disabled-feature-row"><span>Heavy analysis</span><span>Unavailable</span></div>
+                <header class="ui-card-header"><h2 id="task-routing-heading">Task routing</h2></header>
+                <p class="muted">Choose optional providers for chat, quick summaries, and security audits. Leave unset to use the default provider.</p>
+                @if (!string.IsNullOrWhiteSpace(_routingMessage))
+                {
+                    <div class="settings-message success" role="status">@_routingMessage</div>
+                }
+                @if (!string.IsNullOrWhiteSpace(_routingError))
+                {
+                    <div class="settings-message error" role="alert">@_routingError</div>
+                }
+                <div class="select-field">
+                    <label for="route-chat">Chat and tool calls</label>
+                    <select id="route-chat" @bind="_routeChatProviderId" disabled="@(_editor.Providers.Count == 0 || _savingRouting)">
+                        <option value="">Use default provider</option>
+                        @foreach (var provider in _editor.Providers)
+                        {
+                            <option value="@provider.Id">@provider.Name (@provider.Model)</option>
+                        }
+                    </select>
+                </div>
+                <div class="select-field">
+                    <label for="route-quick">Quick / Summary</label>
+                    <select id="route-quick" @bind="_routeQuickProviderId" disabled="@(_editor.Providers.Count == 0 || _savingRouting)">
+                        <option value="">Use default provider</option>
+                        @foreach (var provider in _editor.Providers)
+                        {
+                            <option value="@provider.Id">@provider.Name (@provider.Model)</option>
+                        }
+                    </select>
+                </div>
+                <div class="select-field">
+                    <label for="route-security">Security / Audit</label>
+                    <select id="route-security" @bind="_routeSecurityProviderId" disabled="@(_editor.Providers.Count == 0 || _savingRouting)">
+                        <option value="">Use default provider</option>
+                        @foreach (var provider in _editor.Providers)
+                        {
+                            <option value="@provider.Id">@provider.Name (@provider.Model)</option>
+                        }
+                    </select>
+                </div>
+                <button class="ui-button primary" type="button" disabled="@(_savingRouting || _editor.Providers.Count == 0)" @onclick="SaveRoutingAsync">
+                    @(_savingRouting ? "Saving…" : "Save routing")
+                </button>
             </section>
 
             <section class="ui-card cloud-options-card" aria-labelledby="cloud-options-heading">
-                <header class="ui-card-header"><h2 id="cloud-options-heading">Cloud providers</h2></header>
-                <SwitchRow Title="Redact secrets before sending" Helper="Not applied to local or private-network endpoints" @bind-Value="_editor.Form.RedactSecretsBeforeSending" />
-                <SwitchRow Title="Keep raw logs local" Helper="Available in v2" Value="false" Disabled="true" />
-                <SwitchRow Title="Fallback on failure" Helper="Available in v2" Value="false" Disabled="true" />
+                <header class="ui-card-header"><h2 id="cloud-options-heading">Cloud providers &amp; fallback</h2></header>
+                <SwitchRow Title="Redact secrets before sending" Helper="Not applied to local or private-network endpoints (saved with provider)" @bind-Value="_editor.Form.RedactSecretsBeforeSending" />
+                <SwitchRow Title="Fallback on failure" Helper="Try another provider automatically when the primary endpoint fails or is unreachable" @bind-Value="_fallbackEnabled" />
+                <div class="select-field">
+                    <label for="fallback-provider">Fallback provider</label>
+                    <select id="fallback-provider" @bind="_fallbackProviderId" disabled="@(!_fallbackEnabled || _editor.Providers.Count == 0 || _savingRouting)">
+                        <option value="">Auto (next available provider)</option>
+                        @foreach (var provider in _editor.Providers)
+                        {
+                            <option value="@provider.Id">@provider.Name (@provider.Model)</option>
+                        }
+                    </select>
+                </div>
+                <button class="ui-button secondary" type="button" disabled="@(_savingRouting || _editor.Providers.Count == 0)" @onclick="SaveRoutingAsync">
+                    @(_savingRouting ? "Saving…" : "Save fallback")
+                </button>
             </section>
 
             <section class="ui-card tool-limit-card" aria-labelledby="tool-limit-heading">
@@ -413,6 +464,14 @@
     private bool _savingToolLimit;
     private string? _toolLimitMessage;
     private string? _toolLimitError;
+    private string _routeChatProviderId = string.Empty;
+    private string _routeQuickProviderId = string.Empty;
+    private string _routeSecurityProviderId = string.Empty;
+    private bool _fallbackEnabled;
+    private string _fallbackProviderId = string.Empty;
+    private bool _savingRouting;
+    private string? _routingMessage;
+    private string? _routingError;
 
     private string ApiKeyPlaceholder => _editor.Form.Type switch
     {
@@ -444,6 +503,45 @@
     {
         _toolLimit = await ToolLimits.GetAsync(CancellationToken.None);
         await LoadProvidersAsync();
+        await LoadRoutingAsync();
+    }
+
+    private async Task LoadRoutingAsync()
+    {
+        var saved = await LlmRouting.GetAsync(CancellationToken.None);
+        var existingIds = _editor.Providers.Select(provider => provider.Id).ToHashSet();
+        _routeChatProviderId = saved.ChatProviderId is { } chatId && existingIds.Contains(chatId) ? chatId.ToString() : string.Empty;
+        _routeQuickProviderId = saved.QuickSummaryProviderId is { } quickId && existingIds.Contains(quickId) ? quickId.ToString() : string.Empty;
+        _routeSecurityProviderId = saved.SecurityAuditProviderId is { } secId && existingIds.Contains(secId) ? secId.ToString() : string.Empty;
+        _fallbackEnabled = saved.FallbackEnabled;
+        _fallbackProviderId = saved.FallbackProviderId is { } fbId && existingIds.Contains(fbId) ? fbId.ToString() : string.Empty;
+    }
+
+    private async Task SaveRoutingAsync()
+    {
+        _savingRouting = true;
+        _routingMessage = null;
+        _routingError = null;
+        try
+        {
+            static Guid? ParseGuid(string value) => Guid.TryParse(value, out var parsed) ? parsed : null;
+            var settings = new LlmRoutingSettings(
+                ParseGuid(_routeChatProviderId),
+                ParseGuid(_routeQuickProviderId),
+                ParseGuid(_routeSecurityProviderId),
+                _fallbackEnabled,
+                ParseGuid(_fallbackProviderId));
+            await LlmRouting.SaveAsync(settings, CancellationToken.None);
+            _routingMessage = "Task routing and fallback settings saved.";
+        }
+        catch (ArgumentException exception)
+        {
+            _routingError = exception.Message.Split(" (Parameter")[0];
+        }
+        finally
+        {
+            _savingRouting = false;
+        }
     }
 
     private void UpdateToolLimit(ChangeEventArgs args) => _toolLimit = int.TryParse(args.Value?.ToString(), out var limit) ? limit : 0;
@@ -796,6 +894,7 @@
         if (!confirmed) return;
         await Providers.DeleteAsync(_selectedProvider.Id, CancellationToken.None);
         await LoadProvidersAsync();
+        await LoadRoutingAsync();
         _message = "Provider removed.";
     }
 

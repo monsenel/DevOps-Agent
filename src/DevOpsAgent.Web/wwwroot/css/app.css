@@ -3363,6 +3363,32 @@ p {
     font-size: 12px;
 }
 
+.chat-image-warning {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: var(--dva-radius-row);
+    background: var(--dva-warn-soft);
+    color: var(--dva-on-warn);
+    font-size: 12px;
+}
+
+.chat-image-confirm {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.task-routing-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
 /* Rendered HTML: the line breaks between tags are not text (the plain message style keeps pre-wrap). */
 .chat-message-content.chat-markdown {
     white-space: normal;

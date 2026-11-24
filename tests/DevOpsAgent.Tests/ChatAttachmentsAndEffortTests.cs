@@ -98,7 +98,7 @@ public sealed class ChatAttachmentsAndEffortTests
         await using var chat = await ChatServiceHarness.CreateAsync(capabilities: new FixedCapabilities(false, true));
         var conversation = await chat.Service.CreateAsync(CancellationToken.None);
 
-        await chat.SendAsync(conversation, "what does this graph show?", [new("cpu.png", "image/png", Png)]);
+        await chat.SendAsync(conversation, "what does this graph show?", [new("cpu.png", "image/png", Png)], allowUnredactedImages: true);
 
         var image = chat.Requests[0].SelectMany(message => message.Contents).OfType<DataContent>().Single();
         Assert.Equal("image/png", image.MediaType);
