@@ -12,4 +12,5 @@ public sealed record ServerCapabilityResult(
     bool SudoPasswordUsed = false,
     bool SudoPasswordRejected = false,
     bool SudoProbeSkipped = false,
-    bool SudoPasswordOutcomeUnknown = false);
+    bool SudoPasswordOutcomeUnknown = false,
+    bool SudoPasswordNotChecked = false);

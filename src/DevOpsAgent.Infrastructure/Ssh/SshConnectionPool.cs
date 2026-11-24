@@ -6,6 +6,7 @@ using DevOpsAgent.Domain.Servers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Renci.SshNet.Common;
 
 namespace DevOpsAgent.Infrastructure.Ssh;
@@ -36,8 +37,19 @@ public sealed class SshConnectionPool(
     ISshTransportFactory transportFactory,
     IHostReachability reachability,
     ILogger<SshConnectionPool> logger,
-    IHostApplicationLifetime? lifetime = null) : ISshConnectionPool
+    IHostApplicationLifetime? lifetime = null,
+    IOptions<SshConnectionOptions>? options = null,
+    TimeProvider? timeProvider = null) : ISshConnectionPool
 {
+    /// <summary>
+    /// Commands with a timeout at or above this threshold (for example a 10-minute <c>apt upgrade</c> action) are treated as
+    /// long-running work: short probe timeouts on the same host do not recycle or back it off while one is leased (T7.R21 c).
+    /// </summary>
+    public static readonly TimeSpan LongCommandThreshold = TimeSpan.FromMinutes(2);
+
+    // Overall budget for disposing pooled clients on shutdown so many frozen peers never outlast compose's stop_grace_period (T7.R22).
+    private static readonly TimeSpan ShutdownDisposeBudget = TimeSpan.FromMilliseconds(750);
+
     private readonly ConcurrentDictionary<Guid, ConnectionEntry> _connections = new();
     // The connect attempt in flight per server (T7.R19): at most one, shared by every caller that may share it. Guarded by
     // _flightSync; nothing waits while holding it.
@@ -45,13 +57,24 @@ public sealed class SshConnectionPool(
     private readonly object _flightSync = new();
     // Bumped by Evict so a connect that started with old server settings never caches its result.
     private readonly ConcurrentDictionary<Guid, int> _generations = new();
+    // Active long-running commands per server (T7.R21 c).
+    private readonly ConcurrentDictionary<Guid, int> _longCommands = new();
     // Every client that has not been disposed yet: the pooled ones plus retired ones still draining their last leases.
     private readonly ConcurrentDictionary<ConnectionEntry, byte> _live = new();
     // ApplicationStopping, re-delivered on a thread-pool thread: everything the pool cancels (and every continuation of an
     // abandoned wait) then runs there, never inline on the thread that handles SIGTERM. Left undisposed on purpose: calls in
     // flight when the pool closes may still hold a token from it, and it lives exactly as long as the host.
     private readonly DetachedCancellation? _stopSignal = lifetime is null ? null : new DetachedCancellation(lifetime.ApplicationStopping);
+    // Fired on a pool thread by Dispose() so commands racing a plain Dispose wake immediately as SshShutdownException (T7.R22).
+    private readonly CancellationTokenSource _closedSignal = new();
+    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
     private int _closed;
+
+    /// <summary>Optional connect-timeout threshold override (for sub-second tests, T7.R21 b); null uses <see cref="SshConnectionOptions.ConnectionTimeoutSeconds"/>.</summary>
+    public TimeSpan? ConnectTimeoutOverride { get; set; }
+
+    private TimeSpan ConnectTimeout => ConnectTimeoutOverride
+        ?? TimeSpan.FromSeconds(Math.Clamp(options?.Value.ConnectionTimeoutSeconds ?? 15, 1, 300));
 
     private bool IsClosed => Volatile.Read(ref _closed) != 0;
 
@@ -73,11 +96,25 @@ public sealed class SshConnectionPool(
 
     private CancellationToken StoppingSignal => _stopSignal?.Token ?? CancellationToken.None;
 
+    private CancellationToken ClosedSignal => _closedSignal.Token;
+
     private bool IsStopping => IsClosed || Stopping.IsCancellationRequested;
 
     private IHostReachability Reachability => reachability;
 
     private ILogger Log => logger;
+
+    private TimeProvider Time => _time;
+
+    private void BeginLongCommand(Guid serverId) => _longCommands.AddOrUpdate(serverId, 1, static (_, count) => count + 1);
+
+    private void EndLongCommand(Guid serverId)
+    {
+        var remaining = _longCommands.AddOrUpdate(serverId, 0, static (_, count) => count > 0 ? count - 1 : 0);
+        if (remaining <= 0) _longCommands.TryRemove(new KeyValuePair<Guid, int>(serverId, remaining));
+    }
+
+    private bool HasActiveLongCommand(Guid serverId) => _longCommands.GetValueOrDefault(serverId) > 0;
 
     public Task<ISshCommandSession> GetSessionAsync(Guid serverId, bool bypassBackoff, CancellationToken cancellationToken) =>
         GetSessionAsync(serverId, bypassBackoff, Timeout.InfiniteTimeSpan, cancellationToken);
@@ -88,15 +125,15 @@ public sealed class SshConnectionPool(
         if (IsStopping) throw new SshShutdownException();
 
         var startedAt = Stopwatch.GetTimestamp();
-        using var scope = new CallScope(cancellationToken, Stopping, StoppingSignal, deadline);
+        using var scope = new CallScope(cancellationToken, Stopping, StoppingSignal, ClosedSignal, deadline);
         try
         {
-            var lease = await GetOrConnectAsync(serverId, [], bypassBackoff, scope);
+            var (lease, generation) = await GetOrConnectAsync(serverId, [], bypassBackoff, scope);
             var budget = deadline == Timeout.InfiniteTimeSpan ? (TimeSpan?)null : deadline;
-            return new SshCommandSession(this, lease, serverId, bypassBackoff, startedAt, budget,
+            return new SshCommandSession(this, lease, serverId, generation, bypassBackoff, startedAt, budget,
                 reason => Invalidate(serverId, lease.Entry, reason));
         }
-        catch (OperationCanceledException) when (scope.ShuttingDown)
+        catch (OperationCanceledException) when (scope.ShuttingDown || (IsStopping && !cancellationToken.IsCancellationRequested))
         {
             // The host is stopping: a clean cancellation, not a failure of the server.
             throw new SshShutdownException();
@@ -114,13 +151,15 @@ public sealed class SshConnectionPool(
     {
         // Sessions that depend on this entry as a jump host notice the replaced entry on their next request and reconnect.
         if (IsClosed) return;
-        _generations.AddOrUpdate(serverId, 1, static (_, current) => current + 1);
-        // New settings deserve an immediate attempt rather than the old settings' backoff.
-        reachability.Reset(serverId);
-        // A connect still running was started with the old settings: end it now so the new settings are tried at once
-        // instead of after it (its callers are told to start over with the new settings).
+        // T7.R23: bump generation, reset reachability, and abandon any running flight atomically under _flightSync so
+        // no stale failure can slip in between the generation check and RecordFailure.
         lock (_flightSync)
         {
+            _generations.AddOrUpdate(serverId, 1, static (_, current) => current + 1);
+            // New settings deserve an immediate attempt rather than the old settings' backoff.
+            reachability.Reset(serverId);
+            // A connect still running was started with the old settings: end it now so the new settings are tried at once
+            // instead of after it (its callers are told to start over with the new settings).
             if (_flights.TryGetValue(serverId, out var flight)) flight.Abandon(FlightAbandon.Stale);
         }
 
@@ -137,6 +176,13 @@ public sealed class SshConnectionPool(
             return;
         }
 
+        // Wake any command racing a plain Dispose on a pool thread so it exits as SshShutdownException, never ObjectDisposedException (T7.R22).
+        ThreadPool.UnsafeQueueUserWorkItem(static cts =>
+        {
+            try { cts.Cancel(); }
+            catch (Exception) { }
+        }, _closedSignal, preferLocal: false);
+
         // Shutdown closes every client at once, leased or not. Dependents first, so a tunnel is released while its jump
         // client is still open. Nothing here waits for a connect in flight: such an attempt is told to stop (on a pool
         // thread, so no callback of the connect runs here), notices the pool is closed and closes whatever it opened late.
@@ -147,9 +193,22 @@ public sealed class SshConnectionPool(
             foreach (var flight in _flights.Values) flight.Abandon(FlightAbandon.Closed);
         }
 
-        foreach (var connection in _live.Keys.OrderByDescending(entry => entry.Depth))
+        // T7.R22: dispose pooled clients in parallel per depth level on thread-pool threads with a tight overall budget,
+        // so multiple frozen peers do not serialize shutdown past the container stop grace period.
+        var groups = _live.Keys
+            .GroupBy(entry => entry.Depth)
+            .OrderByDescending(group => group.Key)
+            .ToArray();
+        var deadline = Stopwatch.StartNew();
+        foreach (var group in groups)
         {
-            connection.Shutdown();
+            var tasks = group.Select(static entry => Task.Run(entry.Shutdown)).ToArray();
+            var remaining = ShutdownDisposeBudget - deadline.Elapsed;
+            if (remaining > TimeSpan.Zero)
+            {
+                try { Task.WaitAll(tasks, remaining); }
+                catch (AggregateException) { /* Shutdown() already catches transport errors */ }
+            }
         }
 
         _live.Clear();
@@ -158,7 +217,7 @@ public sealed class SshConnectionPool(
 
     // The returned lease belongs to the caller, who must dispose it (the session does; a jump lease is released once the
     // dependent entry has taken its own).
-    private async Task<EntryLease> GetOrConnectAsync(
+    private async Task<(EntryLease Lease, int Generation)> GetOrConnectAsync(
         Guid serverId,
         HashSet<Guid> visited,
         bool bypassBackoff,
@@ -177,6 +236,13 @@ public sealed class SshConnectionPool(
             {
                 var generation = Generation(serverId);
                 var server = await LoadServerAsync(serverId, scope.Token);
+                // T7.R19 v2 jump order: check the target server's own backoff before connecting its jump host, so a server
+                // already in backoff does not cost a jump-host connect.
+                if (!bypassBackoff && reachability.IsBlocked(server.Id, out var ownBlocked))
+                {
+                    throw new HostUnreachableException(server.Id, server.Name, ownBlocked!);
+                }
+
                 EntryLease? jumpLease = null;
                 try
                 {
@@ -184,7 +250,7 @@ public sealed class SshConnectionPool(
                     {
                         try
                         {
-                            jumpLease = await GetOrConnectAsync(jumpId, visited, bypassBackoff, scope);
+                            (jumpLease, _) = await GetOrConnectAsync(jumpId, visited, bypassBackoff, scope);
                         }
                         catch (HostUnreachableException jumpUnreachable)
                         {
@@ -197,7 +263,7 @@ public sealed class SshConnectionPool(
 
                     // The jump lease keeps the tunnel's client open while this hop connects through it.
                     var connection = await ConnectHopAsync(server, jumpLease, generation, bypassBackoff, scope);
-                    if (connection is not null) return connection;
+                    if (connection is not null) return (connection, generation);
                 }
                 finally
                 {
@@ -239,16 +305,29 @@ public sealed class SshConnectionPool(
             if (IsStopping) throw new SshShutdownException();
             if (TryReuse(server.Id, jumpConnection) is { } pooled) return pooled;
 
-            // Decide, under one lock, whether to share the attempt that is running, wait for it to end, fail fast because
-            // the host is in backoff, or start the attempt. Nothing is awaited inside.
+            // Decide, under one lock, whether to reuse a just-published client, share the attempt that is running, wait for
+            // it to end, fail fast because the host is in backoff, or start the attempt. Nothing is awaited inside.
+            EntryLease? racedReuse = null;
             ConnectFlight? flight = null;
             ConnectFlight? waitFor = null;
             HostReachabilityState? blockedBy = null;
+            var stale = false;
             var started = false;
             EntryLease? flightJumpLease = null;
             lock (_flightSync)
             {
-                if (_flights.TryGetValue(server.Id, out var running))
+                // T7.R23: re-check generation under the lock so a flight never starts with settings edited a moment before.
+                if (Generation(server.Id) != generation)
+                {
+                    stale = true;
+                }
+                // T7.R22: re-check TryReuse under the lock so a caller that missed a just-published client reuses it
+                // instead of starting a second flight and retiring the fresh client.
+                else if (TryReuse(server.Id, jumpConnection) is { } justPublished)
+                {
+                    racedReuse = justPublished;
+                }
+                else if (_flights.TryGetValue(server.Id, out var running))
                 {
                     if (running.CanJoin(generation, jumpConnection, bypassBackoff) && running.TryJoin()) flight = running;
                     // A retry of a host in backoff: everyone but "Retry now" is told at once, as before (D-032).
@@ -260,7 +339,7 @@ public sealed class SshConnectionPool(
                     // The first connect of a host (no failure on record) is shared by whoever arrives while it runs; a retry
                     // of a host in backoff is the retry of whoever claimed it.
                     var shared = reachability.Get(server.Id) is null;
-                    if (!reachability.TryBeginAttempt(server.Id, bypassBackoff, out blockedBy))
+                    if (!reachability.TryBeginAttempt(server.Id, bypassBackoff, out blockedBy, out var claimToken))
                     {
                         // Told at once: in backoff, or another retry is in flight.
                     }
@@ -268,13 +347,15 @@ public sealed class SshConnectionPool(
                     {
                         // The attempt holds its own reference on the jump client (the caller's lease may end before it does).
                         flightJumpLease = jumpLease?.Entry.RetainAsJump();
-                        flight = new ConnectFlight(server.Id, generation, jumpConnection, bypassBackoff, shared, StoppingSignal);
+                        flight = new ConnectFlight(server.Id, generation, claimToken, jumpConnection, bypassBackoff, shared, StoppingSignal);
                         _flights[server.Id] = flight;
                         started = true;
                     }
                 }
             }
 
+            if (stale) return null;
+            if (racedReuse is not null) return racedReuse;
             if (blockedBy is not null) throw new HostUnreachableException(server.Id, server.Name, blockedBy);
 
             if (waitFor is not null)
@@ -309,12 +390,11 @@ public sealed class SshConnectionPool(
     }
 
     // The caller waits for the attempt with its own deadline and cancellation. Leaving early never cancels an attempt other
-    // callers still wait for; the last caller to leave ends it (a deadline counts as a failed connect, a cancellation not).
-    // A caller whose deadline passes while it is the last one therefore still learns the outcome it caused, a moment later:
-    // the attempt notices the cancellation at once and records the failed connect (D-037), so it gets the same
-    // HostUnreachableException as the callers that waited for the connect to fail by itself.
-    private static async Task<FlightOutcome> AwaitFlightAsync(ConnectFlight flight, CallScope scope)
+    // callers still wait for; the last caller to leave ends it. A deadline only counts as a failed connect when this hop's
+    // budget was at least the connect timeout (T7.R21 b); a shorter caller deadline abandons without backing the host off.
+    private async Task<FlightOutcome> AwaitFlightAsync(ConnectFlight flight, CallScope scope)
     {
+        var hopBudget = scope.Remaining;
         var left = false;
         try
         {
@@ -323,17 +403,22 @@ public sealed class SshConnectionPool(
         catch (OperationCanceledException) when (scope.Token.IsCancellationRequested)
         {
             left = true;
-            var endedIt = flight.Leave(scope.DeadlineExpired ? FlightAbandon.Deadline : FlightAbandon.CallerCancelled);
-            if (endedIt && scope.DeadlineExpired)
+            var countsAsConnectFailure = scope.DeadlineExpired
+                && (hopBudget == Timeout.InfiniteTimeSpan || hopBudget >= ConnectTimeout);
+            var reason = !scope.DeadlineExpired ? FlightAbandon.CallerCancelled
+                : countsAsConnectFailure ? FlightAbandon.Deadline
+                : FlightAbandon.ShortDeadline;
+            var endedIt = flight.Leave(reason);
+            if (endedIt && countsAsConnectFailure)
             {
                 try
                 {
-                    var outcome = await flight.Result.WaitAsync(AbandonedAttemptGrace).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
+                    var outcome = await flight.Result.WaitAsync(AbandonedAttemptGrace, scope.AbortToken).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
                     if (outcome.Kind == FlightResult.Failed) return outcome;
                 }
                 catch (Exception)
                 {
-                    // The attempt did not end promptly or failed oddly: the caller reports its own deadline.
+                    // The attempt did not end promptly or was aborted: the caller reports its own deadline.
                 }
             }
 
@@ -345,9 +430,9 @@ public sealed class SshConnectionPool(
         }
     }
 
-    // How long a caller whose deadline ended an attempt waits for it to record the failure: it is cancelled at once and ends
-    // within milliseconds, this only bounds a wedged one.
-    private static readonly TimeSpan AbandonedAttemptGrace = TimeSpan.FromSeconds(5);
+    // T7.R21 (h): tight bound on waiting for a just-cancelled attempt to record its failure (it wakes within milliseconds),
+    // so a wedged attempt never extends a call 5 s past its deadline.
+    private static readonly TimeSpan AbandonedAttemptGrace = TimeSpan.FromMilliseconds(250);
 
     private static async Task WaitForEndAsync(ConnectFlight flight, CallScope scope)
     {
@@ -399,11 +484,12 @@ public sealed class SshConnectionPool(
                 var abandon = flight.AbandonReason;
                 // Evicted while connecting: the failure belongs to the old settings and must not back off the new ones.
                 if (abandon == FlightAbandon.Stale || Generation(server.Id) != flight.Generation) return;
-                // Every caller left (cancelled): nobody is waiting for the outcome and the host did not fail.
-                if (abandon == FlightAbandon.CallerCancelled && exception is OperationCanceledException) return;
+                // Every caller left (cancelled, or cut by a caller deadline shorter than the connect timeout, T7.R21 b):
+                // nobody is waiting for the outcome and the host did not fail.
+                if (abandon is FlightAbandon.CallerCancelled or FlightAbandon.ShortDeadline && exception is OperationCanceledException) return;
 
-                // Cut off because every caller's deadline passed: the host did not answer in time, which is what a connect
-                // timeout is.
+                // Cut off because every caller's deadline passed (at least the connect timeout): the host did not answer
+                // in time, which is what a connect timeout is.
                 var failure = exception is OperationCanceledException && abandon == FlightAbandon.Deadline
                     ? new SshOperationTimeoutException(
                         $"Connecting to {server.Host}:{server.Port} did not complete within the call deadline.")
@@ -413,8 +499,15 @@ public sealed class SshConnectionPool(
                 // The sentence shown to the owner is fixed; the exception's type name (never its message) is what tells
                 // "cannot be read" from "wrong passphrase" or a blocked socket when it does not make sense.
                 logger.LogDebug("{ServerName}: the connection attempt failed with {ErrorType}", server.Name, exception.GetType().Name);
-                var state = reachability.RecordFailure(server.Id, loginFailure ?? failure, SshFailureClassifier.DescribeCause(failure));
-                outcomeRecorded = true;
+                // T7.R23: check generation and record failure atomically under _flightSync so an Evict cannot slip between them.
+                HostReachabilityState state;
+                lock (_flightSync)
+                {
+                    if (IsStopping || flight.AbandonReason == FlightAbandon.Stale || Generation(server.Id) != flight.Generation) return;
+                    state = reachability.RecordFailure(server.Id, loginFailure ?? failure, SshFailureClassifier.DescribeCause(failure));
+                    outcomeRecorded = true;
+                }
+
                 if (loginFailure is null)
                     logger.LogInformation("{ServerName} is unreachable (could not connect); next retry at {NextRetryUtc:u}", server.Name, state.NextRetryUtc);
                 else if (state.AutomaticRetriesPaused)
@@ -425,34 +518,40 @@ public sealed class SshConnectionPool(
                 return;
             }
 
-            if (IsStopping || Generation(server.Id) != flight.Generation)
+            // The new entry holds the attempt's reference on the jump entry until it is disposed, so the tunnel it runs
+            // through outlives every command on it.
+            ConnectionEntry? created = null;
+            var discard = false;
+            lock (_flightSync)
+            {
+                if (IsStopping || flight.AbandonReason == FlightAbandon.Stale || Generation(server.Id) != flight.Generation)
+                {
+                    discard = true;
+                }
+                else
+                {
+                    reachability.RecordSuccess(server.Id);
+                    outcomeRecorded = true;
+                    created = new ConnectionEntry(server.Id, server.Name, transport, jumpConnection, jumpReference, logger, Forget);
+                    jumpReference = null;
+                    _live[created] = 0;
+                    _connections[server.Id] = created;
+                }
+            }
+
+            if (discard)
             {
                 // Connected just as the host started stopping, or after the settings changed: nothing may keep it.
                 transport.Dispose();
                 return;
             }
 
-            reachability.RecordSuccess(server.Id);
-            outcomeRecorded = true;
-            // The new entry holds the attempt's reference on the jump entry until it is disposed, so the tunnel it runs
-            // through outlives every command on it.
-            var created = new ConnectionEntry(server.Id, server.Name, transport, jumpConnection, jumpReference, logger, Forget);
-            jumpReference = null;
-            _live[created] = 0;
-            if (IsStopping)
-            {
-                // Shut down while connecting: nothing may outlive the pool.
-                created.Shutdown();
-                return;
-            }
-
-            _connections[server.Id] = created;
             logger.LogDebug("SSH client for {ServerName} connected{ViaJump}", server.Name,
                 jumpConnection is null ? string.Empty : $" through {jumpConnection.ServerName}");
-            if (Generation(server.Id) != flight.Generation)
+            if (IsStopping)
             {
-                // Evicted while connecting: do not keep a connection built from stale settings.
-                Invalidate(server.Id, created, "server settings changed while connecting");
+                // Shut down while publishing: nothing may outlive the pool.
+                created!.Shutdown();
                 return;
             }
 
@@ -468,7 +567,7 @@ public sealed class SshConnectionPool(
             try
             {
                 jumpReference?.Dispose();
-                if (!outcomeRecorded) reachability.EndAttempt(server.Id);
+                if (!outcomeRecorded) reachability.EndAttempt(server.Id, flight.ClaimToken);
             }
             catch (Exception exception)
             {
@@ -566,7 +665,9 @@ public sealed class SshConnectionPool(
         None,
         /// <summary>Every caller that waited for the attempt cancelled: nobody wants the outcome and the host did not fail.</summary>
         CallerCancelled,
-        /// <summary>Every caller's deadline passed: the host did not answer in time (a failed connect).</summary>
+        /// <summary>Every caller's deadline passed (shorter than the connect timeout): abandon without backing the host off (T7.R21 b).</summary>
+        ShortDeadline,
+        /// <summary>Every caller's deadline passed (at least the connect timeout): the host did not answer in time (a failed connect).</summary>
         Deadline,
         /// <summary>The server's settings changed: the attempt belongs to the old ones.</summary>
         Stale,
@@ -607,10 +708,11 @@ public sealed class SshConnectionPool(
         private bool _finished;
         private FlightAbandon _abandon;
 
-        public ConnectFlight(Guid serverId, int generation, ConnectionEntry? jump, bool bypass, bool shared, CancellationToken stoppingSignal)
+        public ConnectFlight(Guid serverId, int generation, long claimToken, ConnectionEntry? jump, bool bypass, bool shared, CancellationToken stoppingSignal)
         {
             ServerId = serverId;
             Generation = generation;
+            ClaimToken = claimToken;
             Jump = jump;
             Bypass = bypass;
             Shared = shared;
@@ -622,6 +724,9 @@ public sealed class SshConnectionPool(
 
         /// <summary>The server's settings generation the attempt was started with (<see cref="SshConnectionPool.Evict"/> bumps it).</summary>
         public int Generation { get; }
+
+        /// <summary>The reachability claim token for this attempt (T7.R19 v2).</summary>
+        public long ClaimToken { get; }
 
         /// <summary>The jump client the attempt tunnels through.</summary>
         public ConnectionEntry? Jump { get; }
@@ -749,26 +854,39 @@ public sealed class SshConnectionPool(
     {
         private readonly CancellationToken _caller;
         private readonly CancellationToken _stopping;
+        private readonly CancellationToken _closedSignal;
+        private readonly TimeSpan _deadlineSpan;
+        private readonly long _startedAt = Stopwatch.GetTimestamp();
         private readonly CancellationTokenSource _deadline = new();
+        private readonly CancellationTokenSource _abort;
         private readonly CancellationTokenSource _linked;
 
-        // stopping answers "is the host stopping" at once; stoppingSignal is what the call's waits are linked to.
-        public CallScope(CancellationToken caller, CancellationToken stopping, CancellationToken stoppingSignal, TimeSpan deadline)
+        // stopping answers "is the host stopping" at once; stoppingSignal and closedSignal are what waits are linked to.
+        public CallScope(CancellationToken caller, CancellationToken stopping, CancellationToken stoppingSignal, CancellationToken closedSignal, TimeSpan deadline)
         {
             _caller = caller;
             _stopping = stopping;
+            _closedSignal = closedSignal;
+            _deadlineSpan = deadline;
             if (deadline != Timeout.InfiniteTimeSpan) _deadline.CancelAfter(deadline);
-            _linked = CancellationTokenSource.CreateLinkedTokenSource(caller, stoppingSignal, _deadline.Token);
+            _abort = CancellationTokenSource.CreateLinkedTokenSource(caller, stoppingSignal, closedSignal);
+            _linked = CancellationTokenSource.CreateLinkedTokenSource(_abort.Token, _deadline.Token);
         }
 
         public CancellationToken Token => _linked.Token;
+        public CancellationToken AbortToken => _abort.Token;
+        public TimeSpan Remaining => _deadlineSpan == Timeout.InfiniteTimeSpan
+            ? Timeout.InfiniteTimeSpan
+            : _deadlineSpan - Stopwatch.GetElapsedTime(_startedAt);
         public bool CallerCancelled => _caller.IsCancellationRequested;
-        public bool ShuttingDown => _stopping.IsCancellationRequested && !_caller.IsCancellationRequested;
-        public bool DeadlineExpired => _deadline.IsCancellationRequested && !_caller.IsCancellationRequested && !_stopping.IsCancellationRequested;
+        public bool ShuttingDown => (_stopping.IsCancellationRequested || _closedSignal.IsCancellationRequested) && !_caller.IsCancellationRequested;
+        public bool DeadlineExpired => _deadline.IsCancellationRequested && !_caller.IsCancellationRequested
+            && !_stopping.IsCancellationRequested && !_closedSignal.IsCancellationRequested;
 
         public void Dispose()
         {
             _linked.Dispose();
+            _abort.Dispose();
             _deadline.Dispose();
         }
     }
@@ -852,16 +970,6 @@ public sealed class SshConnectionPool(
             lock (_sync)
             {
                 if (_retired) return null;
-                _leases++;
-                return new EntryLease(this, isReference: false);
-            }
-        }
-
-        /// <summary>A new command lease for the caller that created the entry.</summary>
-        public EntryLease Retain()
-        {
-            lock (_sync)
-            {
                 _leases++;
                 return new EntryLease(this, isReference: false);
             }
@@ -960,6 +1068,7 @@ public sealed class SshConnectionPool(
         SshConnectionPool pool,
         EntryLease lease,
         Guid serverId,
+        int sessionGeneration,
         bool bypassBackoff,
         long startedAt,
         TimeSpan? budget,
@@ -1004,15 +1113,19 @@ public sealed class SshConnectionPool(
             ObjectDisposedException.ThrowIf(lease.IsReleased, this);
             // After shutdown began nothing new starts, on a client leased earlier as well.
             if (pool.IsStopping) throw new SshShutdownException();
-            var stopping = pool.Stopping;
 
-            timeout = WithinCallDeadline(timeout);
+            var requestedTimeout = timeout;
+            var commandStartedAtUtc = pool.Time.GetUtcNow();
+            var commandGeneration = sessionGeneration;
+            var isLongCommand = requestedTimeout >= LongCommandThreshold;
+            timeout = WithinCallDeadline(requestedTimeout, out var ranFullTimeout);
             var transport = Entry.Transport;
             // The call is bounded here as well as inside SSH.NET: its own timeout and cancellation do not always end a
             // command on a dead peer, and Dispose does not wake a command already running (T7.R15 live run). The wait is
             // abandoned when the deadline passes, the caller cancels or the host stops; a late result is discarded.
             using var deadline = new CancellationTokenSource(timeout);
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, pool.StoppingSignal, deadline.Token);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, pool.StoppingSignal, pool.ClosedSignal, deadline.Token);
+            if (isLongCommand) pool.BeginLongCommand(serverId);
             // SSH.NET opens the command's channel synchronously, so on a session whose peer is frozen the "async" call blocks
             // its caller for up to the connect timeout. The cycles start all their hosts from one thread: started here, one
             // frozen host would hold back every host after it and a cycle would run past its deadline.
@@ -1020,40 +1133,71 @@ public sealed class SshConnectionPool(
             try
             {
                 var result = await running.WaitAsync(linked.Token).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
-                Timeouts.RecordSuccess();
-                pool.Reachability.RecordCommandSuccess(serverId);
+                if (pool.Generation(serverId) == commandGeneration)
+                {
+                    Timeouts.RecordSuccess();
+                    pool.Reachability.RecordCommandSuccess(serverId);
+                }
+
                 return result;
             }
             catch (OperationCanceledException) when (linked.IsCancellationRequested)
             {
+                // T7.R27 (1): explicitly abandon stdin password writing before abandoning the background task.
+                marker?.AbandonInput();
                 Abandon(running);
                 if (cancellationToken.IsCancellationRequested) throw;
-                if (stopping.IsCancellationRequested) throw new SshShutdownException();
-                throw RegisterTimeout(new SshOperationTimeoutException(
-                    $"The command did not finish within {timeout.TotalSeconds:0.#} s."));
+                if (pool.IsStopping) throw new SshShutdownException();
+                var timeoutException = new SshOperationTimeoutException(
+                    $"The command did not finish within {timeout.TotalSeconds:0.#} s.");
+                throw ShouldCountTimeout(ranFullTimeout, isLongCommand, commandGeneration)
+                    ? RegisterTimeout(timeoutException, commandStartedAtUtc)
+                    : timeoutException;
             }
-            catch (Exception) when (stopping.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            catch (Exception) when (pool.IsStopping && !cancellationToken.IsCancellationRequested)
             {
-                // The host is stopping and tore the client down under the command.
+                // The host is stopping or the pool was disposed and tore the client down under the command (T7.R22).
+                marker?.AbandonInput();
                 throw new SshShutdownException();
             }
             catch (SshOperationTimeoutException exception)
             {
-                throw RegisterTimeout(exception);
+                marker?.AbandonInput();
+                throw ShouldCountTimeout(ranFullTimeout, isLongCommand, commandGeneration)
+                    ? RegisterTimeout(exception, commandStartedAtUtc)
+                    : exception;
             }
             catch (Exception exception) when (SshTransportFailure.IsTransportFailure(exception) && !transport.IsConnected)
             {
+                marker?.AbandonInput();
                 // INV-5: reconnect on failure. Only a dead transport poisons the shared client; a command timeout merely
                 // ends this command's channel and must not tear down other commands or jump tunnels sharing the client.
                 retire("connection lost");
                 throw;
             }
+            finally
+            {
+                if (isLongCommand) pool.EndLongCommand(serverId);
+            }
         }
 
+        // T7.R21 (a, c, d): only count a timeout toward client recycling and hung-host backoff when the command ran its
+        // full timeout (not cut short by connect time), belongs to the current settings generation, and is not a short
+        // probe racing a leased long command (like an apt upgrade).
+        private bool ShouldCountTimeout(bool ranFullTimeout, bool isLongCommand, int commandGeneration) =>
+            ranFullTimeout
+            && pool.Generation(serverId) == commandGeneration
+            && (isLongCommand || !pool.HasActiveLongCommand(serverId));
+
         // The first command of a session has only what is left of the call's deadline after connecting.
-        private TimeSpan WithinCallDeadline(TimeSpan timeout)
+        private TimeSpan WithinCallDeadline(TimeSpan requestedTimeout, out bool ranFullTimeout)
         {
-            if (budget is not { } total || Interlocked.Exchange(ref _budgetUsed, 1) != 0) return timeout;
+            if (budget is not { } total || Interlocked.Exchange(ref _budgetUsed, 1) != 0)
+            {
+                ranFullTimeout = true;
+                return requestedTimeout;
+            }
+
             var remaining = total - Stopwatch.GetElapsedTime(startedAt);
             if (remaining <= TimeSpan.Zero)
             {
@@ -1061,7 +1205,11 @@ public sealed class SshConnectionPool(
                     $"Connecting used up the {total.TotalSeconds:0.#} s deadline of the call; the command was not started.");
             }
 
-            return remaining < timeout ? remaining : timeout;
+            var effective = remaining < requestedTimeout ? remaining : requestedTimeout;
+            // T7.R21 (a): allow up to 10% scheduling/fast-connect overhead so a normal reused/fast-connect call counts,
+            // while a command meaningfully truncated by a slow connect does not count toward recycle/backoff.
+            ranFullTimeout = effective.Ticks >= (long)(requestedTimeout.Ticks * 0.9);
+            return effective;
         }
 
         // A silently dead peer (blackholed route, frozen process) keeps IsConnected true and every command waits its full
@@ -1069,10 +1217,10 @@ public sealed class SshConnectionPool(
         // under other commands (for example a running package update), and the last lease to end disposes it. The host
         // itself goes into backoff when the timeouts continue on the fresh client (IHostReachability.CommandTimeoutThreshold),
         // or at once when it was already in backoff and this was its retry.
-        private SshOperationTimeoutException RegisterTimeout(SshOperationTimeoutException exception)
+        private SshOperationTimeoutException RegisterTimeout(SshOperationTimeoutException exception, DateTimeOffset commandStartedAtUtc)
         {
             var recycle = Timeouts.RecordTimeout();
-            var backoff = pool.Reachability.RecordCommandTimeout(serverId, exception, force: bypassBackoff);
+            var backoff = pool.Reachability.RecordCommandTimeout(serverId, exception, force: bypassBackoff, commandStartedAtUtc);
             if (backoff is not null)
             {
                 pool.Log.LogInformation("{ServerName} is not answering commands; next retry at {NextRetryUtc:u}",

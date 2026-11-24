@@ -66,6 +66,7 @@ public sealed class UpdatesService(
                 var rows = JsonSerializer.Deserialize<UpdatePackageDto[]>(collected.ResultJson) ?? [];
                 return (Server: server, Collected: collected, Rows: rows, Error: (string?)null);
             }
+            catch (SshShutdownException) { throw; }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception exception) { return (Server: server, Collected: (CollectedUpdateResult?)null, Rows: Array.Empty<UpdatePackageDto>(), Error: exception.Message); }
             finally { semaphore.Release(); }

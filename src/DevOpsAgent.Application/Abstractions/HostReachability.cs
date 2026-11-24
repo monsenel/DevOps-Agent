@@ -82,6 +82,17 @@ public interface IHostReachability
     bool TryBeginAttempt(Guid serverId, bool bypassBackoff, out HostReachabilityState? blockedBy);
 
     /// <summary>
+    /// Like <see cref="TryBeginAttempt(Guid, bool, out HostReachabilityState?)"/>, returning a claim token that must be
+    /// passed to <see cref="EndAttempt(Guid, long)"/> so a cancelled caller never clears the in-flight flag of a later
+    /// bypass ("Retry now") caller (T7.R19 v2).
+    /// </summary>
+    bool TryBeginAttempt(Guid serverId, bool bypassBackoff, out HostReachabilityState? blockedBy, out long claimToken)
+    {
+        claimToken = 0;
+        return TryBeginAttempt(serverId, bypassBackoff, out blockedBy);
+    }
+
+    /// <summary>
     /// A connection was established (which includes the login). Clears a connection or login failure; a host that is in
     /// backoff for command timeouts stays in it until a command succeeds (connecting says nothing about whether its commands
     /// are answered).
@@ -103,11 +114,21 @@ public interface IHostReachability
     /// </summary>
     HostReachabilityState? RecordCommandTimeout(Guid serverId, Exception failure, bool force = false);
 
+    /// <summary>
+    /// Like <see cref="RecordCommandTimeout(Guid, Exception, bool)"/>, carrying when the timed-out command started so a
+    /// command that started before a backoff cannot escalate it after its window or clear a claimed retry (T7.R21).
+    /// </summary>
+    HostReachabilityState? RecordCommandTimeout(Guid serverId, Exception failure, bool force, DateTimeOffset? commandStartedAtUtc) =>
+        RecordCommandTimeout(serverId, failure, force);
+
     /// <summary>A command on the host completed: resets the timeout count and ends a command-timeout backoff.</summary>
     void RecordCommandSuccess(Guid serverId);
 
     /// <summary>Releases a claimed attempt that ended without an outcome (for example the caller cancelled).</summary>
     void EndAttempt(Guid serverId);
+
+    /// <summary>Releases a claimed attempt only when <paramref name="claimToken"/> matches the active claim (T7.R19 v2).</summary>
+    void EndAttempt(Guid serverId, long claimToken) => EndAttempt(serverId);
 
     /// <summary>Forgets the backoff and the timeout count, e.g. after the server's connection settings changed.</summary>
     void Reset(Guid serverId);
@@ -171,9 +192,20 @@ public sealed class HostUnreachableException : Exception
             return $"{serverName}{route}: authentication failed{reason}. Since {Time(state.UnreachableSinceUtc)}, {retry}.";
         }
 
-        var cause = state.Kind == HostFailureKind.CommandTimeout
-            ? viaJumpServerName is null ? "commands timed out" : $"commands on {viaJumpServerName} timed out"
-            : viaJumpServerName is null ? "could not connect" : $"could not connect to {viaJumpServerName}";
+        if (state.Kind == HostFailureKind.CommandTimeout)
+        {
+            // T7.R21 (e): the host answered on the network, only its commands timed out; do not call it "unreachable".
+            var timeoutCause = viaJumpServerName is null ? "commands timed out" : $"commands on {viaJumpServerName} timed out";
+            return $"{serverName}{route} is not answering commands (since {Time(state.UnreachableSinceUtc)}, {retry}): {timeoutCause}.";
+        }
+
+        if (viaJumpServerName is not null && SshFailures.HostKeyMismatch(state.LastFailure) is not null)
+        {
+            // T7.R29 (6): a target behind a jump host whose key changed reports the jump host's key mismatch, not generic "unreachable".
+            return $"{serverName} via jump host {viaJumpServerName}: host key mismatch on {viaJumpServerName} (since {Time(state.UnreachableSinceUtc)}, {retry}).";
+        }
+
+        var cause = viaJumpServerName is null ? "could not connect" : $"could not connect to {viaJumpServerName}";
         return $"{serverName} is unreachable{route} (since {Time(state.UnreachableSinceUtc)}, {retry}): {cause}.";
     }
 

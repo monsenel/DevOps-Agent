@@ -166,6 +166,12 @@ public sealed class Server
         SudoAuthFailedSinceUtc = null;
     }
 
+    /// <summary>
+    /// Sudo ran via NOPASSWD or a cached ticket without consuming the password from stdin (T7.R27): clears the in-flight
+    /// attempt marker so a restart does not treat it as interrupted, without resolving an open sudo-auth-failed alert.
+    /// </summary>
+    public void ClearSudoPasswordAttemptStarted() => SudoPasswordAttemptStartedAtUtc = null;
+
     /// <param name="sudoCapable">The sudo probe's result; null when the probe was not run (a rejected sudo password), which
     /// keeps the previous value.</param>
     public void RecordCapabilities(bool? sudoCapable, string? osInfo, DateTimeOffset lastSeenAtUtc)

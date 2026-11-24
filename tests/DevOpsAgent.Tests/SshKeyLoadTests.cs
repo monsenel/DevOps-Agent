@@ -128,7 +128,7 @@ public sealed class SshKeyLoadTests : IDisposable
     }
 
     [Fact]
-    public async Task AnUnreadablePassphraseIsAnInvalidKeyOrWrongPassphrase()
+    public async Task AnUnreadablePassphraseIsReportedAsPassphraseUnreadable()
     {
         WriteEncryptedKey("protected");
         var server = KeyServer("protected");
@@ -136,7 +136,9 @@ public sealed class SshKeyLoadTests : IDisposable
 
         var failure = await ConnectAsync(server);
 
-        Assert.Equal(SshAuthFailure.KeyInvalidOrWrongPassphrase, failure.Reason);
+        // T7.R23: a Data Protection decrypt failure is distinct from a wrong passphrase and never contacts the server.
+        Assert.Equal(SshAuthFailure.PassphraseUnreadable, failure.Reason);
+        Assert.Contains("cannot be decrypted", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]

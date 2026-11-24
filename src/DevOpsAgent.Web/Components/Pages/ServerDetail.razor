@@ -50,7 +50,7 @@
                 <dl class="host-key-list">
                     @foreach (var key in _hostKeys)
                     {
-                        <div class="host-key-row" @key="key.Fingerprint">
+                        <div class="host-key-row" @key="(key.KeyType, key.Fingerprint)">
                             <dt><span class="mono">@key.KeyType</span></dt>
                             <dd>
                                 <span class="mono host-key-fingerprint">@key.Fingerprint</span>
@@ -63,15 +63,19 @@
             @if (_mismatch is not null)
             {
                 <div class="host-key-mismatch" role="alert">
-                    <p><strong>Host key changed.</strong> On @_mismatch.SeenAtUtc.ToLocalTime().ToString("g") the server presented a different key, and every connection is refused until you decide. This can mean a reinstalled server or someone impersonating it.</p>
+                    <p><strong>@(_mismatch.Revoked ? "Host key revoked." : "Host key changed.")</strong> On @_mismatch.SeenAtUtc.ToLocalTime().ToString("g") the server presented @(_mismatch.Revoked ? "a key marked @revoked in your known_hosts file" : "a different key"), and every connection is refused until you decide. This can mean a reinstalled server or someone impersonating it.</p>
                     <p class="mono">Presented: @_mismatch.PresentedKeyType @_mismatch.PresentedFingerprint</p>
-                    @if (_mismatch.StoredIsManual)
+                    @if (_mismatch.Revoked)
+                    {
+                        <p class="muted">This key is explicitly revoked in your known_hosts file and cannot be accepted from the web interface.</p>
+                    }
+                    else if (_mismatch.StoredIsManual)
                     {
                         <p class="muted">The stored key comes from your own known_hosts file. Verify the new key, then update that file.</p>
                     }
                     else
                     {
-                        <button class="ui-button secondary" type="button" @onclick="() => _acceptOpen = true">Accept new key</button>
+                        <button class="ui-button secondary" type="button" @onclick="OpenAccept">Accept new key</button>
                     }
                 </div>
             }
@@ -297,6 +301,7 @@
     private bool _acceptOpen;
     private bool _acceptConfirmed;
     private bool _accepting;
+    private string? _acceptToken;
     private string? _hostKeyMessage;
     private bool _hostKeyError;
 
@@ -307,22 +312,41 @@
         _mismatch = HostKeys.GetMismatch(_server.Host, _server.Port);
     }
 
+    private void OpenAccept()
+    {
+        if (_server is null || _mismatch is null) return;
+        try
+        {
+            _acceptToken = HostKeys.IssueAcceptToken(_server.Host, _server.Port, _mismatch.PresentedFingerprint);
+            _acceptConfirmed = false;
+            _acceptOpen = true;
+            _hostKeyError = false;
+            _hostKeyMessage = null;
+        }
+        catch (InvalidOperationException exception)
+        {
+            _hostKeyError = true;
+            _hostKeyMessage = exception.Message;
+            LoadHostKeys();
+        }
+    }
+
     private void CloseAccept()
     {
         _acceptOpen = false;
         _acceptConfirmed = false;
+        _acceptToken = null;
     }
 
     private async Task AcceptKeyAsync()
     {
-        if (_server is null || _mismatch is null || !_acceptConfirmed) return;
+        if (_server is null || _mismatch is null || !_acceptConfirmed || string.IsNullOrWhiteSpace(_acceptToken)) return;
         _accepting = true;
         try
         {
-            await HostKeys.AcceptPresentedKeyAsync(_server.Host, _server.Port, _mismatch.PresentedFingerprint, CancellationToken.None);
-            // Reconnect now with the accepted key (this is also "Retry now" for a host in backoff).
-            ConnectionPool.Evict(_server.Id);
-            var test = await Capabilities.TestAsync(_server.Id, CancellationToken.None);
+            // T7.R29 (4 & 5): validates the one-time token and evicts every inventory entry sharing this host:port.
+            var test = await Capabilities.AcceptHostKeyAndTestAsync(_server.Id, _mismatch.PresentedFingerprint, _acceptToken,
+                HostKeys, ConnectionPool, CancellationToken.None);
             _hostKeyError = !test.Reachable;
             _hostKeyMessage = test.Reachable ? "New key stored; the connection works again." : $"New key stored, but the connection test failed: {test.Error}";
         }

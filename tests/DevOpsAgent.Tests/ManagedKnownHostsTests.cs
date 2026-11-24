@@ -15,6 +15,12 @@ public sealed class ManagedKnownHostsTests : IDisposable
     private string Manual => Path.Combine(_directory, "known_hosts");
     private string Managed => Path.Combine(_directory, "data", "known_hosts");
 
+    public ManagedKnownHostsTests()
+    {
+        // An existing (empty) owner known_hosts file allows TOFU; missing/unreadable configured files refuse TOFU (T7.R29 2).
+        File.WriteAllText(Manual, string.Empty);
+    }
+
     public void Dispose() => Directory.Delete(_directory, recursive: true);
 
     private ManagedKnownHosts Store() => new(Options.Create(new SshConnectionOptions { KnownHostsFile = Manual, ManagedKnownHostsFile = Managed }),
@@ -81,9 +87,10 @@ public sealed class ManagedKnownHostsTests : IDisposable
         await store.RecordFirstUseAsync("other", 22, "ssh-ed25519", KeyA, CancellationToken.None);
         store.Check("db", 22, "ssh-ed25519", KeyB);
 
+        var token = store.IssueAcceptToken("db", 22, ManagedKnownHosts.Fingerprint(KeyB));
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            store.AcceptPresentedKeyAsync("db", 22, ManagedKnownHosts.Fingerprint(KeyA), CancellationToken.None));
-        await store.AcceptPresentedKeyAsync("db", 22, ManagedKnownHosts.Fingerprint(KeyB), CancellationToken.None);
+            store.AcceptPresentedKeyAsync("db", 22, ManagedKnownHosts.Fingerprint(KeyA), token, CancellationToken.None));
+        await store.AcceptPresentedKeyAsync("db", 22, ManagedKnownHosts.Fingerprint(KeyB), token, CancellationToken.None);
 
         Assert.Equal(HostKeyDecision.Trusted, store.Check("db", 22, "ssh-ed25519", KeyB));
         Assert.Equal(HostKeyDecision.Mismatch, store.Check("db", 22, "ssh-ed25519", KeyA));
@@ -107,8 +114,10 @@ public sealed class ManagedKnownHostsTests : IDisposable
         var mismatch = store.GetMismatch("edge.test", 22)!;
         Assert.True(mismatch.StoredIsManual);
         Assert.True(Assert.Single(store.GetKeys("edge.test", 22)).Manual);
+        Assert.Throws<InvalidOperationException>(() =>
+            store.IssueAcceptToken("edge.test", 22, mismatch.PresentedFingerprint));
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            store.AcceptPresentedKeyAsync("edge.test", 22, mismatch.PresentedFingerprint, CancellationToken.None));
+            store.AcceptPresentedKeyAsync("edge.test", 22, mismatch.PresentedFingerprint, "forged-token", CancellationToken.None));
         await store.RecordFirstUseAsync("edge.test", 22, "ssh-ed25519", KeyB, CancellationToken.None);
         Assert.False(File.Exists(Managed)); // a manually listed host is never recorded
     }
@@ -135,7 +144,8 @@ public sealed class ManagedKnownHostsTests : IDisposable
         Assert.Equal(before, File.ReadAllText(Managed)); // nothing recorded beside the damaged line
 
         // The owner can still replace the app's own damaged line, after looking at the fingerprint.
-        await store.AcceptPresentedKeyAsync("managed.test", 22, ManagedKnownHosts.Fingerprint(KeyA), CancellationToken.None);
+        var token = store.IssueAcceptToken("managed.test", 22, ManagedKnownHosts.Fingerprint(KeyA));
+        await store.AcceptPresentedKeyAsync("managed.test", 22, ManagedKnownHosts.Fingerprint(KeyA), token, CancellationToken.None);
         Assert.Equal(HostKeyDecision.Trusted, store.Check("managed.test", 22, "ssh-ed25519", KeyA));
         Assert.Single(File.ReadAllLines(Managed));
     }

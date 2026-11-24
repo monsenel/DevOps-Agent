@@ -53,8 +53,10 @@ public sealed class ServerCapabilityService(
                 new SshRunOptions(ProbeTimeout, BypassBackoff: true), cancellationToken);
 
             var osInfo = ParseOsInfo(osRelease.StandardOutput);
-            // A probe that did not run to a confirmed or rejected answer keeps the previous capability, like a skipped one.
-            bool? sudoCapable = sudo is null ? null : sudo.ExitCode == 0;
+            var sudoPasswordNotChecked = server.HasSudoPassword && sudo?.SudoPasswordNotChecked == true;
+            // A probe that did not run to a confirmed or rejected answer (or ran via NOPASSWD/cached ticket without
+            // checking the saved password, T7.R27 4) keeps the previous capability, like a skipped one.
+            bool? sudoCapable = sudo is null || sudoPasswordNotChecked ? null : sudo.ExitCode == 0;
             // Reloaded: the probe may just have recorded a rejection in another scope.
             server = await serverRepository.GetAsync(serverId, cancellationToken);
             if (server is null)
@@ -68,7 +70,7 @@ public sealed class ServerCapabilityService(
             return new ServerCapabilityResult(serverId, true, osInfo, uptime.StandardOutput.Trim(), sudoCapable ?? server.SudoCapable,
                 ParseAvailableCommands(availableCommands.StandardOutput), null, testedAt,
                 server.HasSudoPassword, server.HasSudoPassword && server.SudoPasswordRejectedAtUtc is not null, sudoSkipped,
-                server.HasSudoPassword && server.SudoPasswordOutcomeUnknownAtUtc is not null);
+                server.HasSudoPassword && server.SudoPasswordOutcomeUnknownAtUtc is not null, sudoPasswordNotChecked);
         }
         catch (OperationCanceledException exception) when (exception is SshShutdownException || cancellationToken.IsCancellationRequested)
         {
@@ -104,6 +106,34 @@ public sealed class ServerCapabilityService(
         }
     }
 
+    /// <summary>
+    /// Accepts the refused host key using the dialog's one-time confirmation token (T7.R29 4), evicts every inventory entry
+    /// pointing to the same host and port so duplicate entries clear their backoff and Critical alerts immediately (T7.R29 5),
+    /// and re-tests the connection.
+    /// </summary>
+    public async Task<ServerCapabilityResult> AcceptHostKeyAndTestAsync(
+        Guid serverId,
+        string presentedFingerprint,
+        string confirmationToken,
+        IHostKeyStore hostKeys,
+        ISshConnectionPool connectionPool,
+        CancellationToken cancellationToken)
+    {
+        var inventory = await serverRepository.ListAsync(cancellationToken);
+        var server = inventory.SingleOrDefault(item => item.Id == serverId)
+            ?? throw new InvalidOperationException("Server no longer exists.");
+
+        await hostKeys.AcceptPresentedKeyAsync(server.Host, server.Port, presentedFingerprint, confirmationToken, cancellationToken);
+
+        foreach (var matching in inventory.Where(item =>
+            item.Port == server.Port && string.Equals(item.Host, server.Host, StringComparison.OrdinalIgnoreCase)))
+        {
+            connectionPool.Evict(matching.Id);
+        }
+
+        return await TestAsync(serverId, cancellationToken);
+    }
+
     // D-041: hosts not listed anywhere are trusted on first use, so a refusal means the key changed.
     public static string HostKeyChangedText(string host, int port, string fingerprint) =>
         $"The SSH host key for {host}:{port} changed ({fingerprint}); the connection was refused. Compare the fingerprint on the server, "
@@ -115,7 +145,15 @@ public sealed class ServerCapabilityService(
     // Only safe text: the exception's message is built by the pool from fixed wording and the cause comes from a fixed list.
     private static string DescribeFailure(HostUnreachableException exception)
     {
-        if (exception.IsAuthFailure) return $"{exception.Message} {AuthHint}";
+        if (exception.IsAuthFailure)
+        {
+            // T7.R23: when the login failure is on the jump host, direct the owner to that jump host's key, not the target's.
+            var hint = exception.ViaJumpServerName is { } jump
+                ? $"Check the SSH key and passphrase configured for jump host {jump}."
+                : AuthHint;
+            return $"{exception.Message} {hint}";
+        }
+
         var cause = string.IsNullOrWhiteSpace(exception.Cause) ? string.Empty : $" Cause: {exception.Cause}.";
         return $"{exception.Message}{cause} {ConnectHint}";
     }

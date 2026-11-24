@@ -31,14 +31,17 @@ internal sealed class HangLab : IDisposable
     /// Added to every call's deadline, so the command still gets its full timeout however long connecting took (up to the
     /// headroom). Leave it null in tests about the deadline itself, which need connect time to count against it.
     /// </param>
-    public HangLab(TimeProvider? time = null, TimeSpan? connectHeadroom = null)
+    public HangLab(TimeProvider? time = null, TimeSpan? connectHeadroom = null, TimeSpan? connectTimeout = null)
     {
         Time = time ?? new ManualClock();
         Servers = new HangServers(_servers);
         Reachability = new HostReachabilityTracker(Time);
         var services = new ServiceCollection().AddSingleton<IServerRepository>(Servers).BuildServiceProvider();
         Pool = new SshConnectionPool(services.GetRequiredService<IServiceScopeFactory>(), Transports, Reachability,
-            NullLogger<SshConnectionPool>.Instance, Lifetime);
+            NullLogger<SshConnectionPool>.Instance, Lifetime, timeProvider: Time)
+        {
+            ConnectTimeoutOverride = connectTimeout ?? TimeSpan.FromMilliseconds(200)
+        };
         Runner = new SshRunner(connectHeadroom is { } headroom ? new HeadroomPool(Pool, headroom) : Pool);
     }
 
@@ -137,6 +140,10 @@ internal sealed class HostScript
     public Task? ConnectGate { get; set; }
     /// <summary>Closing the client throws (a socket that is already gone): shutdown must still go on and not throw.</summary>
     public bool DisposeThrows { get; set; }
+    /// <summary>Simulates a frozen peer whose <c>Dispose</c> blocks for this long (T7.R22).</summary>
+    public TimeSpan DisposeDelay { get; set; }
+    /// <summary>Optional per-command handler; when null, <see cref="Commands"/> decides.</summary>
+    public Func<string, TimeSpan, CancellationToken, Task<RemoteCommandResult>>? OnCommand { get; set; }
     public CommandMode Commands { get; set; } = CommandMode.Ok;
     public TimeSpan BlockFor { get; set; }
 }
@@ -187,6 +194,7 @@ internal sealed class ScriptedTransport(ScriptedTransports owner, string host, H
     public async Task<RemoteCommandResult> ExecuteAsync(string command, TimeSpan timeout, CancellationToken cancellationToken)
     {
         owner.CountCommand(Host);
+        if (script.OnCommand is { } handler) return await handler(command, timeout, cancellationToken);
         if (script.Commands == CommandMode.BlockSynchronously) Thread.Sleep(script.BlockFor);
         switch (script.Commands)
         {
@@ -205,6 +213,7 @@ internal sealed class ScriptedTransport(ScriptedTransports owner, string host, H
     public void Dispose()
     {
         Interlocked.Exchange(ref _disposed, 1);
+        if (script.DisposeDelay > TimeSpan.Zero) Thread.Sleep(script.DisposeDelay);
         if (script.DisposeThrows) throw new InvalidOperationException("closing the client failed");
     }
 }

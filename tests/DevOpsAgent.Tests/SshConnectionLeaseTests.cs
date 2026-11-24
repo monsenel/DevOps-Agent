@@ -306,9 +306,9 @@ public sealed class SshConnectionLeaseTests
         Assert.Null(exception);
         Assert.All(lab.Transports, transport => Assert.True(transport.Disposed, transport.Name));
         Assert.Equal(0, lab.Pool.LiveClients);
-        // Commands in flight fail with the shutdown exception; they are not waited for.
-        await Assert.ThrowsAsync<SshConnectionException>(() => running.WaitAsync(Patience));
-        await Assert.ThrowsAsync<SshConnectionException>(() => draining.WaitAsync(Patience));
+        // Commands in flight fail with the shutdown exception; they are not waited for (T7.R22).
+        await Assert.ThrowsAsync<SshShutdownException>(() => running.WaitAsync(Patience));
+        await Assert.ThrowsAsync<SshShutdownException>(() => draining.WaitAsync(Patience));
         // The tunnel is released before its jump client closes.
         var log = lab.DisposeLog.ToArray();
         var appName = lab.Transports.Single(transport => transport.Host == "10.0.0.2").Name;

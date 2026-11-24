@@ -72,14 +72,14 @@ public sealed class AlertSignalSource(
             }
             catch (OperationCanceledException) when (cycleToken.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
             {
-                // Out of time before this host's turn: a failed probe for this cycle, nothing else.
-                var failed = (Status: (RemoteServiceStatus?)null, HostKeyMismatch: (SshHostKeyMismatchException?)null,
-                    Unreachable: (HostUnreachableException?)null, ProbeFailure: (string?)DeadlineText());
-                return (Server: server, Status: failed, Auth: await authLogScanner.GetCachedAsync(server, cancellationToken));
+                // T7.R21 (f): host never got a slot before the cycle deadline — "not tried this cycle" without opening a High alert.
+                var notTried = (Status: (RemoteServiceStatus?)null, HostKeyMismatch: (SshHostKeyMismatchException?)null,
+                    Unreachable: (HostUnreachableException?)null, ProbeFailure: (string?)null, NotTried: true);
+                return (Server: server, Status: notTried, Auth: await authLogScanner.GetCachedAsync(server, cancellationToken));
             }
         }));
 
-        foreach (var (server, (remoteStatus, hostKeyMismatch, unreachable, probeFailure), auth) in remote)
+        foreach (var (server, (remoteStatus, hostKeyMismatch, unreachable, probeFailure, notTried), auth) in remote)
         {
             result.AddRange(auth);
             result.AddRange(await containerRestarts.GetConditionsAsync(server.Id, server.Name, cancellationToken));
@@ -97,7 +97,14 @@ public sealed class AlertSignalSource(
                 heldScopes.Add(new HeldRuleScope(server.Id, "unit-failed"));
             }
 
-            if (hostKeyMismatch is not null && !mismatchIsOwn)
+            if (notTried)
+            {
+                // T7.R21 (f): never got a slot this cycle; hold existing probe-driven alerts without opening a High unreachable alert.
+                heldScopes.Add(new HeldRuleScope(server.Id, "server-unreachable"));
+                heldScopes.Add(new HeldRuleScope(server.Id, AuthFailedRule));
+                heldScopes.Add(new HeldRuleScope(server.Id, "ssh-host-key-mismatch"));
+            }
+            else if (hostKeyMismatch is not null && !mismatchIsOwn)
             {
                 result.Add(Condition("server-unreachable", server.Id.ToString("N"), AlertSeverity.High, server.Id, server.Host,
                     $"{server.Name} is unreachable",
@@ -128,8 +135,12 @@ public sealed class AlertSignalSource(
             }
             else if (remoteStatus is null)
             {
+                // T7.R21 (e): a host whose commands timed out answers on the network; give it its own wording.
+                var title = unreachable?.Kind == HostFailureKind.CommandTimeout
+                    ? $"{server.Name} is not answering commands"
+                    : $"{server.Name} is unreachable";
                 result.Add(Condition("server-unreachable", server.Id.ToString("N"), AlertSeverity.High, server.Id, server.Host,
-                    $"{server.Name} is unreachable", unreachable?.Message
+                    title, unreachable?.Message
                         ?? $"The scheduled read-only SSH status probe failed: {probeFailure ?? "no usable answer"}."));
             }
             else if (!remoteStatus.IsComplete)
@@ -294,7 +305,7 @@ public sealed class AlertSignalSource(
         + "else printf '__DVA_DOCKER_DOWN__\\n'; fi; fi; "
         + "printf '__DVA_SYSTEMD_FAILED__\\n'; systemctl --failed --type=service --no-legend --plain 2>/dev/null || true";
 
-    private async Task<(RemoteServiceStatus? Status, SshHostKeyMismatchException? HostKeyMismatch, HostUnreachableException? Unreachable, string? ProbeFailure)> TryGetRemoteStatusAsync(
+    private async Task<(RemoteServiceStatus? Status, SshHostKeyMismatchException? HostKeyMismatch, HostUnreachableException? Unreachable, string? ProbeFailure, bool NotTried)> TryGetRemoteStatusAsync(
         Server server, DateTimeOffset cycleEnd, CancellationToken cycleToken, CancellationToken cancellationToken)
     {
         var serverId = server.Id;
@@ -303,7 +314,7 @@ public sealed class AlertSignalSource(
             var options = new SshRunOptions(_cycle.AlertProbeTimeout);
             var response = await sshRunner.RunAsync(serverId, StatusCommand, options, cycleToken);
             if (response.ExitCode != 0)
-                return (null, null, null, $"the status command exited with code {response.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown"}");
+                return (null, null, null, $"the status command exited with code {response.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown"}", false);
             var status = RemoteServiceStatusParser.Parse(response.StandardOutput);
             // Same non-interactive sudo fallback as the metric cycle's container query, only when Docker refused the user
             // and the server is known to allow sudo. It is the same read-only command, so no server write happens.
@@ -320,20 +331,26 @@ public sealed class AlertSignalSource(
                         if (retriedStatus.IsComplete) status = retriedStatus;
                     }
                 }
+                catch (OperationCanceledException exception) when (exception is not SshShutdownException && !cancellationToken.IsCancellationRequested)
+                {
+                    // T7.R21 (f): the initial probe answered; only its sudo retry was cut by the cycle deadline.
+                    // Do not report the host as unreachable or open a High alert; mark as not tried for Docker this cycle.
+                    return (null, null, null, null, true);
+                }
                 catch (Exception exception) when (exception is not OperationCanceledException and not HostUnreachableException
                     and not SshHostKeyMismatchException) { /* keep the refused result: it is reported below */ }
             }
 
-            return (status, null, null, null);
+            return (status, null, null, null, false);
         }
         catch (OperationCanceledException exception) when (exception is SshShutdownException || cancellationToken.IsCancellationRequested) { throw; }
         // The cycle deadline passed while the probe was running.
-        catch (OperationCanceledException) { return (null, null, null, DeadlineText()); }
+        catch (OperationCanceledException) { return (null, null, null, DeadlineText(), false); }
         // While a host is in backoff the original failure (for example a changed host key) travels with the exception,
         // so a host-key mismatch keeps its own alert instead of turning into "unreachable".
-        catch (HostUnreachableException exception) { return (null, SshFailures.HostKeyMismatch(exception), exception, null); }
-        catch (SshHostKeyMismatchException exception) { return (null, exception, null, null); }
-        catch (Exception exception) { return (null, null, null, exception.Message); }
+        catch (HostUnreachableException exception) { return (null, SshFailures.HostKeyMismatch(exception), exception, null, false); }
+        catch (SshHostKeyMismatchException exception) { return (null, exception, null, null, false); }
+        catch (Exception exception) { return (null, null, null, exception.Message, false); }
     }
 
     private static void AddThreshold(IReadOnlyList<MetricSample> samples, string metric, string key, double threshold,

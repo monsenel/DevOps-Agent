@@ -3,13 +3,27 @@ using DevOpsAgent.Application.Abstractions;
 namespace DevOpsAgent.Application.Servers;
 
 /// <summary>What the UI shows for a server that is in backoff: its kind (for the badge) and the full text.</summary>
-public sealed record ServerReachabilityStatus(HostFailureKind Kind, string Text, bool AutomaticRetriesPaused = false)
+public sealed record ServerReachabilityStatus(
+    HostFailureKind Kind,
+    string Text,
+    bool AutomaticRetriesPaused = false,
+    bool IsHostKeyMismatch = false)
 {
     public const string AuthFailedPausedBadge = "Auth failed — automatic retries paused";
+    public const string CommandTimeoutBadge = "Not responding";
+    public const string HostKeyMismatchBadge = "Host key mismatch";
 
-    /// <summary>The short badge: a failed login must not be called "Unreachable"; after three of them, retries are paused.</summary>
-    public string Badge => Kind != HostFailureKind.AuthFailed ? "Unreachable"
-        : AutomaticRetriesPaused ? AuthFailedPausedBadge : "Auth failed";
+    /// <summary>
+    /// The short badge: a failed login is "Auth failed", a host whose commands time out is "Not responding" (T7.R21),
+    /// a host-key mismatch (including on a jump host) is "Host key mismatch" (T7.R29), and a real outage is "Unreachable".
+    /// </summary>
+    public string Badge => IsHostKeyMismatch ? HostKeyMismatchBadge
+        : Kind switch
+        {
+            HostFailureKind.AuthFailed => AutomaticRetriesPaused ? AuthFailedPausedBadge : "Auth failed",
+            HostFailureKind.CommandTimeout => CommandTimeoutBadge,
+            _ => "Unreachable"
+        };
 }
 
 /// <summary>How a server's reachability reads in the UI: its own backoff, or the backoff of a jump host on its route.</summary>
@@ -25,7 +39,8 @@ public static class ServerReachability
     {
         if (!inventory.TryGetValue(serverId, out var server)) return null;
         if (reachability.Get(serverId) is { } own)
-            return new ServerReachabilityStatus(own.Kind, HostUnreachableException.Describe(server.Name, own), own.AutomaticRetriesPaused);
+            return new ServerReachabilityStatus(own.Kind, HostUnreachableException.Describe(server.Name, own),
+                own.AutomaticRetriesPaused, SshFailures.HostKeyMismatch(own.LastFailure) is not null);
 
         var visited = new HashSet<Guid> { serverId };
         var jumpId = server.JumpServerId;
@@ -33,7 +48,7 @@ public static class ServerReachability
         {
             if (reachability.Get(hop) is { } jumpState)
                 return new ServerReachabilityStatus(jumpState.Kind, HostUnreachableException.Describe(server.Name, jumpState, jump.Name),
-                    jumpState.AutomaticRetriesPaused);
+                    jumpState.AutomaticRetriesPaused, SshFailures.HostKeyMismatch(jumpState.LastFailure) is not null);
             jumpId = jump.JumpServerId;
         }
 
