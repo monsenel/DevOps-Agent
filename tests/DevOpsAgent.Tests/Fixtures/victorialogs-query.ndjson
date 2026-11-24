@@ -1,0 +1,2 @@
+{"_time":"2026-11-24T08:01:02Z","_stream":"{host=\"srv-edge\",service=\"nginx\"}","_msg":"upstream timed out (110: Connection timed out) while reading response header"}
+{"_time":"2026-11-24T08:01:05Z","_stream":"{host=\"srv-app\",service=\"api\"}","_msg":"database pool exhausted after 5000ms"}

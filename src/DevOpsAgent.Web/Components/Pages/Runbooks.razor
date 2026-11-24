@@ -1,0 +1,125 @@
+@page "/runbooks"
+@inject RunbookService RunbookCatalog
+@inject ServerService ServerInventory
+
+<PageTitle>Runbooks · DevOps Agent</PageTitle>
+
+<div class="page-stack">
+    <section class="ui-card runbooks-header-card" aria-labelledby="runbooks-title">
+        <header class="ui-card-header">
+            <div>
+                <p class="eyebrow">Operations</p>
+                <h2 id="runbooks-title">Runbooks</h2>
+                <p class="muted">Structured step-by-step checklists with pre-filled prompts to launch guided workflows in Agent chat.</p>
+            </div>
+            <div class="runbooks-controls">
+                <div class="select-field">
+                    <label for="runbook-server-select">Target server (optional)</label>
+                    <select id="runbook-server-select" @bind="_selectedServerName">
+                        <option value="">Any / ask in chat</option>
+                        @foreach (var server in _servers)
+                        {
+                            <option value="@server.Name">@server.Name (@server.Group)</option>
+                        }
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="runbook-filter">Filter runbooks</label>
+                    <input id="runbook-filter" type="search" @bind="_query" @bind:event="oninput" placeholder="Nginx, hardening, patch, triage…" />
+                </div>
+            </div>
+        </header>
+    </section>
+
+    @{
+        var visible = RunbookCatalog.List(_query);
+    }
+
+    @if (visible.Count == 0)
+    {
+        <section class="ui-card">
+            <EmptyState Title="No matching runbooks" Description="Clear the filter to see all built-in operational runbooks." />
+        </section>
+    }
+    else
+    {
+        <div class="runbook-grid">
+            @foreach (var runbook in visible)
+            {
+                var doneCount = runbook.Steps.Count(step => _checkedSteps.Contains((runbook.Id, step.Number)));
+                <article class="ui-card runbook-card" @key="runbook.Id" aria-labelledby="rb-@runbook.Id">
+                    <header class="ui-card-header">
+                        <div>
+                            <p class="eyebrow">@runbook.Category</p>
+                            <h3 id="rb-@runbook.Id">@runbook.Title</h3>
+                        </div>
+                        <div class="runbook-badges">
+                            <span class="ui-badge @RiskClass(runbook.EstimatedRisk)">@runbook.EstimatedRisk risk</span>
+                            <span class="ui-badge neutral">@doneCount/@runbook.Steps.Count steps</span>
+                        </div>
+                    </header>
+
+                    <p class="muted">@runbook.Summary</p>
+
+                    <ol class="runbook-steps">
+                        @foreach (var step in runbook.Steps)
+                        {
+                            var key = (runbook.Id, step.Number);
+                            var isDone = _checkedSteps.Contains(key);
+                            <li class="runbook-step @(isDone ? "done" : null)" @key="step.Number">
+                                <label class="runbook-step-label">
+                                    <input type="checkbox" checked="@isDone" @onchange="args => ToggleStep(key, args)" />
+                                    <span class="runbook-step-body">
+                                        <strong>@step.Number. @step.Title</strong>
+                                        <span class="muted">@step.Detail</span>
+                                        @if (!string.IsNullOrWhiteSpace(step.SuggestedTool))
+                                        {
+                                            <span class="mono runbook-tool-chip">tool: @step.SuggestedTool</span>
+                                        }
+                                    </span>
+                                </label>
+                            </li>
+                        }
+                    </ol>
+
+                    <div class="runbook-footer">
+                        <a class="ui-button primary" href="@RunbookService.BuildChatUrl(runbook, _selectedServerName)">Run in Agent chat</a>
+                        @if (doneCount > 0)
+                        {
+                            <button type="button" class="ui-button secondary" @onclick="() => ResetChecklist(runbook.Id)">Reset checklist</button>
+                        }
+                    </div>
+                </article>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private readonly List<ServerSummary> _servers = [];
+    private readonly HashSet<(string RunbookId, int StepNumber)> _checkedSteps = [];
+    private string _query = string.Empty;
+    private string _selectedServerName = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var list = await ServerInventory.ListAsync(CancellationToken.None);
+        _servers.AddRange(list.OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase));
+    }
+
+    private void ToggleStep((string RunbookId, int StepNumber) key, ChangeEventArgs args)
+    {
+        var isChecked = args.Value is true || string.Equals(args.Value?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+        if (isChecked) _checkedSteps.Add(key);
+        else _checkedSteps.Remove(key);
+    }
+
+    private void ResetChecklist(string runbookId) => _checkedSteps.RemoveWhere(item => item.RunbookId == runbookId);
+
+    private static string RiskClass(string risk) => risk switch
+    {
+        "High" => "danger",
+        "Medium" => "warn",
+        _ => "soft"
+    };
+}

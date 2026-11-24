@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Discovery;
+using DevOpsAgent.Application.Monitoring;
 using DevOpsAgent.Application.Security;
 using DevOpsAgent.Domain.Chat;
 
@@ -22,7 +23,11 @@ public sealed class AgentToolDispatcher(
     ISshRunner sshRunner,
     ConfigEditService? configEdits = null,
     IDiscoveryCoordinator? discoveryCoordinator = null,
-    SecurityAuditService? securityAudit = null)
+    SecurityAuditService? securityAudit = null,
+    CveScanService? cveScan = null,
+    FileIntegrityService? fileIntegrity = null,
+    RunbookService? runbooks = null,
+    ExternalObservabilityService? observability = null)
 {
     public async Task<AgentToolResult> DispatchAsync(
         string name,
@@ -80,6 +85,29 @@ public sealed class AgentToolDispatcher(
 
             return new(name, $"Discovery completed for {snapshotsCreated.Count} server(s). Snapshot {snapshotsCreated.Last()}.",
                 ReadOnlyServerIds: request.ServerIds.Distinct().ToArray());
+        }
+        if (name == "list_runbooks")
+        {
+            var args = (ListRunbooksArgs)validated;
+            var catalog = runbooks ?? new RunbookService();
+            var list = catalog.List(args.Query);
+            return new(name, JsonSerializer.Serialize(list.Select(item => new
+            {
+                item.Id,
+                item.Title,
+                item.Category,
+                item.EstimatedRisk,
+                item.Summary,
+                Steps = item.Steps.Select(s => $"{s.Number}. {s.Title}: {s.Detail}")
+            })), ReadOnlyServerIds: []);
+        }
+        if (name == "query_observability")
+        {
+            if (observability is null) return new(name, "query_observability is not available.");
+            var args = (QueryObservabilityArgs)validated;
+            var obsResult = await observability.QueryAsync(args.Source, args.Query, args.Limit, cancellationToken);
+            return new(name, obsResult.Succeeded ? obsResult.Summary : $"Observability error ({args.Source}): {obsResult.Error}",
+                ReadOnlyServerIds: []);
         }
 
         var serverIds = (validated as IServerTargetArgs)?.ServerIds?.Distinct().ToArray() ?? [];
@@ -153,6 +181,61 @@ public sealed class AgentToolDispatcher(
                     $"  - [{item.Severity}] {item.Category}: {item.Title} — {item.Detail}"
                     + (string.IsNullOrWhiteSpace(item.Recommendation) ? string.Empty : $" Recommendation: {item.Recommendation}"));
                 summaries.Add($"[{server.Name}] high={report.HighCount}, warnings={report.WarningCount}, passed={report.PassCount}\n{string.Join("\n", lines)}");
+            }
+
+            return new(name, string.Join("\n\n", summaries), ReadOnlyServerIds: selected.Select(server => server.Id).ToArray());
+        }
+        if (name == "scan_cve")
+        {
+            if (cveScan is null) return new(name, "scan_cve is not available.");
+            var summaries = new List<string>(selected.Length);
+            foreach (var server in selected)
+            {
+                var report = await cveScan.RunAsync(server.Id, cancellationToken);
+                if (!string.IsNullOrWhiteSpace(report.Error))
+                {
+                    summaries.Add($"[{server.Name}] {report.Error}");
+                    continue;
+                }
+
+                var topFindings = report.Findings.Take(25).Select(f =>
+                    $"  - [{f.Severity}] {f.Id} {f.PackageName} {f.InstalledVersion}"
+                    + (string.IsNullOrWhiteSpace(f.FixedVersion) ? string.Empty : $" -> fix {f.FixedVersion}"));
+                summaries.Add($"[{server.Name}] scanner={report.Scanner} total={report.TotalCount} (critical={report.CriticalCount}, high={report.HighCount}, medium={report.MediumCount}, low={report.LowCount})"
+                    + (report.Findings.Count == 0 ? string.Empty : "\n" + string.Join("\n", topFindings)));
+            }
+
+            return new(name, string.Join("\n\n", summaries), ReadOnlyServerIds: selected.Select(server => server.Id).ToArray());
+        }
+        if (name == "check_file_integrity")
+        {
+            if (fileIntegrity is null) return new(name, "check_file_integrity is not available.");
+            var fimArgs = (CheckFileIntegrityArgs)validated;
+            var summaries = new List<string>(selected.Length);
+            foreach (var server in selected)
+            {
+                var report = fimArgs.ResetBaseline
+                    ? await fileIntegrity.ResetBaselineAsync(server.Id, cancellationToken)
+                    : await fileIntegrity.CheckAsync(server.Id, cancellationToken);
+                if (!string.IsNullOrWhiteSpace(report.Error))
+                {
+                    summaries.Add($"[{server.Name}] error: {report.Error}");
+                    continue;
+                }
+
+                if (report.BaselineInitialized)
+                {
+                    summaries.Add($"[{server.Name}] baseline initialized for {report.CurrentFiles.Count} watched file(s); no drift.");
+                }
+                else if (report.Changes.Count == 0)
+                {
+                    summaries.Add($"[{server.Name}] OK: all {report.CurrentFiles.Count} watched file(s) match baseline.");
+                }
+                else
+                {
+                    var lines = report.Changes.Select(c => $"  - [{c.ChangeType}] {c.Path}");
+                    summaries.Add($"[{server.Name}] DRIFT DETECTED ({report.Changes.Count} change(s)):\n{string.Join("\n", lines)}");
+                }
             }
 
             return new(name, string.Join("\n\n", summaries), ReadOnlyServerIds: selected.Select(server => server.Id).ToArray());

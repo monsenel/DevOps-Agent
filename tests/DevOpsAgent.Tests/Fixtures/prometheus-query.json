@@ -1,0 +1,24 @@
+{
+  "status": "success",
+  "data": {
+    "resultType": "vector",
+    "result": [
+      {
+        "metric": {
+          "__name__": "up",
+          "instance": "srv-edge:9100",
+          "job": "node"
+        },
+        "value": [1732449600, "1"]
+      },
+      {
+        "metric": {
+          "__name__": "up",
+          "instance": "srv-app:9100",
+          "job": "node"
+        },
+        "value": [1732449600, "0"]
+      }
+    ]
+  }
+}

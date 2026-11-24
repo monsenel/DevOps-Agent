@@ -1,8 +1,50 @@
 @page "/alerts"
 @inject AlertService AlertManager
+@inject IncidentModeService IncidentMode
+@inject AuthenticationStateProvider AuthenticationState
 
 <PageTitle>Alerts · DevOps Agent</PageTitle>
 <div class="page-stack">
+    <section class="ui-card incident-mode-card @(_incident.Active ? "active" : null)" aria-labelledby="incident-mode-title">
+        <div class="ui-card-header">
+            <div>
+                <p class="eyebrow">Operations</p>
+                <h2 id="incident-mode-title">Incident mode</h2>
+                <p class="muted">
+                    @if (_incident.Active)
+                    {
+                        <span>High and Critical alerts are prioritized first. Low-severity notifications are suppressed.</span>
+                        @if (_incident.ActivatedAtUtc is { } started)
+                        {
+                            <span> Active since @started.ToLocalTime().ToString("g").</span>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_incident.Reason))
+                        {
+                            <span> Reason: @_incident.Reason</span>
+                        }
+                    }
+                    else
+                    {
+                        <span>Turn on during an active outage to prioritize High/Critical alerts and silence Low-severity notification noise.</span>
+                    }
+                </p>
+            </div>
+            <div class="incident-mode-actions">
+                <span class="ui-badge @(_incident.Active ? "danger" : "neutral")">@(_incident.Active ? "Incident active" : "Normal")</span>
+                <button class="ui-button @(_incident.Active ? "secondary" : "primary")" type="button" disabled="@_togglingIncident" @onclick="ToggleIncidentModeAsync">
+                    @(_incident.Active ? "End incident mode" : "Enable incident mode")
+                </button>
+            </div>
+        </div>
+        @if (!_incident.Active)
+        {
+            <div class="field incident-reason-field">
+                <label for="incident-reason">Incident note (optional)</label>
+                <input id="incident-reason" type="text" maxlength="240" @bind="_incidentReason" placeholder="e.g. Investigating API latency spike" />
+            </div>
+        }
+    </section>
+
     <section class="ui-card alerts-page-card" aria-labelledby="alerts-title">
         <div class="ui-card-header">
             <div><p class="eyebrow">Monitoring</p><h2 id="alerts-title">Alerts</h2><p class="muted">Current and resolved conditions across your servers.</p></div>
@@ -57,6 +99,9 @@
     private AlertState? _filter = AlertState.Open;
     private IReadOnlyList<AlertDto> _alerts = [];
     private AlertDto? _selected;
+    private IncidentModeState _incident = IncidentModeState.Inactive;
+    private string _incidentReason = string.Empty;
+    private bool _togglingIncident;
 
     /// <summary>An alert to open, from the global search (T8.2).</summary>
     [SupplyParameterFromQuery(Name = "alert")]
@@ -64,6 +109,7 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        _incident = await IncidentMode.GetAsync(CancellationToken.None);
         await LoadAsync();
         if (AlertId is not { } id) return;
         _selected = _alerts.FirstOrDefault(item => item.Id == id);
@@ -74,6 +120,30 @@
         _selected = _alerts.FirstOrDefault(item => item.Id == id);
     }
 
+    private async Task ToggleIncidentModeAsync()
+    {
+        _togglingIncident = true;
+        try
+        {
+            if (_incident.Active)
+            {
+                _incident = await IncidentMode.DeactivateAsync(CancellationToken.None);
+            }
+            else
+            {
+                var actor = ApproverName.Resolve((await AuthenticationState.GetAuthenticationStateAsync()).User.Identity?.Name);
+                _incident = await IncidentMode.ActivateAsync(_incidentReason, actor, CancellationToken.None);
+                _incidentReason = string.Empty;
+            }
+
+            await LoadAsync();
+        }
+        finally
+        {
+            _togglingIncident = false;
+        }
+    }
+
     private async Task SetFilter(AlertState? state)
     {
         _filter = state;
@@ -81,7 +151,11 @@
         await LoadAsync();
     }
 
-    private async Task LoadAsync() => _alerts = await AlertManager.ListAsync(_filter, CancellationToken.None);
+    private async Task LoadAsync()
+    {
+        var listed = await AlertManager.ListAsync(_filter, CancellationToken.None);
+        _alerts = IncidentModeService.PrioritizeAlerts(listed, _incident.Active);
+    }
 
     private async Task ChangeStateAsync(bool acknowledge)
     {

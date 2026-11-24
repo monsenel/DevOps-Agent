@@ -1,6 +1,7 @@
 using DevOpsAgent.Application.Abstractions;
 using DevOpsAgent.Application.Discovery;
 using DevOpsAgent.Application.Monitoring;
+using DevOpsAgent.Application.Security;
 using DevOpsAgent.Domain.Discovery;
 using DevOpsAgent.Domain.Monitoring;
 using DevOpsAgent.Domain.Servers;
@@ -19,7 +20,9 @@ public sealed class AlertSignalSource(
     TimeProvider timeProvider,
     MonitoringCycleOptions? cycleOptions = null,
     IUpdateScanRepository? updateScans = null,
-    IUpdatePackageRepository? updatePackages = null) : IAlertSignalSource
+    IUpdatePackageRepository? updatePackages = null,
+    FileIntegrityService? fileIntegrity = null,
+    AnomalyBaselineService? anomalyBaselines = null) : IAlertSignalSource
 {
     private const int MaxParallelServers = 8;
 
@@ -184,12 +187,23 @@ public sealed class AlertSignalSource(
                 if (cpuCores is > 0)
                     AddThreshold(recent, "load_1m", "load", cpuCores.Value * 2, TimeSpan.FromMinutes(5), AlertSeverity.Medium,
                         $"Load has stayed above {cpuCores.Value * 2:0} for 5 minutes", result, server.Id, server.Name, strict: true);
+                if (anomalyBaselines is not null)
+                    result.AddRange(await anomalyBaselines.EvaluateServerAsync(server.Id, server.Name, cancellationToken));
             }
             else
             {
                 heldScopes.Add(new HeldRuleScope(server.Id, "threshold-disk"));
                 heldScopes.Add(new HeldRuleScope(server.Id, "threshold-memory"));
                 heldScopes.Add(new HeldRuleScope(server.Id, "threshold-load"));
+                if (anomalyBaselines is not null)
+                    heldScopes.Add(new HeldRuleScope(server.Id, AnomalyBaselineService.AlertRule));
+            }
+
+            if (fileIntegrity is not null)
+            {
+                var (fimAlert, holdFim) = await fileIntegrity.EvaluateAlertForServerAsync(server.Id, server.Name, cancellationToken);
+                if (fimAlert is not null) result.Add(fimAlert);
+                else if (holdFim) heldScopes.Add(new HeldRuleScope(server.Id, FileIntegrityService.AlertRule));
             }
         }
 

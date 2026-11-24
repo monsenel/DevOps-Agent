@@ -17,10 +17,14 @@ public sealed class AgentToolPolicyTests
     {
         var registry = new ToolRegistry();
 
-        Assert.Equal(20, registry.Tools.Count);
+        Assert.Equal(24, registry.Tools.Count);
         Assert.Equal(
             new[] { "apply_updates", "block_ip", "edit_config", "restart_container", "restart_service", "run_shell", "unblock_ip" },
             registry.Tools.Where(tool => tool.Access == ToolAccess.Mutating).Select(tool => tool.Name).Order().ToArray());
+        Assert.True(registry.TryGet("scan_cve", out var scanCve) && scanCve.Access == ToolAccess.ReadOnly);
+        Assert.True(registry.TryGet("check_file_integrity", out var fim) && fim.Access == ToolAccess.ReadOnly);
+        Assert.True(registry.TryGet("list_runbooks", out var runbooks) && runbooks.Access == ToolAccess.ReadOnly && !runbooks.RequiresServer);
+        Assert.True(registry.TryGet("query_observability", out var obs) && obs.Access == ToolAccess.ReadOnly && !obs.RequiresServer);
         Assert.True(registry.TryGet("run_shell", out var shell));
         Assert.True(shell.RequiresApproval);
         Assert.True(registry.TryGet("edit_config", out var edit));

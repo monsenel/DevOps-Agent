@@ -3582,3 +3582,212 @@ p {
 .chat-mode-select.auto {
     border-color: var(--dva-warn);
 }
+
+/* Incident mode card (Alerts) */
+.incident-mode-card.active {
+    background: var(--dva-danger-soft);
+    color: var(--dva-on-danger);
+}
+
+.incident-mode-card.active .muted,
+.incident-mode-card.active .eyebrow {
+    color: var(--dva-on-danger);
+}
+
+.incident-mode-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.incident-reason-field {
+    margin-top: 12px;
+    max-width: 480px;
+}
+
+/* Rolling patch plan panel (Updates) */
+.rolling-plan-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 18px;
+    margin-bottom: 18px;
+    border-radius: var(--dva-radius-tile);
+    background: var(--dva-inset);
+}
+
+.rolling-plan-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.rolling-plan-header h3 {
+    margin: 0 0 4px;
+    font-size: 16px;
+}
+
+.rolling-plan-header p {
+    margin: 0;
+}
+
+.rolling-wave-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+    gap: 14px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.rolling-wave-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 16px;
+    border-radius: var(--dva-radius-row);
+    background: var(--dva-card);
+    border: 1px solid var(--dva-line);
+}
+
+.rolling-wave-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.rolling-wave-servers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.rolling-wave-chip {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: var(--dva-radius-input);
+    background: var(--dva-inset);
+    font-size: 12px;
+}
+
+.rolling-wave-gate {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-top: 8px;
+    border-top: 1px solid var(--dva-line);
+    font-size: 12px;
+}
+
+.rolling-wave-gate p {
+    margin: 0;
+}
+
+.rolling-wave-gate ul {
+    margin: 4px 0 0;
+    padding-left: 18px;
+    color: var(--dva-muted);
+}
+
+/* Runbooks page */
+.runbooks-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px;
+}
+
+.runbooks-controls .field,
+.runbooks-controls .select-field {
+    min-width: 200px;
+}
+
+.runbook-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
+    gap: var(--dva-gap);
+}
+
+.runbook-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.runbook-card h3 {
+    margin: 2px 0 0;
+    font-size: 17px;
+}
+
+.runbook-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.runbook-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.runbook-step {
+    padding: 10px 12px;
+    border-radius: var(--dva-radius-row);
+    background: var(--dva-inset);
+}
+
+.runbook-step.done {
+    background: var(--dva-soft);
+}
+
+.runbook-step-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.runbook-step-label input[type="checkbox"] {
+    margin-top: 3px;
+    min-width: 18px;
+    min-height: 18px;
+    accent-color: var(--dva-accent);
+}
+
+.runbook-step-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 13px;
+}
+
+.runbook-tool-chip {
+    display: inline-block;
+    width: fit-content;
+    margin-top: 4px;
+    padding: 2px 8px;
+    border-radius: var(--dva-radius-pill);
+    background: var(--dva-card);
+    color: var(--dva-muted);
+    font-size: 11px;
+}
+
+.runbook-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: auto;
+    padding-top: 6px;
+}

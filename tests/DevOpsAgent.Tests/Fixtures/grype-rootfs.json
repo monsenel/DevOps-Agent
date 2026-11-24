@@ -1,0 +1,59 @@
+__DVA_CVE_SCANNER__:grype
+{
+  "matches": [
+    {
+      "vulnerability": {
+        "id": "CVE-2025-55555",
+        "severity": "Critical",
+        "description": "libssl critical memory corruption",
+        "fix": {
+          "versions": ["3.0.16-1"],
+          "state": "fixed"
+        }
+      },
+      "artifact": {
+        "name": "libssl3",
+        "version": "3.0.11-1",
+        "locations": [
+          { "path": "/var/lib/dpkg/status" }
+        ]
+      }
+    },
+    {
+      "vulnerability": {
+        "id": "CVE-2025-66666",
+        "severity": "High",
+        "description": "nginx HTTP/2 frame handling DoS",
+        "fix": {
+          "versions": ["1.24.0-2"],
+          "state": "fixed"
+        }
+      },
+      "artifact": {
+        "name": "nginx",
+        "version": "1.24.0-1",
+        "locations": [
+          { "path": "/var/lib/dpkg/status" }
+        ]
+      }
+    },
+    {
+      "vulnerability": {
+        "id": "CVE-2024-77777",
+        "severity": "Negligible",
+        "description": "minor info leak",
+        "fix": {
+          "versions": [],
+          "state": "not-fixed"
+        }
+      },
+      "artifact": {
+        "name": "gzip",
+        "version": "1.12-1",
+        "locations": [
+          { "path": "/var/lib/dpkg/status" }
+        ]
+      }
+    }
+  ]
+}
