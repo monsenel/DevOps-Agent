@@ -43,15 +43,16 @@ internal sealed class ChatServiceHarness : IAsyncDisposable
     /// <param name="baseUrl">A cloud URL by default; use a loopback one for a local provider.</param>
     public static async Task<ChatServiceHarness> CreateAsync(IKnownSecrets? secrets = null, string baseUrl = "https://openrouter.ai/api/v1",
         ProviderType type = ProviderType.OpenRouter, string model = "test/model", IEnumerable<Server>? servers = null, string reply = "done",
-        IModelCapabilities? capabilities = null, Func<int, IReadOnlyList<ChatMessage>, ChatOptions?, ChatMessage>? script = null, bool native = false)
+        IModelCapabilities? capabilities = null, Func<int, IReadOnlyList<ChatMessage>, ChatOptions?, ChatMessage>? script = null, bool native = false,
+        bool streaming = false, bool redactSecrets = true)
     {
         var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
         var context = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection).Options);
         await context.Database.EnsureCreatedAsync();
         var provider = new LlmProvider("test", type, baseUrl, model);
-        provider.Update("test", type, baseUrl, model, 0, 0.2, 60, nativeToolCallingEnabled: native, streamingEnabled: false,
-            redactSecretsBeforeSending: true, null);
+        provider.Update("test", type, baseUrl, model, 0, 0.2, 60, nativeToolCallingEnabled: native, streamingEnabled: streaming,
+            redactSecretsBeforeSending: redactSecrets, null);
         provider.SetDefault(true);
         context.LlmProviders.Add(provider);
         if (servers is not null) context.Servers.AddRange(servers);
@@ -79,10 +80,11 @@ internal sealed class ChatServiceHarness : IAsyncDisposable
         return new ChatServiceHarness(connection, context, client, service, provider, limits);
     }
 
-    public async Task<IReadOnlyList<ChatStreamEvent>> SendAsync(Guid conversationId, string text, IReadOnlyList<ChatAttachmentInput>? attachments = null)
+    public async Task<IReadOnlyList<ChatStreamEvent>> SendAsync(Guid conversationId, string text, IReadOnlyList<ChatAttachmentInput>? attachments = null,
+        bool allowUnredactedImages = false)
     {
         var events = new List<ChatStreamEvent>();
-        await foreach (var item in Service.SendAsync(conversationId, text, attachments)) events.Add(item);
+        await foreach (var item in Service.SendAsync(conversationId, text, attachments, allowUnredactedImages: allowUnredactedImages)) events.Add(item);
         return events;
     }
 

@@ -27,11 +27,70 @@ public static class ChatAttachmentPolicy
     public const int MaxFiles = 5;
     public const int MaxBytes = 2 * 1024 * 1024;
 
+    /// <summary>Maximum total attachment bytes replayed across conversation history per LLM turn (T7.R30).</summary>
+    public const long MaxReplayedBytes = 4 * 1024 * 1024;
+
+    /// <summary>Maximum number of images replayed across conversation history per LLM turn (T7.R30).</summary>
+    public const int MaxReplayedImages = 5;
+
     /// <summary>For the file picker; the content decides, not the name.</summary>
     public const string AcceptAttribute =
         ".txt,.log,.conf,.cfg,.ini,.json,.yaml,.yml,.xml,.toml,.md,.csv,.env,.service,.sh,.properties,.pem,.crt,text/*,application/json,application/yaml,image/png,image/jpeg,image/gif,image/webp";
 
     public sealed record Checked(string FileName, string ContentType, ChatAttachmentKind Kind, long SizeBytes, string Text, byte[]? ImageBytes);
+
+    /// <summary>Returns true when the byte header identifies a supported image format (PNG, JPEG, GIF87a/GIF89a, WebP).</summary>
+    public static bool IsImage(byte[] data) => ImageType(data) is not null;
+
+    /// <summary>
+    /// Selects which attachment IDs fit in the per-turn replay budget, prioritizing the newest messages (current turn first)
+    /// so earlier attachments do not grow prompt size unboundedly across long conversations (T7.R30).
+    /// </summary>
+    public static HashSet<Guid> SelectReplayedAttachmentIds(
+        IReadOnlyList<ChatMessageRecord> orderedMessages,
+        long maxReplayedBytes = MaxReplayedBytes,
+        int maxReplayedImages = MaxReplayedImages)
+    {
+        var selected = new HashSet<Guid>();
+        var lastUserIndex = -1;
+        for (var i = orderedMessages.Count - 1; i >= 0; i--)
+        {
+            if (orderedMessages[i].Role == "user")
+            {
+                lastUserIndex = i;
+                break;
+            }
+        }
+
+        long usedBytes = 0;
+        var usedImages = 0;
+        for (var i = orderedMessages.Count - 1; i >= 0; i--)
+        {
+            var message = orderedMessages[i];
+            if (message.Role != "user" || message.Attachments.Count == 0) continue;
+            var isCurrentTurn = i == lastUserIndex;
+            foreach (var attachment in message.Attachments)
+            {
+                var size = Math.Max(0L, attachment.SizeBytes);
+                var isImage = attachment.Kind == ChatAttachmentKind.Image;
+                if (isCurrentTurn)
+                {
+                    selected.Add(attachment.Id);
+                    usedBytes += size;
+                    if (isImage) usedImages++;
+                    continue;
+                }
+
+                if (usedBytes + size > maxReplayedBytes) continue;
+                if (isImage && usedImages + 1 > maxReplayedImages) continue;
+                selected.Add(attachment.Id);
+                usedBytes += size;
+                if (isImage) usedImages++;
+            }
+        }
+
+        return selected;
+    }
 
     public static IReadOnlyList<Checked> Check(IReadOnlyList<ChatAttachmentInput>? files, bool imagesAllowed)
     {
@@ -103,8 +162,19 @@ public static class ChatAttachmentPolicy
     {
         [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, ..] => "image/png",
         [0xFF, 0xD8, 0xFF, ..] => "image/jpeg",
-        [0x47, 0x49, 0x46, 0x38, ..] => "image/gif",
+        [0x47, 0x49, 0x46, 0x38, 0x37 or 0x39, 0x61, ..] when IsValidGifStructure(data) => "image/gif",
         [0x52, 0x49, 0x46, 0x46, _, _, _, _, 0x57, 0x45, 0x42, 0x50, ..] => "image/webp",
         _ => null
     };
+
+    // Real GIF87a/GIF89a files have at least a 6-byte header + 7-byte Logical Screen Descriptor + 1-byte trailer (0x3B),
+    // non-zero width/height in bytes 6..9, and binary bytes or the 0x3B trailer so plain text starting "GIF8..." stays text.
+    private static bool IsValidGifStructure(byte[] data)
+    {
+        if (data.Length < 14) return false;
+        var width = data[6] | (data[7] << 8);
+        var height = data[8] | (data[9] << 8);
+        if (width == 0 || height == 0) return false;
+        return data[^1] == 0x3B || Array.IndexOf(data, (byte)0) >= 0;
+    }
 }

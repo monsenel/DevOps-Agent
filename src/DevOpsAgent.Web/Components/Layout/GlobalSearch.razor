@@ -9,6 +9,7 @@
     <Icon Name="search" Small="true" />
     <label class="visually-hidden" for="global-search">Search servers, IPs, ports, containers, domains and alerts</label>
     <input id="global-search" type="search" role="combobox" autocomplete="off" spellcheck="false"
+           maxlength="@GlobalSearchService.MaxQueryLength"
            placeholder="Search name, IP or port"
            aria-autocomplete="list" aria-controls="global-search-results" aria-expanded="@(_open ? "true" : "false")"
            aria-activedescendant="@(_open && _active >= 0 ? OptionId(_active) : null)"
@@ -60,32 +61,45 @@
 
     private static string OptionId(int index) => $"global-search-option-{index}";
 
+    private void CancelPending()
+    {
+        var previous = Interlocked.Exchange(ref _pending, null);
+        if (previous is null) return;
+        try { previous.Cancel(); }
+        catch (ObjectDisposedException) { }
+        finally { previous.Dispose(); }
+    }
+
     private async Task OnInputAsync(ChangeEventArgs args)
     {
         _query = args.Value?.ToString() ?? string.Empty;
-        _pending?.Cancel();
+        if (_query.Length > GlobalSearchService.MaxQueryLength)
+            _query = _query[..GlobalSearchService.MaxQueryLength];
+        CancelPending();
         if (string.IsNullOrWhiteSpace(_query))
         {
             Close();
             return;
         }
 
-        var pending = _pending = new CancellationTokenSource();
+        var pending = new CancellationTokenSource();
+        _pending = pending;
+        var token = pending.Token;
         _open = true;
         _searching = true;
         try
         {
-            await Task.Delay(DebounceMilliseconds, pending.Token);
+            await Task.Delay(DebounceMilliseconds, token);
             // A scope of its own: the search runs beside whatever the page is doing with its own DbContext.
             await using var scope = Scopes.CreateAsyncScope();
-            var groups = await scope.ServiceProvider.GetRequiredService<GlobalSearchService>().SearchAsync(_query, pending.Token);
-            if (pending.IsCancellationRequested) return;
+            var groups = await scope.ServiceProvider.GetRequiredService<GlobalSearchService>().SearchAsync(_query, token);
+            if (token.IsCancellationRequested) return;
             _groups = groups;
             _flat = groups.SelectMany(group => group.Items).ToList();
             _active = _flat.Count > 0 ? 0 : -1;
             _searching = false;
         }
-        catch (OperationCanceledException) when (pending.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
     }
 
     private void OnKeyDownAsync(KeyboardEventArgs args)
@@ -120,7 +134,7 @@
 
     private void Close()
     {
-        _pending?.Cancel();
+        CancelPending();
         _open = false;
         _searching = false;
         _active = -1;
@@ -136,6 +150,6 @@
     public void Dispose()
     {
         Navigation.LocationChanged -= OnLocationChanged;
-        _pending?.Cancel();
+        CancelPending();
     }
 }

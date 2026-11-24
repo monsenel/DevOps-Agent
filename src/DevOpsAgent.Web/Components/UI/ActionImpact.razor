@@ -44,6 +44,10 @@
                             {
                                 <li>
                                     <span class="ui-badge @(dependent.Level == 1 ? "warn" : "neutral")">@(dependent.Level == 1 ? "direct" : "via one hop")</span>
+                                    @if (dependent.IsStale)
+                                    {
+                                        <span class="ui-badge neutral">stale</span>
+                                    }
                                     <span class="mono">@dependent.Name</span>
                                     <span class="muted">@dependent.Kind@(dependent.Server is null ? " · outside the inventory" : $" · {dependent.Server}")</span>
                                 </li>

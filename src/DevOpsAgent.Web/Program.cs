@@ -21,6 +21,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddDevOpsPersistence(builder.Configuration);
 builder.Services.AddScoped<ProviderService>();
+builder.Services.AddScoped<LlmRoutingService>();
 builder.Services.AddScoped<ChatService>();
 builder.Services.AddScoped<ToolCallLimitService>();
 builder.Services.AddScoped<AgentContextBuilder>();
@@ -58,6 +59,7 @@ builder.Services.AddScoped<BanTargetGuard>();
 builder.Services.AddScoped<ActionExecutionService>();
 builder.Services.AddSingleton<ToolCommandBuilder>();
 builder.Services.AddScoped<GraphBuilder>();
+builder.Services.AddScoped<LlmEdgeSuggestionService>();
 builder.Services.AddScoped<ProviderStatusState>();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddSingleton<AlertStatusState>();

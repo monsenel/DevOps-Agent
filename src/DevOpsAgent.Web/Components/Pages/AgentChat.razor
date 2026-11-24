@@ -99,9 +99,9 @@
                         </ul>
                     </details>
                 }
-                else if (message.Role is "tool_run")
+                else if (message.Role is "tool_run" or "provider_fallback")
                 {
-                    <div class="chat-tool-run">@message.Content</div>
+                    <div class="chat-tool-run" role="status">@message.Content</div>
                 }
                 else if (message.Role is "tool_limit" or "tool_loop")
                 {
@@ -178,10 +178,20 @@
                     {
                         <li class="chat-attachment-chip" @key="file">
                             <span class="mono">@file.FileName</span><span class="muted">@Size(file.Data.Length)</span>
-                            <button type="button" class="chat-chip-remove" aria-label="Remove @file.FileName" @onclick="() => _pending.Remove(file)">×</button>
+                            <button type="button" class="chat-chip-remove" aria-label="Remove @file.FileName" @onclick="() => RemovePendingFile(file)">×</button>
                         </li>
                     }
                 </ul>
+            }
+            @if (HasPendingImages && _requiresImageRedactionConfirm)
+            {
+                <div class="chat-image-warning" role="note">
+                    <span>Images cannot be redacted before sending to this non-local provider.</span>
+                    <label class="chat-image-confirm">
+                        <input id="allow-unredacted-images" type="checkbox" @bind="_allowUnredactedImages" disabled="@_isSending" />
+                        <span>Allow unredacted image upload for this message</span>
+                    </label>
+                </div>
             }
             @if (_attachError is not null)
             {
@@ -217,8 +227,18 @@
     private readonly List<ChatAttachmentInput> _pending = [];
     private string? _attachError;
     private ModelCapabilities _capabilities = ModelCapabilities.None;
+    private bool _requiresImageRedactionConfirm;
+    private bool _allowUnredactedImages;
     private ChatEffort _effort = ChatEffort.Medium;
     private ChatMode _mode = ChatMode.Confirm;
+
+    private bool HasPendingImages => _pending.Any(file => ChatAttachmentPolicy.IsImage(file.Data));
+
+    private void RemovePendingFile(ChatAttachmentInput file)
+    {
+        _pending.Remove(file);
+        if (!HasPendingImages) _allowUnredactedImages = false;
+    }
 
     private string ModeBadgeClass => _isSending ? "neutral" : _mode switch
     {
@@ -239,7 +259,17 @@
     private async Task AttachAsync(InputFileChangeEventArgs args)
     {
         _attachError = null;
-        var files = args.GetMultipleFiles(ChatAttachmentPolicy.MaxFiles + 1);
+        IReadOnlyList<IBrowserFile> files;
+        try
+        {
+            files = args.GetMultipleFiles(ChatAttachmentPolicy.MaxFiles + 1);
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException or ArgumentException)
+        {
+            _attachError = "Could not read the selected files. Try selecting up to 5 files of 2 MB each.";
+            return;
+        }
+
         if (_pending.Count + files.Count > ChatAttachmentPolicy.MaxFiles)
         {
             _attachError = $"Attach at most {ChatAttachmentPolicy.MaxFiles} files to one message.";
@@ -254,17 +284,24 @@
                 continue;
             }
 
-            using var buffer = new MemoryStream();
-            await using var stream = file.OpenReadStream(ChatAttachmentPolicy.MaxBytes);
-            await stream.CopyToAsync(buffer);
-            var input = new ChatAttachmentInput(file.Name, file.ContentType, buffer.ToArray());
             try
             {
+                using var buffer = new MemoryStream();
+                await using var stream = file.OpenReadStream(ChatAttachmentPolicy.MaxBytes);
+                await stream.CopyToAsync(buffer);
+                var input = new ChatAttachmentInput(file.Name, file.ContentType, buffer.ToArray());
                 // The same check the service runs, so a refused file is reported here, before anything is sent.
                 ChatAttachmentPolicy.Check([input], _capabilities.Images);
                 _pending.Add(input);
             }
-            catch (ArgumentException exception) { _attachError = exception.Message.Split(" (Parameter")[0]; }
+            catch (ArgumentException exception)
+            {
+                _attachError = exception.Message.Split(" (Parameter")[0];
+            }
+            catch (Exception exception) when (exception is IOException or InvalidOperationException or OperationCanceledException)
+            {
+                _attachError = $"Could not read {file.Name}. Check that it is accessible and under 2 MB.";
+            }
         }
     }
 
@@ -288,6 +325,7 @@
     protected override async Task OnInitializedAsync()
     {
         _capabilities = await Chat.GetCapabilitiesAsync(CancellationToken.None);
+        _requiresImageRedactionConfirm = await Chat.RequiresImageRedactionConfirmationAsync(CancellationToken.None);
         await RefreshActionStatusesAsync();
         await LoadConversationsAsync();
         if (_conversations.Count == 0)
@@ -331,11 +369,18 @@
             return;
         }
 
+        // Keep picked files and draft intact if ChatService refuses the message (T7.R30); clear only once accepted.
         var files = _pending.ToArray();
-        _pending.Clear();
+        var allowUnredactedImages = _allowUnredactedImages;
         _attachError = null;
-        _draft = string.Empty;
-        await RunTurnAsync(Chat.SendAsync(_selectedConversationId.Value, prompt, files));
+        await RunTurnAsync(
+            Chat.SendAsync(_selectedConversationId.Value, prompt, files, allowUnredactedImages: allowUnredactedImages),
+            onAccepted: () =>
+            {
+                _pending.Clear();
+                _draft = string.Empty;
+                _allowUnredactedImages = false;
+            });
     }
 
     // Continue (T8.10): the task that stopped at its tool-call limit resumes with a fresh budget.
@@ -346,21 +391,33 @@
         await RunTurnAsync(Chat.ContinueAsync(_selectedConversationId.Value));
     }
 
-    private async Task RunTurnAsync(IAsyncEnumerable<ChatStreamEvent> updates)
+    private async Task RunTurnAsync(IAsyncEnumerable<ChatStreamEvent> updates, Action? onAccepted = null)
     {
         _error = null;
         _streamingText = string.Empty;
         _isSending = true;
+        var accepted = false;
         try
         {
             await foreach (var update in updates)
             {
+                if (!accepted)
+                {
+                    accepted = true;
+                    onAccepted?.Invoke();
+                }
+
                 if (update.Kind == "text") _streamingText += update.Content;
                 else _messages.Add(new ChatMessageView(Guid.NewGuid(), update.Kind,
                     update.Kind == "action_proposed" && update.ActionId is Guid id
                         ? System.Text.Json.JsonSerializer.Serialize(new { actionId = id, tool = update.Content.Split(':')[0], summary = update.Content[(update.Content.IndexOf(':') + 1)..].Trim() })
                         : update.Content, DateTimeOffset.UtcNow));
                 await InvokeAsync(StateHasChanged);
+            }
+
+            if (!accepted)
+            {
+                onAccepted?.Invoke();
             }
 
             await LoadConversationsAsync();
@@ -372,7 +429,7 @@
             {
                 await SelectConversationAsync(_selectedConversationId.Value);
             }
-            _error = exception.Message;
+            _error = exception.Message.Split(" (Parameter")[0];
         }
         finally
         {
